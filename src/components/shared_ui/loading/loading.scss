@@ -7,6 +7,8 @@
     width: 6rem;
     height: 2rem;
     white-space: nowrap;
+    position: relative;
+    z-index: 2;
 
     &__rect {
         margin: 0.4rem;
@@ -14,24 +16,59 @@
         height: 60%;
         width: 0.6rem;
         display: inline-block;
-
-        @include createBarspinnerAnimation(5, 1.2s, 0.1);
+        animation: sk-stretchdelay 1.2s infinite ease-in-out;
+        position: relative;
+        
+        &::before {
+            content: '';
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            right: -2px;
+            bottom: -2px;
+            background: inherit;
+            border-radius: 22px;
+            filter: blur(4px);
+            opacity: 0.6;
+            z-index: -1;
+        }
     }
 
-    &--dark .barspinner__rect {
-        background-color: var(--brand-secondary);
+    &-ramzfx .barspinner__rect {
+        background: linear-gradient(135deg, #ff6b6b, #4ecdc4, #45b7d1);
+        background-size: 200% 200%;
+        animation: gradientShift 2s ease infinite, sk-stretchdelay 1.2s infinite ease-in-out;
+        box-shadow: 0 0 15px rgba(78, 205, 196, 0.6);
+    }
+    
+    &-dark .barspinner__rect {
+        background: linear-gradient(135deg, var(--brand-secondary), var(--brand-primary));
+        box-shadow: 0 0 10px rgba(var(--brand-secondary-rgb), 0.5);
+    }
+    
+    &-light .barspinner__rect {
+        background: linear-gradient(135deg, #ffffff, #e0e0e0);
+        box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+    }
+}
+
+@keyframes gradientShift {
+    0%, 100% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
     }
 }
 
 @keyframes sk-stretchdelay {
-    0%,
-    40%,
-    100% {
+    0%, 40%, 100% {
         transform: scaleY(1);
+        opacity: 0.6;
     }
-
     20% {
         transform: scaleY(2);
+        opacity: 1;
     }
 }
 
@@ -44,10 +81,34 @@
     flex-direction: column;
     display: flex;
     background: transparent;
+    position: relative;
+    overflow: hidden;
+    
+    &__overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, var(--overlay-opacity, 0.7));
+        backdrop-filter: blur(5px);
+        z-index: 1;
+    }
+    
+    &--has-background {
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+        position: relative;
+    }
 
     &--fullscreen {
         width: 100vw;
         height: 100vh;
+        position: fixed;
+        top: 0;
+        left: 0;
+        z-index: 9999;
 
         @include desktop-screen {
             height: calc(100vh - #{$HEADER_HEIGHT} - #{$FOOTER_HEIGHT});
@@ -59,10 +120,187 @@
     }
 
     &__barspinner {
-        margin: 5rem auto;
-
+        margin: 2rem auto;
+        
         &--rect {
-            background-color: var(--brand-secondary);
+            background: linear-gradient(135deg, var(--brand-secondary), var(--brand-primary));
+            border-radius: 4px;
+            transition: all 0.3s ease;
         }
+    }
+}
+
+/* RamzFX Loading Container */
+.ramzfx-loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 2.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border-radius: 20px;
+    animation: ramzfxPulse 2s infinite;
+    position: relative;
+    z-index: 2;
+    min-width: 300px;
+    border: 1px solid rgba(78, 205, 196, 0.3);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    
+    @keyframes ramzfxPulse {
+        0%, 100% {
+            transform: scale(1);
+            opacity: 1;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+        50% {
+            transform: scale(1.02);
+            opacity: 0.98;
+            box-shadow: 0 8px 48px rgba(78, 205, 196, 0.2);
+        }
+    }
+}
+
+/* RamzFX Logo Styles */
+.ramzfx-logo {
+    color: #4ecdc4;
+    font-size: 2rem;
+    animation: logoRotate 3s ease-in-out infinite;
+    
+    svg {
+        filter: drop-shadow(0 0 10px rgba(78, 205, 196, 0.5));
+    }
+    
+    @keyframes logoRotate {
+        0%, 100% {
+            transform: rotate(0deg);
+        }
+        25% {
+            transform: rotate(10deg);
+        }
+        75% {
+            transform: rotate(-10deg);
+        }
+    }
+}
+
+.ramzfx-loading-text {
+    font-size: 1.2rem;
+    font-weight: bold;
+    background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    letter-spacing: 2px;
+    animation: textGlow 2s ease-in-out infinite;
+    text-transform: uppercase;
+    
+    @keyframes textGlow {
+        0%, 100% {
+            text-shadow: 0 0 5px rgba(78, 205, 196, 0.5);
+        }
+        50% {
+            text-shadow: 0 0 20px rgba(78, 205, 196, 0.8);
+        }
+    }
+}
+
+/* Enhanced bar animations */
+.barspinner__rect {
+    animation: ramzfxStretch 1.2s infinite ease-in-out;
+    
+    @for $i from 1 through 5 {
+        &:nth-child(#{$i}) {
+            animation-delay: -#{$i * 0.1}s;
+        }
+    }
+}
+
+@keyframes ramzfxStretch {
+    0%, 40%, 100% {
+        transform: scaleY(1);
+        opacity: 0.5;
+    }
+    20% {
+        transform: scaleY(2.5);
+        opacity: 1;
+    }
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .barspinner {
+        width: 4rem;
+        height: 1.5rem;
+        
+        &__rect {
+            width: 0.4rem;
+            margin: 0.25rem;
+        }
+    }
+    
+    .ramzfx-loading-container {
+        padding: 1.5rem;
+        margin: 1rem;
+        min-width: 250px;
+        gap: 1rem;
+    }
+    
+    .ramzfx-loading-text {
+        font-size: 1rem;
+    }
+    
+    .ramzfx-logo svg {
+        width: 40px;
+        height: 40px;
+    }
+}
+
+/* Performance optimization */
+@media (prefers-reduced-motion: reduce) {
+    .barspinner__rect,
+    .ramzfx-loading-container,
+    .ramzfx-logo,
+    .ramzfx-loading-text {
+        animation: none;
+    }
+    
+    .ramzfx-loading-container {
+        transform: none;
+    }
+}
+
+/* Loading states */
+.initial-loader--loading {
+    cursor: wait;
+}
+
+/* Optional: Add ripple effect on container */
+.ramzfx-loading-container::before {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: -2px;
+    right: -2px;
+    bottom: -2px;
+    background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #ff6b6b);
+    border-radius: 22px;
+    z-index: -1;
+    animation: borderGlow 3s ease infinite;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.ramzfx-loading-container:hover::before {
+    opacity: 1;
+}
+
+@keyframes borderGlow {
+    0%, 100% {
+        filter: blur(5px);
+    }
+    50% {
+        filter: blur(10px);
     }
 }
