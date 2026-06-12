@@ -1,0 +1,21 @@
+services:
+    - type: web
+      name: deriv-bot-backend
+      runtime: node
+      runtimeVersion: 20
+      plan: free
+      buildCommand: npm install
+      startCommand: npm run server
+      envVars:
+          - key: DATABASE_URL
+            sync: false
+          - key: NODE_ENV
+            value: production
+          - key: PORT
+            value: 10000
+          - key: OPENAI_API_KEY
+            sync: false
+          - key: OPENAI_MODEL
+            value: gpt-4o-mini
+          - key: CORS_ORIGIN
+            value: https://riskmanagers.site,https://www.riskmanagers.site,https://termicafx.site,https://www.termicafx.site,https://mrzetuzetu.site,https://www.mrzetuzetu.site,https://masterhunter.site,https://www.masterhunter.site,https://tradinghubs.site,https://www.tradinghubs.site,https://mafiahub.site,https://www.mafiahub.site,http://localhost:5000

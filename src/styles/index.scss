@@ -1,0 +1,64 @@
+@use 'components/shared/styles/themes' as *;
+// Removed IBM Plex Sans Google Font import - now using brand font from brand.config.json
+// Third-party developers can add their own font imports if needed
+
+body {
+    // Updated to use brand font variable from brand.config.json
+    font-family: var(--brand-font-primary);
+    background: var(--general-main-1);
+}
+
+:root,
+.theme--light,
+.theme--dark {
+    --rm-shell-top: #111111;
+    --rm-shell-top-light: #ffffff;
+    --rm-shell-nav: #1f1978;
+    --rm-shell-nav-active: #11105f;
+    --rm-shell-nav-hover: #15136b;
+    --rm-shell-gold: #ffb300;
+    --rm-shell-text: #ffffff;
+    --rm-shell-muted: #9a9a9a;
+    --rm-shell-auth-blue: #003b73;
+    --rm-shell-auth-border: #8f8f8f;
+    --rm-shell-run: #00b8ad;
+    --rm-shell-run-hover: #0bc7bc;
+    --rm-shell-run-panel: #111111;
+    --rm-shell-run-panel-light: #ffffff;
+    --rm-shell-progress-track: #dfe3e6;
+    --rm-shell-progress-dot: #222222;
+}
+
+.deriv-header {
+    height: 40px !important;
+    min-height: 40px !important;
+    background: var(--rm-shell-top) !important;
+    border-bottom: 0 !important;
+    box-shadow: none !important;
+}
+
+.theme--light .deriv-header {
+    background: var(--rm-shell-top-light) !important;
+}
+
+.icon-general-fill-path {
+    path {
+        fill: var(--text-general);
+    }
+}
+
+.icon-general-fill-g-path {
+    g {
+        path {
+            fill: var(--text-general);
+        }
+    }
+}
+
+.icon-orange-fill-g-path {
+    g {
+        path {
+            fill: var(--rm-shell-gold);
+        }
+    }
+}

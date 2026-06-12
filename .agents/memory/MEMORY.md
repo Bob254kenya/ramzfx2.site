@@ -1,0 +1,3 @@
+- [Auto Trades feature flag](auto-trades-feature-flag.md) — `autoTrades` defaults to `false` in dev fallback; must be `true` in DEFAULT_DOMAIN_FEATURES for Replit preview to show the tab
+- [Backend ROUND() SQL fix](backend-round-sql.md) — PostgreSQL ROUND(x, n) requires numeric, not float; cast profits/losses to ::numeric before ROUND
+- [Auto Trades SCSS tokens](auto-trades-scss.md) — Premium palette: deep navy #060c18/bg, #0c1627/card, #c42038/crimson, #00cc7a/win; all design tokens as SCSS vars at top of auto-trades.scss
