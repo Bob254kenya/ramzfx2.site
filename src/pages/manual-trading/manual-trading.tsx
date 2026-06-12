@@ -103,7 +103,7 @@ const TRADE_ACTIONS: Record<TDigitTradeGroup, TManualTradeAction[]> = {
 const BARRIER_TRADE_GROUPS = new Set<TDigitTradeGroup>(['over_under', 'matches_differs']);
 
 const RING_COLORS = {
-    highest: '#0ba95b',
+    highest: '#22c310',
     secondHighest: '#1127ff',
     least: '#ff1717',
     secondLeast: '#ffe733',
