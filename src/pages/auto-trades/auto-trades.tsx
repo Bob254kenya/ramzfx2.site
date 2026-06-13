@@ -2135,6 +2135,7 @@ const AutoTrades = observer(() => {
             if (profit > 0 && state.lDigitActive) {
                 state.lDigitActive = false;
                 if (state.lDigitOriginalTradeType) {
+                    // Restore original trade type after win
                     tradeTypeRef.current = state.lDigitOriginalTradeType;
                     state.lDigitOriginalTradeType = null;
                 }
@@ -2404,6 +2405,7 @@ const AutoTrades = observer(() => {
                     });
                 }
             } else if (state.lDigitActive && previousContractResultRef.current === 'win') {
+                // Reset L→Digit on win - THIS IS THE KEY FIX
                 state.lDigitActive = false;
                 if (state.lDigitOriginalTradeType) {
                     tradeTypeRef.current = state.lDigitOriginalTradeType;
@@ -3169,7 +3171,7 @@ const AutoTrades = observer(() => {
                             <div className='auto-trades-card'>
                                 <h2 className='auto-trades-card__title'>Settings</h2>
 
-                                {/* L→Digit Strategy Section - Enhanced UI */}
+                                {/* L→Digit Strategy Section - MOVED BEFORE MARTINGALE STRATEGY */}
                                 <div className='auto-trades-l-digit-section'>
                                     <div className='auto-trades-l-digit-section__header'>
                                         <span className='auto-trades-l-digit-section__icon'>🎯</span>
@@ -3623,7 +3625,7 @@ const AutoTrades = observer(() => {
                                     </div>
                                 </div>
 
-                                {/* Martingale Strategy Selector */}
+                                {/* Martingale Strategy Selector - NOW AFTER L→DIGIT */}
                                 <div className='auto-trades-config__group'>
                                     <div className='auto-trades-martingale-selector'>
                                         <label>Martingale Strategy</label>
