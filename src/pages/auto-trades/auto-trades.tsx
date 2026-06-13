@@ -1222,7 +1222,6 @@ const AutoTrades = observer(() => {
         'RUNHIGH',
         'RUNLOW',
     ];
-    
     const loadSaved = (key: string, fallback: string) => {
         try {
             return localStorage.getItem(`auto_trades_${key}`) || fallback;
@@ -1230,13 +1229,11 @@ const AutoTrades = observer(() => {
             return fallback;
         }
     };
-    
     const loadSavedNum = (key: string, fallback: string, min: number, max: number) => {
         const v = loadSaved(key, fallback);
         const n = Number(v);
         return !isNaN(n) && n >= min && n <= max ? v : fallback;
     };
-    
     const loadSavedMarkets = () => {
         try {
             const raw = localStorage.getItem('auto_trades_markets');
@@ -1676,7 +1673,6 @@ const AutoTrades = observer(() => {
             // Ignore localStorage write failures.
         }
     }, [tradeType]);
-    
     useEffect(() => {
         strategyTemplateRef.current = strategyTemplate;
         try {
@@ -1693,7 +1689,6 @@ const AutoTrades = observer(() => {
         setAnalysisTicks('1');
         setInverseMode(false);
     }, [strategyTemplate]);
-    
     useEffect(() => {
         barrierRef.current = getDigitNumber(barrier, 4);
         try {
@@ -1702,7 +1697,6 @@ const AutoTrades = observer(() => {
             // Ignore localStorage write failures.
         }
     }, [barrier]);
-    
     useEffect(() => {
         predictionBeforeLossRef.current = getDigitNumber(predictionBeforeLoss, 0);
         try {
@@ -1711,7 +1705,6 @@ const AutoTrades = observer(() => {
             // Ignore localStorage write failures.
         }
     }, [predictionBeforeLoss]);
-    
     useEffect(() => {
         predictionAfterLossRef.current = getDigitNumber(predictionAfterLoss, 0);
         try {
@@ -1720,7 +1713,6 @@ const AutoTrades = observer(() => {
             // Ignore localStorage write failures.
         }
     }, [predictionAfterLoss]);
-    
     useEffect(() => {
         streakRef.current = Math.min(10, Math.max(1, Number(streak) || 4));
         try {
@@ -1729,7 +1721,6 @@ const AutoTrades = observer(() => {
             // Ignore localStorage write failures.
         }
     }, [streak]);
-    
     useEffect(() => {
         analysisTicksRef.current = Math.min(10, Math.max(1, Number(analysisTicks) || 1));
         try {
@@ -4300,7 +4291,7 @@ const AutoTrades = observer(() => {
                                                 </div>
                                             </button>
                                         ))}
-                    </div>
+                                    </div>
                                 </div>
                             )}
                         </div>
