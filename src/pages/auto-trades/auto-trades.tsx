@@ -62,6 +62,15 @@ type LastDigitsPattern = {
     barrierOverride?: string;
 };
 
+type LossRecoveryStrategy = {
+    enabled: boolean;
+    strategyMode: 'pattern' | 'digit';
+    patternValue: string;
+    digitCondition: string;
+    digitCompare: string;
+    digitWindow: string;
+};
+
 type RecoveryConfig = {
     enabled: boolean;
     recoveryType: RecoveryMarketType;
@@ -74,14 +83,7 @@ type RecoveryConfig = {
     switchBackToOriginalMarket: boolean;
     useLastDigitsPattern: boolean;
     lastDigitsPattern: LastDigitsPattern;
-    lossRecoveryStrategy: {
-        enabled: boolean;
-        strategyMode: 'pattern' | 'digit';
-        patternValue: string;
-        digitCondition: string;
-        digitCompare: string;
-        digitWindow: string;
-    };
+    lossRecoveryStrategy: LossRecoveryStrategy;
 };
 
 type CombinedStrategyConfig = {
@@ -326,7 +328,7 @@ const RECOVERY_MARKET_MAPPING: Record<RecoveryMarketType, (originalSymbol: strin
 };
 
 const evaluateLossRecoveryStrategy = (
-    strategy: RecoveryConfig['lossRecoveryStrategy'],
+    strategy: LossRecoveryStrategy,
     lastDigits: number[],
     currentTradeType: TradeType,
     currentBarrier: number
@@ -1493,6 +1495,29 @@ const AutoTrades = observer(() => {
     const stopTradingRef = useRef<() => void>(() => {});
     const floatingStrategyAlertRef = useRef<FloatingStrategyAlert | null>(null);
 
+    // Define executeRealTrade first before it's used
+    const executeRealTrade = useCallback(async (symbol: string, stakeAmount: number, lastResult: 'win' | 'loss' | null): Promise<{ profit: number; won: boolean }> => {
+        const ct = tradeTypeRef.current;
+        const bar = getActiveDigitBarrier(ct, lastResult, consecutiveLossRef.current);
+        const tradeStartTime = Math.floor(Date.now() / 1000);
+        const verificationId = `${symbol}_${tradeStartTime}_${Math.random().toString(36).substring(2, 11)}`;
+        const abortController = new AbortController();
+
+        const params: Record<string, any> = { amount: stakeAmount, basis: 'stake', contract_type: ct, currency: currency || 'USD', duration: analysisTicksRef.current, duration_unit: 't', symbol };
+        if (BARRIER_NEEDED[ct]) params.barrier = String(bar);
+
+        try {
+            const buy = await buyContractForUi({ parameters: params, price: stakeAmount, source: 'AutoTrades' });
+            const { contract_id, buy_price, transaction_id } = buy;
+            pushContract({ buy_price, contract_id, transaction_ids: { buy: transaction_id }, date_start: tradeStartTime, display_name: symbol, underlying_symbol: symbol, shortcode: `AUTO_${ct}_${symbol}`, contract_type: ct, currency: currency || 'USD', verification_id: verificationId });
+
+            contractStreamAbortControllersRef.current.add(abortController);
+            const contract = await streamContractUntilSettled({ contractId: contract_id, fallback: { buy_price, contract_id, transaction_ids: { buy: transaction_id }, date_start: tradeStartTime, display_name: symbol, underlying_symbol: symbol, shortcode: `AUTO_${ct}_${symbol}`, contract_type: ct, currency: currency || 'USD', verification_id: verificationId }, onUpdate: snapshot => { if (!unmountedRef.current) pushContract(snapshot); }, signal: abortController.signal, source: 'AutoTrades' });
+            return { profit: Number(contract.profit ?? 0), won: (contract.profit ?? 0) > 0 };
+        } catch (err) { console.error('[AutoTrades] executeTrade exception:', err); setError(err instanceof Error ? err.message : 'Auto Trades could not purchase this contract.'); return { profit: 0, won: false }; }
+        finally { contractStreamAbortControllersRef.current.delete(abortController); }
+    }, [currency, pushContract, setError]);
+
     const getRecoveryMarkets = useCallback((originalSymbol: string, recoveryType: RecoveryMarketType, originalTradeType: TradeType): string[] => {
         const recoveryMarkets = RECOVERY_MARKET_MAPPING[recoveryType](originalSymbol, originalTradeType);
         return recoveryMarkets.filter(symbol => AUTO_MARKET_LOOKUP.has(symbol) && selectedMarketSymbolsRef.current.has(symbol));
@@ -1553,147 +1578,17 @@ const AutoTrades = observer(() => {
         };
     }, [recoveryConfig, getRecoveryMarkets, calculateRecoveryStake]);
 
-    const checkPatternMatch = useCallback((digits: number[], pattern: string): boolean => {
-        if (!pattern || digits.length < pattern.length) return false;
-        const recent = digits.slice(-pattern.length);
-        for (let i = 0; i < pattern.length; i++) {
-            const expected = pattern[i];
-            const actual = recent[i] % 2 === 0 ? 'E' : 'O';
-            if (expected !== actual) return false;
-        }
-        return true;
-    }, []);
-
-    const checkDigitCondition = useCallback((digits: number[], condition: string, compare: string, windowSize: string): boolean => {
-        const win = parseInt(windowSize) || 3;
-        const comp = parseInt(compare);
-        if (digits.length < win) return false;
-        const recent = digits.slice(-win);
-        return recent.every(d => {
-            switch (condition) {
-                case '>': return d > comp;
-                case '<': return d < comp;
-                case '>=': return d >= comp;
-                case '<=': return d <= comp;
-                case '==': return d === comp;
-                default: return false;
-            }
-        });
-    }, []);
-
-    const checkStrategyCondition = useCallback((symbol: string, strategy: StrategyCondition, isM1: boolean): boolean => {
-        if (!strategy.enabled) return true;
-        const digits = marketStatesRef.current[symbol]?.lastDigitsHistory || [];
-        if (strategy.mode === 'pattern') {
-            return checkPatternMatch(digits, strategy.pattern || '');
-        } else {
-            return checkDigitCondition(digits, strategy.digitCondition || '==', strategy.digitCompare || '5', strategy.digitWindow || '3');
-        }
-    }, [checkPatternMatch, checkDigitCondition]);
-
-    const checkCombinedStrategy = useCallback((symbol: string, combined: CombinedStrategyConfig): boolean => {
-        if (!combined.enabled || !combined.patterns) return false;
-        const digits = marketStatesRef.current[symbol]?.lastDigitsHistory || [];
-        return checkCombinedPattern(digits, combined.patterns);
-    }, []);
-
-    const findScannerMatch = useCallback((checkFn: (symbol: string) => boolean): string | null => {
-        for (const market of SCANNER_MARKETS) {
-            if (checkFn(market.symbol)) return market.symbol;
-        }
-        return null;
-    }, []);
-
-    const handleVirtualHook = useCallback(async (
-        symbol: string,
-        hookConfig: VirtualHookConfig,
-        contractType: TradeType,
-        contractBarrier: number,
-        currentBalance: number,
-        currentPnl: number,
-        cStake: number,
-        mStep: number,
-        isM1: boolean
-    ): Promise<{ shouldProceed: boolean; newBalance: number; newPnl: number; newCStake: number; newMStep: number }> => {
-        if (!hookConfig.enabled) return { shouldProceed: true, newBalance: currentBalance, newPnl: currentPnl, newCStake: cStake, newMStep: mStep };
-        
-        const state = marketStatesRef.current[symbol];
-        if (!state) return { shouldProceed: true, newBalance: currentBalance, newPnl: currentPnl, newCStake: cStake, newMStep: mStep };
-        
-        state.virtualHookActive = true;
-        state.virtualConsecutiveLosses = 0;
-        state.virtualTradeCount = 0;
-        
-        let currentBal = currentBalance;
-        let currentPnlVal = currentPnl;
-        
-        for (let i = 0; i < hookConfig.virtualLossCount; i++) {
-            if (!runningRef.current) break;
-            
-            const virtualDigit = Math.floor(Math.random() * 10);
-            const isWin = (contractType === 'DIGITEVEN' && virtualDigit % 2 === 0) ||
-                         (contractType === 'DIGITODD' && virtualDigit % 2 !== 0) ||
-                         (contractType === 'DIGITOVER' && virtualDigit > contractBarrier) ||
-                         (contractType === 'DIGITUNDER' && virtualDigit < contractBarrier) ||
-                         (contractType === 'DIGITMATCH' && virtualDigit === contractBarrier) ||
-                         (contractType === 'DIGITDIFF' && virtualDigit !== contractBarrier);
-            
-            if (isWin) {
-                state.virtualConsecutiveLosses = 0;
-                state.virtualFakeWins++;
-            } else {
-                state.virtualConsecutiveLosses++;
-                state.virtualFakeLosses++;
-            }
-            state.virtualTradeCount++;
-            
-            if (!isWin && state.virtualConsecutiveLosses >= hookConfig.virtualLossCount) {
-                break;
-            }
-            
-            await new Promise(r => setTimeout(r, turboMode ? 10 : 100));
-        }
-        
-        if (state.virtualConsecutiveLosses >= hookConfig.virtualLossCount) {
-            for (let i = 0; i < hookConfig.realTradeCount && runningRef.current; i++) {
-                const result = await executeRealTrade(symbol, cStake, previousContractResultRef.current);
-                currentPnlVal += result.profit;
-                currentBal += result.profit;
-                if (result.profit > 0) break;
-            }
-        }
-        
-        state.virtualHookActive = false;
-        return { shouldProceed: true, newBalance: currentBal, newPnl: currentPnlVal, newCStake: cStake, newMStep: mStep };
-    }, [turboMode]);
-
-    const executeRealTrade = useCallback(async (symbol: string, stakeAmount: number, lastResult: 'win' | 'loss' | null): Promise<{ profit: number; won: boolean }> => {
-        const ct = tradeTypeRef.current;
-        const bar = getActiveDigitBarrier(ct, lastResult, consecutiveLossRef.current);
-        const tradeStartTime = Math.floor(Date.now() / 1000);
-        const verificationId = `${symbol}_${tradeStartTime}_${Math.random().toString(36).substring(2, 11)}`;
-        const abortController = new AbortController();
-
-        const params: Record<string, any> = { amount: stakeAmount, basis: 'stake', contract_type: ct, currency: currency || 'USD', duration: analysisTicksRef.current, duration_unit: 't', symbol };
-        if (BARRIER_NEEDED[ct]) params.barrier = String(bar);
-
-        try {
-            const buy = await buyContractForUi({ parameters: params, price: stakeAmount, source: 'AutoTrades' });
-            const { contract_id, buy_price, transaction_id } = buy;
-            pushContract({ buy_price, contract_id, transaction_ids: { buy: transaction_id }, date_start: tradeStartTime, display_name: symbol, underlying_symbol: symbol, shortcode: `AUTO_${ct}_${symbol}`, contract_type: ct, currency: currency || 'USD', verification_id: verificationId });
-
-            contractStreamAbortControllersRef.current.add(abortController);
-            const contract = await streamContractUntilSettled({ contractId: contract_id, fallback: { buy_price, contract_id, transaction_ids: { buy: transaction_id }, date_start: tradeStartTime, display_name: symbol, underlying_symbol: symbol, shortcode: `AUTO_${ct}_${symbol}`, contract_type: ct, currency: currency || 'USD', verification_id: verificationId }, onUpdate: snapshot => { if (!unmountedRef.current) pushContract(snapshot); }, signal: abortController.signal, source: 'AutoTrades' });
-            return { profit: Number(contract.profit ?? 0), won: (contract.profit ?? 0) > 0 };
-        } catch (err) { console.error('[AutoTrades] executeTrade exception:', err); setError(err instanceof Error ? err.message : 'Auto Trades could not purchase this contract.'); return { profit: 0, won: false }; }
-        finally { contractStreamAbortControllersRef.current.delete(abortController); }
-    }, [currency, pushContract, setError]);
+    const pushContract = useCallback((data: any) => { 
+        try { 
+            transactions.pushTransaction({ ...data, run_id: run_panel.run_id }); 
+            run_panel.onBotContractEvent(data); 
+            summary_card.onBotContractEvent(data); 
+        } catch {} 
+    }, [run_panel, summary_card, transactions]);
 
     const getActiveDigitBarrier = useCallback((ct: TradeType, lastResult: 'win' | 'loss' | null, consecutiveLosses = 0) => {
         return getPredictionForLastOutcome({ trade_type: ct, last_result: lastResult, consecutive_losses: consecutiveLosses, prediction_before_loss: predictionBeforeLossRef.current, prediction_after_loss: predictionAfterLossRef.current, fallback_barrier: barrierRef.current });
     }, []);
-
-    const pushContract = useCallback((data: any) => { try { transactions.pushTransaction({ ...data, run_id: run_panel.run_id }); run_panel.onBotContractEvent(data); summary_card.onBotContractEvent(data); } catch {} }, [run_panel, summary_card, transactions]);
 
     const completeRunPanelStop = useCallback(() => {
         try { run_panel.is_contract_buying_in_progress = false; run_panel.setIsRunning(false); run_panel.setHasOpenContract?.(false); run_panel.setContractStage?.(contract_stages.NOT_RUNNING); run_panel.setShowBotStopMessage?.(false); } catch {}
@@ -1710,6 +1605,7 @@ const AutoTrades = observer(() => {
         restartInFlightRef.current = false;
     }, []);
 
+    // Define handleAfterTrade after executeRealTrade
     const handleAfterTrade = useCallback(async (symbol: string, profit: number, originalMarket?: string, originalTradeType?: TradeType, originalBarrier?: number) => {
         if (!runningRef.current) return;
         const state = marketStatesRef.current[symbol];
@@ -1805,6 +1701,50 @@ const AutoTrades = observer(() => {
         if (!unmountedRef.current) refreshDisplays();
         if ((totalPnlRef.current >= tp || totalPnlRef.current <= -sl) && runningRef.current) { runningRef.current = false; if (!unmountedRef.current) setIsRunning(false); completeRunPanelStop(); }
     }, [completeRunPanelStop, executeRealTrade, handleRecoveryMode, refreshDisplays, recoveryConfig]);
+
+    const checkPatternMatch = useCallback((digits: number[], pattern: string): boolean => {
+        if (!pattern || digits.length < pattern.length) return false;
+        const recent = digits.slice(-pattern.length);
+        for (let i = 0; i < pattern.length; i++) {
+            const expected = pattern[i];
+            const actual = recent[i] % 2 === 0 ? 'E' : 'O';
+            if (expected !== actual) return false;
+        }
+        return true;
+    }, []);
+
+    const checkDigitCondition = useCallback((digits: number[], condition: string, compare: string, windowSize: string): boolean => {
+        const win = parseInt(windowSize) || 3;
+        const comp = parseInt(compare);
+        if (digits.length < win) return false;
+        const recent = digits.slice(-win);
+        return recent.every(d => {
+            switch (condition) {
+                case '>': return d > comp;
+                case '<': return d < comp;
+                case '>=': return d >= comp;
+                case '<=': return d <= comp;
+                case '==': return d === comp;
+                default: return false;
+            }
+        });
+    }, []);
+
+    const checkStrategyCondition = useCallback((symbol: string, strategy: StrategyCondition, isM1: boolean): boolean => {
+        if (!strategy.enabled) return true;
+        const digits = marketStatesRef.current[symbol]?.lastDigitsHistory || [];
+        if (strategy.mode === 'pattern') {
+            return checkPatternMatch(digits, strategy.pattern || '');
+        } else {
+            return checkDigitCondition(digits, strategy.digitCondition || '==', strategy.digitCompare || '5', strategy.digitWindow || '3');
+        }
+    }, [checkPatternMatch, checkDigitCondition]);
+
+    const checkCombinedStrategy = useCallback((symbol: string, combined: CombinedStrategyConfig): boolean => {
+        if (!combined.enabled || !combined.patterns) return false;
+        const digits = marketStatesRef.current[symbol]?.lastDigitsHistory || [];
+        return checkCombinedPattern(digits, combined.patterns);
+    }, []);
 
     const isPatternDigit = useCallback((symbol: string, digit: number): boolean => {
         const ct = tradeTypeRef.current;
@@ -2069,7 +2009,7 @@ const AutoTrades = observer(() => {
     const markMarketRecovering = useCallback((symbol: string, is_recovering: boolean) => { const state = marketStatesRef.current[symbol]; if (!state) return; state.isRecovering = is_recovering; refreshDisplays(); }, [refreshDisplays]);
 
     useEffect(() => { refreshDisplays(); }, [refreshDisplays, selectedMarketSymbols]);
-    useEffect(() => { if (!show_auto) return; if (strategyTemplate !== 'STANDARD' || selectedMarketSymbols.length > 0) { setDataRecoveryLoading(strategyTemplate === 'STANDARD' ? 'Loading selected market data...' : 'Loading strategy scanner data...'); return; } if (selectedMarketSymbols.length === 0) clearDataRecoveryLoading(); }, [clearDataRecoveryLoading, selectedMarketSymbols.length, setDataRecoveryLoading, show_auto, strategyTemplate]);
+    useEffect(() => { if (!show_auto) return; if (strategyTemplate !== 'STANDARD' || selectedMarkets.length > 0) { setDataRecoveryLoading(strategyTemplate === 'STANDARD' ? 'Loading selected market data...' : 'Loading strategy scanner data...'); return; } if (selectedMarkets.length === 0) clearDataRecoveryLoading(); }, [clearDataRecoveryLoading, selectedMarkets.length, setDataRecoveryLoading, show_auto, strategyTemplate]);
 
     const handleAddMarket = useCallback((symbol: string) => { if (!AUTO_MARKET_LOOKUP.has(symbol) || runningRef.current) return; setSelectedMarketSymbols(current => (current.includes(symbol) ? current : [...current, symbol])); }, []);
     const handleRemoveMarket = useCallback((symbol: string) => { if (!AUTO_MARKET_LOOKUP.has(symbol) || runningRef.current) return; setSelectedMarketSymbols(current => current.filter(item => item !== symbol)); }, []);
