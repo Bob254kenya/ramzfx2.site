@@ -186,6 +186,7 @@ export const DOMAIN_CONFIG: Record<string, DomainConfig> = {
         clientId: '33aa3kMiZIo6H3svJWwvu',
         appId: '133749',
         redirectUri: 'https://ramzfx.site/',
+        botsFolder: 'termicafx.site',
         includeLegacyAppIdInOAuth: true,
         features: {
             autoTrades: true,
