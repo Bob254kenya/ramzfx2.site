@@ -59,8 +59,8 @@ type LDigitAnalysis = {
     enabled: boolean;
     patternType: LDigitPatternType;
     lookbackTicks: number;
-    thresholdDigit?: number; // For over/under strategies
-    barrierDigit?: number;    // For match/diff strategies
+    thresholdDigit?: number;
+    barrierDigit?: number;
 };
 
 const FIVE_MINUTE_GRANULARITY = 300;
@@ -3182,7 +3182,7 @@ const AutoTrades = observer(() => {
                                 <h2 className='auto-trades-card__title'>Settings</h2>
 
                                 {/* L→Digit Strategy Section */}
-                                <div className='auto-trades-config__group l-digit-group'>
+                                <div className='auto-trades-config__group'>
                                     <div className='auto-trades-l-digit-section'>
                                         <div className='auto-trades-l-digit-section__header'>
                                             <span className='auto-trades-l-digit-section__icon'>🎯</span>
@@ -3197,7 +3197,7 @@ const AutoTrades = observer(() => {
                                         </div>
                                         <div className='auto-trades-l-digit-section__selector'>
                                             <select
-                                                className='auto-trades-config__select l-digit-select'
+                                                className='auto-trades-config__select'
                                                 value={lDigitStrategy.enabled ? lDigitStrategy.patternType : 'disabled'}
                                                 onChange={e => {
                                                     const value = e.target.value;
