@@ -59,8 +59,8 @@ type LDigitAnalysis = {
     enabled: boolean;
     patternType: LDigitPatternType;
     lookbackTicks: number;
-    thresholdDigit?: number;
-    barrierDigit?: number;
+    thresholdDigit?: number; // For over/under strategies
+    barrierDigit?: number;    // For match/diff strategies
 };
 
 const FIVE_MINUTE_GRANULARITY = 300;
@@ -311,7 +311,7 @@ const clampAiFabPosition = (left: number, top: number): AiFabPosition => {
 
     return {
         left: Math.min(Math.max(AI_FAB_MARGIN, left), maxLeft),
-        top: Math.min(Math.max(AI_FAB_MARGIN, top), maxTop),
+        top: Math.min(Math.max(AI_FAB_MARGIN, left), maxTop),
     };
 };
 
@@ -3183,160 +3183,148 @@ const AutoTrades = observer(() => {
 
                                 {/* L→Digit Strategy Section */}
                                 <div className='auto-trades-config__group'>
-                                    <div className='auto-trades-l-digit-section'>
-                                        <div className='auto-trades-l-digit-section__header'>
-                                            <span className='auto-trades-l-digit-section__icon'>🎯</span>
-                                            <span className='auto-trades-l-digit-section__title'>L→Digit Strategy (After Loss Pattern Detection)</span>
-                                            {lDigitStrategy.enabled && (
-                                                <span className={classNames('auto-trades-l-digit-section__badge', {
-                                                    'auto-trades-l-digit-section__badge--active': isLossActive && isRunning
-                                                })}>
-                                                    {isLossActive && isRunning ? 'ACTIVE' : 'READY'}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <div className='auto-trades-l-digit-section__selector'>
-                                            <select
-                                                className='auto-trades-config__select'
-                                                value={lDigitStrategy.enabled ? lDigitStrategy.patternType : 'disabled'}
-                                                onChange={e => {
-                                                    const value = e.target.value;
-                                                    if (value === 'disabled') {
-                                                        setLDigitStrategy({ enabled: false, patternType: 'odd_to_even', lookbackTicks: 5 });
-                                                    } else if (value === 'odd_to_even') {
-                                                        setLDigitStrategy({
-                                                            enabled: true,
-                                                            patternType: 'odd_to_even',
-                                                            lookbackTicks: 5,
-                                                        });
-                                                    } else if (value === 'even_to_odd') {
-                                                        setLDigitStrategy({
-                                                            enabled: true,
-                                                            patternType: 'even_to_odd',
-                                                            lookbackTicks: 5,
-                                                        });
-                                                    } else if (value === 'over_to_under') {
-                                                        setLDigitStrategy({
-                                                            enabled: true,
-                                                            patternType: 'over_to_under',
-                                                            lookbackTicks: 5,
-                                                            thresholdDigit: 4,
-                                                        });
-                                                    } else if (value === 'under_to_over') {
-                                                        setLDigitStrategy({
-                                                            enabled: true,
-                                                            patternType: 'under_to_over',
-                                                            lookbackTicks: 5,
-                                                            thresholdDigit: 4,
-                                                        });
-                                                    } else if (value === 'match_to_diff') {
-                                                        setLDigitStrategy({
-                                                            enabled: true,
-                                                            patternType: 'match_to_diff',
-                                                            lookbackTicks: 5,
-                                                            barrierDigit: 4,
-                                                        });
-                                                    } else if (value === 'diff_to_match') {
-                                                        setLDigitStrategy({
-                                                            enabled: true,
-                                                            patternType: 'diff_to_match',
-                                                            lookbackTicks: 5,
-                                                            barrierDigit: 4,
-                                                        });
-                                                    } else if (value === 'rise_to_fall') {
-                                                        setLDigitStrategy({
-                                                            enabled: true,
-                                                            patternType: 'rise_to_fall',
-                                                            lookbackTicks: 5,
-                                                        });
-                                                    } else if (value === 'fall_to_rise') {
-                                                        setLDigitStrategy({
-                                                            enabled: true,
-                                                            patternType: 'fall_to_rise',
-                                                            lookbackTicks: 5,
-                                                        });
-                                                    }
-                                                }}
-                                                disabled={isRunning}
-                                            >
-                                                <option value='disabled'>Disabled</option>
-                                                <option value='odd_to_even'>🔴 Odd → Even (if all odd digits, trade EVEN)</option>
-                                                <option value='even_to_odd'>🟢 Even → Odd (if all even digits, trade ODD)</option>
-                                                <option value='over_to_under'>📉 Over → Under (if all > threshold, trade UNDER)</option>
-                                                <option value='under_to_over'>📈 Under → Over (if all < threshold, trade OVER)</option>
-                                                <option value='match_to_diff'>🎯 Match → Differs (if all match barrier, trade DIFFERS)</option>
-                                                <option value='diff_to_match'>🎯 Differs → Match (if all differ from barrier, trade MATCH)</option>
-                                                <option value='rise_to_fall'>⬆️ Rise → Fall (if all ticks rising, trade FALL)</option>
-                                                <option value='fall_to_rise'>⬇️ Fall → Rise (if all ticks falling, trade RISE)</option>
-                                            </select>
-                                        </div>
-                                        
-                                        {lDigitStrategy.enabled && (
-                                            <div className='auto-trades-l-digit-section__config'>
-                                                <div className='auto-trades-config__field'>
-                                                    <label>Lookback Ticks (how many ticks to check)</label>
-                                                    <div className='auto-trades-config__streak-row'>
-                                                        <input
-                                                            type='range'
-                                                            min='1'
-                                                            max='20'
-                                                            step='1'
-                                                            value={lDigitStrategy.lookbackTicks}
-                                                            onChange={e => setLDigitStrategy(prev => ({
-                                                                ...prev,
-                                                                lookbackTicks: parseInt(e.target.value)
-                                                            }))}
-                                                            disabled={isRunning}
-                                                        />
-                                                        <span className='auto-trades-config__streak-value'>{lDigitStrategy.lookbackTicks} ticks</span>
-                                                    </div>
-                                                </div>
-                                                
-                                                {(lDigitStrategy.patternType === 'over_to_under' || lDigitStrategy.patternType === 'under_to_over') && (
-                                                    <div className='auto-trades-config__field'>
-                                                        <label>Threshold Digit</label>
-                                                        <select
-                                                            className='auto-trades-config__select'
-                                                            value={lDigitStrategy.thresholdDigit}
-                                                            onChange={e => setLDigitStrategy(prev => ({
-                                                                ...prev,
-                                                                thresholdDigit: parseInt(e.target.value)
-                                                            }))}
-                                                            disabled={isRunning}
-                                                        >
-                                                            {[0,1,2,3,4,5,6,7,8,9].map(d => (
-                                                                <option key={d} value={d}>{d}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                )}
-                                                
-                                                {(lDigitStrategy.patternType === 'match_to_diff' || lDigitStrategy.patternType === 'diff_to_match') && (
-                                                    <div className='auto-trades-config__field'>
-                                                        <label>Barrier Digit</label>
-                                                        <select
-                                                            className='auto-trades-config__select'
-                                                            value={lDigitStrategy.barrierDigit}
-                                                            onChange={e => setLDigitStrategy(prev => ({
-                                                                ...prev,
-                                                                barrierDigit: parseInt(e.target.value)
-                                                            }))}
-                                                            disabled={isRunning}
-                                                        >
-                                                            {[0,1,2,3,4,5,6,7,8,9].map(d => (
-                                                                <option key={d} value={d}>{d}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                )}
-                                                
-                                                <p className='auto-trades-l-digit-section__hint'>
-                                                    ⚡ This strategy activates ONLY after a loss and deactivates after a win.
-                                                    When active, it will override the current trade type with the opposite pattern.
-                                                </p>
-                                            </div>
-                                        )}
+                                    <div className='auto-trades-strategy-selector'>
+                                        <label>🎯 L→Digit Strategy (After Loss Pattern Detection)</label>
+                                        <select
+                                            className='auto-trades-strategy-selector__select'
+                                            value={lDigitStrategy.enabled ? lDigitStrategy.patternType : 'disabled'}
+                                            onChange={e => {
+                                                const value = e.target.value;
+                                                if (value === 'disabled') {
+                                                    setLDigitStrategy({ enabled: false, patternType: 'odd_to_even', lookbackTicks: 5 });
+                                                } else if (value === 'odd_to_even') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'odd_to_even',
+                                                        lookbackTicks: 5,
+                                                    });
+                                                } else if (value === 'even_to_odd') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'even_to_odd',
+                                                        lookbackTicks: 5,
+                                                    });
+                                                } else if (value === 'over_to_under') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'over_to_under',
+                                                        lookbackTicks: 5,
+                                                        thresholdDigit: 4,
+                                                    });
+                                                } else if (value === 'under_to_over') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'under_to_over',
+                                                        lookbackTicks: 5,
+                                                        thresholdDigit: 4,
+                                                    });
+                                                } else if (value === 'match_to_diff') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'match_to_diff',
+                                                        lookbackTicks: 5,
+                                                        barrierDigit: 4,
+                                                    });
+                                                } else if (value === 'diff_to_match') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'diff_to_match',
+                                                        lookbackTicks: 5,
+                                                        barrierDigit: 4,
+                                                    });
+                                                } else if (value === 'rise_to_fall') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'rise_to_fall',
+                                                        lookbackTicks: 5,
+                                                    });
+                                                } else if (value === 'fall_to_rise') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'fall_to_rise',
+                                                        lookbackTicks: 5,
+                                                    });
+                                                }
+                                            }}
+                                            disabled={isRunning}
+                                        >
+                                            <option value='disabled'>Disabled</option>
+                                            <option value='odd_to_even'>🔴 Odd → Even (if all odd digits, trade EVEN)</option>
+                                            <option value='even_to_odd'>🟢 Even → Odd (if all even digits, trade ODD)</option>
+                                            <option value='over_to_under'>📉 Over → Under (if all > threshold, trade UNDER)</option>
+                                            <option value='under_to_over'>📈 Under → Over (if all < threshold, trade OVER)</option>
+                                            <option value='match_to_diff'>🎯 Match → Differs (if all match barrier, trade DIFFERS)</option>
+                                            <option value='diff_to_match'>🎯 Differs → Match (if all differ from barrier, trade MATCH)</option>
+                                            <option value='rise_to_fall'>⬆️ Rise → Fall (if all ticks rising, trade FALL)</option>
+                                            <option value='fall_to_rise'>⬇️ Fall → Rise (if all ticks falling, trade RISE)</option>
+                                        </select>
                                     </div>
+                                    
+                                    {lDigitStrategy.enabled && (
+                                        <div className='auto-trades-config__group' style={{ marginTop: '0.5rem' }}>
+                                            <div className='auto-trades-config__field'>
+                                                <label>Lookback Ticks (how many ticks to check)</label>
+                                                <div className='auto-trades-config__streak-row'>
+                                                    <input
+                                                        type='range'
+                                                        min='1'
+                                                        max='20'
+                                                        step='1'
+                                                        value={lDigitStrategy.lookbackTicks}
+                                                        onChange={e => setLDigitStrategy(prev => ({
+                                                            ...prev,
+                                                            lookbackTicks: parseInt(e.target.value)
+                                                        }))}
+                                                        disabled={isRunning}
+                                                    />
+                                                    <span className='auto-trades-config__streak-value'>{lDigitStrategy.lookbackTicks} ticks</span>
+                                                </div>
+                                            </div>
+                                            
+                                            {(lDigitStrategy.patternType === 'over_to_under' || lDigitStrategy.patternType === 'under_to_over') && (
+                                                <div className='auto-trades-config__field'>
+                                                    <label>Threshold Digit</label>
+                                                    <select
+                                                        className='auto-trades-config__select'
+                                                        value={lDigitStrategy.thresholdDigit}
+                                                        onChange={e => setLDigitStrategy(prev => ({
+                                                            ...prev,
+                                                            thresholdDigit: parseInt(e.target.value)
+                                                        }))}
+                                                        disabled={isRunning}
+                                                    >
+                                                        {[0,1,2,3,4,5,6,7,8,9].map(d => (
+                                                            <option key={d} value={d}>{d}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                            
+                                            {(lDigitStrategy.patternType === 'match_to_diff' || lDigitStrategy.patternType === 'diff_to_match') && (
+                                                <div className='auto-trades-config__field'>
+                                                    <label>Barrier Digit</label>
+                                                    <select
+                                                        className='auto-trades-config__select'
+                                                        value={lDigitStrategy.barrierDigit}
+                                                        onChange={e => setLDigitStrategy(prev => ({
+                                                            ...prev,
+                                                            barrierDigit: parseInt(e.target.value)
+                                                        }))}
+                                                        disabled={isRunning}
+                                                    >
+                                                        {[0,1,2,3,4,5,6,7,8,9].map(d => (
+                                                            <option key={d} value={d}>{d}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                            
+                                            <p className='auto-trades-inverse__hint' style={{ color: '#ff9800', marginTop: '0.5rem' }}>
+                                                ⚡ This strategy activates ONLY after a loss and deactivates after a win.
+                                                When active, it will override the current trade type with the opposite pattern.
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className='auto-trades-config__group'>
