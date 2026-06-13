@@ -2,38 +2,49 @@
 
 @use 'components/shared/styles/mixins' as *;
 
-// ── Design tokens ────────────────────────────────────────────────────────────
-// Deep dark navy + muted crimson premium palette
+// ── Enhanced Design Tokens ───────────────────────────────────────────────────
+// Premium color palette with improved contrast and visibility
 $at-bg-deep: #060c18;
-$at-bg-base: #080e1d;
-$at-bg-card: #0c1627;
-$at-bg-card-2: #101e35;
-$at-bg-card-3: #132440;
-$at-border: #1b2e4e;
-$at-border-subtle: #122038;
-$at-border-glow: #2a4872;
+$at-bg-base: #0a1122;
+$at-bg-card: #0d1a2f;
+$at-bg-card-2: #14233d;
+$at-bg-card-3: #1a2d4a;
+$at-border: #1e3a5f;
+$at-border-subtle: #152842;
+$at-border-glow: #2a5a8a;
 
-$at-crimson: #c42038;
-$at-crimson-dark: #8f1427;
-$at-crimson-light: #e0304e;
-$at-crimson-glow: rgba(196, 32, 56, 0.15);
-$at-crimson-faint: rgba(196, 32, 56, 0.07);
+// Vibrant accent colors for different elements
+$at-crimson: #e5394b;
+$at-crimson-dark: #b71c1c;
+$at-crimson-light: #ff6b7c;
+$at-crimson-glow: rgba(229, 57, 75, 0.15);
+$at-crimson-faint: rgba(229, 57, 75, 0.07);
 
-$at-navy: #1e5aa8;
-$at-navy-bright: #2e7fd8;
-$at-navy-glow: rgba(46, 127, 216, 0.15);
+$at-navy: #1e6ad4;
+$at-navy-bright: #3a8cff;
+$at-navy-glow: rgba(58, 140, 255, 0.15);
 
-$at-win: #00cc7a;
-$at-win-glow: rgba(0, 204, 122, 0.12);
-$at-loss: #c42038;
-$at-loss-glow: rgba(196, 32, 56, 0.12);
-$at-amber: #d9921a;
-$at-amber-glow: rgba(217, 146, 26, 0.12);
+$at-win: #00e676;
+$at-win-dark: #00b248;
+$at-win-glow: rgba(0, 230, 118, 0.12);
+$at-loss: #ff4d4d;
+$at-loss-glow: rgba(255, 77, 77, 0.12);
+$at-amber: #ffb74d;
+$at-amber-dark: #f57c00;
+$at-amber-glow: rgba(255, 183, 77, 0.12);
+$at-amber-faint: rgba(255, 183, 77, 0.07);
 
-$at-text: #d6e4f7;
-$at-text-dim: #8aa8cc;
-$at-text-muted: #4a6a90;
-$at-text-faint: #2c4060;
+// L→Digit special colors
+$at-l-digit: #ff9800;
+$at-l-digit-glow: rgba(255, 152, 0, 0.2);
+$at-l-digit-active: #ff5722;
+$at-l-digit-active-glow: rgba(255, 87, 34, 0.25);
+
+// Text colors - enhanced contrast
+$at-text: #ffffff;
+$at-text-dim: #c8e1ff;
+$at-text-muted: #8aadcc;
+$at-text-faint: #4a6a90;
 
 // ── Auto Trades Page ─────────────────────────────────────────────────────────
 
@@ -54,20 +65,24 @@ $at-text-faint: #2c4060;
         overflow-y: auto;
 
         &::-webkit-scrollbar {
-            width: 4px;
+            width: 6px;
         }
         &::-webkit-scrollbar-track {
-            background: transparent;
+            background: $at-bg-deep;
         }
         &::-webkit-scrollbar-thumb {
             background: $at-border;
-            border-radius: 2px;
+            border-radius: 3px;
+            
+            &:hover {
+                background: $at-border-glow;
+            }
         }
     }
 
     &__inner {
-        padding: 2.4rem;
-        max-width: 1400px;
+        padding: 2.8rem 3rem;
+        max-width: 1600px;
         margin: 0 auto;
         width: 100%;
 
@@ -81,67 +96,75 @@ $at-text-faint: #2c4060;
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        margin-bottom: 2rem;
+        margin-bottom: 2.4rem;
         flex-wrap: wrap;
-        gap: 1rem;
+        gap: 1.2rem;
 
         h1 {
-            font-size: 2.4rem;
-            font-weight: 700;
-            color: $at-text;
-            margin: 0 0 0.4rem;
-            letter-spacing: -0.025em;
+            font-size: 2.8rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, $at-text, $at-text-dim);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin: 0 0 0.6rem;
+            letter-spacing: -0.02em;
         }
 
         p {
-            font-size: 1.3rem;
+            font-size: 1.5rem;
             color: $at-text-muted;
             margin: 0;
+            font-weight: 500;
         }
     }
 
     &__status-dot {
         display: flex;
         align-items: center;
-        gap: 0.6rem;
-        font-size: 1.2rem;
+        gap: 0.8rem;
+        font-size: 1.3rem;
+        font-weight: 600;
         color: $at-text-dim;
-        padding: 0.5rem 1.1rem;
+        padding: 0.6rem 1.4rem;
         background: $at-bg-card;
         border: 1px solid $at-border;
-        border-radius: 2rem;
+        border-radius: 2.4rem;
         white-space: nowrap;
         letter-spacing: 0.02em;
     }
 
     &__notice {
         background: $at-amber-glow;
-        border: 1px solid rgba(217, 146, 26, 0.25);
-        border-radius: 0.8rem;
-        padding: 1rem 1.6rem;
-        font-size: 1.3rem;
+        border: 1px solid rgba(255, 183, 77, 0.35);
+        border-radius: 1rem;
+        padding: 1.2rem 1.8rem;
+        font-size: 1.4rem;
+        font-weight: 600;
         color: $at-amber;
-        margin-bottom: 1.6rem;
+        margin-bottom: 1.8rem;
     }
 
     &__error {
         background: $at-crimson-faint;
-        border: 1px solid rgba(196, 32, 56, 0.25);
-        border-radius: 0.8rem;
-        padding: 1rem 1.6rem;
-        font-size: 1.3rem;
+        border: 1px solid rgba(229, 57, 75, 0.35);
+        border-radius: 1rem;
+        padding: 1.2rem 1.8rem;
+        font-size: 1.4rem;
+        font-weight: 600;
         color: $at-crimson-light;
-        margin-bottom: 1.6rem;
+        margin-bottom: 1.8rem;
     }
 
     &__body {
         display: grid;
-        grid-template-columns: 30rem 1fr;
-        gap: 2rem;
+        grid-template-columns: 34rem 1fr;
+        gap: 2.4rem;
         align-items: start;
 
-        @media (max-width: 1100px) {
+        @media (max-width: 1200px) {
             grid-template-columns: 1fr;
+            gap: 1.8rem;
         }
 
         &--loading {
@@ -153,7 +176,7 @@ $at-text-faint: #2c4060;
     }
 
     &__loader {
-        min-height: 38rem;
+        min-height: 42rem;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -162,11 +185,11 @@ $at-text-faint: #2c4060;
     &__sidebar {
         display: flex;
         flex-direction: column;
-        gap: 1.6rem;
+        gap: 1.8rem;
         position: sticky;
         top: 0;
 
-        @media (max-width: 1100px) {
+        @media (max-width: 1200px) {
             position: static;
         }
     }
@@ -176,67 +199,74 @@ $at-text-faint: #2c4060;
 
 .auto-trades-floating-alert {
     position: fixed;
-    right: 2rem;
-    bottom: 2rem;
+    right: 2.4rem;
+    bottom: 2.4rem;
     z-index: 30;
-    width: min(34rem, calc(100vw - 2.4rem));
-    padding: 1.6rem;
-    border-radius: 1.6rem;
-    border: 1px solid rgba(0, 204, 122, 0.3);
-    background: linear-gradient(180deg, rgba(0, 204, 122, 0.18), rgba(8, 14, 29, 0.96)),
-                linear-gradient(135deg, rgba(46, 127, 216, 0.1), transparent 55%);
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+    width: min(38rem, calc(100vw - 3rem));
+    padding: 1.8rem;
+    border-radius: 1.8rem;
+    border: 1px solid $at-win;
+    background: linear-gradient(180deg, rgba(0, 230, 118, 0.2), rgba(8, 14, 29, 0.96)),
+                linear-gradient(135deg, rgba(58, 140, 255, 0.12), transparent 60%);
+    box-shadow: 0 20px 48px rgba(0, 0, 0, 0.4);
     color: $at-text;
+    backdrop-filter: blur(4px);
 
     &__eyebrow {
-        margin-bottom: 0.6rem;
-        font-size: 1.1rem;
-        font-weight: 700;
-        letter-spacing: 0.08em;
+        margin-bottom: 0.8rem;
+        font-size: 1.2rem;
+        font-weight: 800;
+        letter-spacing: 0.1em;
         text-transform: uppercase;
-        color: #7bf0b4;
+        color: $at-win;
     }
 
     strong {
         display: block;
-        margin-bottom: 0.6rem;
-        font-size: 1.8rem;
+        margin-bottom: 0.8rem;
+        font-size: 2rem;
+        font-weight: 800;
+        color: $at-text;
     }
 
     p {
         margin: 0;
-        font-size: 1.25rem;
+        font-size: 1.35rem;
         line-height: 1.5;
         color: $at-text-dim;
     }
 
     &__actions {
         display: flex;
-        gap: 0.8rem;
-        margin-top: 1.2rem;
+        gap: 1rem;
+        margin-top: 1.4rem;
 
         button {
             border: 0;
             border-radius: 999px;
-            padding: 0.9rem 1.3rem;
-            font-size: 1.2rem;
+            padding: 0.9rem 1.5rem;
+            font-size: 1.3rem;
             font-weight: 700;
             cursor: pointer;
             transition: transform 0.18s ease, opacity 0.18s ease;
 
             &:hover {
-                transform: translateY(-1px);
+                transform: translateY(-2px);
             }
         }
 
         button:first-child {
-            background: linear-gradient(135deg, #0bb86a, #1e5aa8);
+            background: linear-gradient(135deg, $at-win-dark, $at-navy);
             color: #fff;
         }
 
         button:last-child {
-            background: rgba(255, 255, 255, 0.08);
+            background: rgba(255, 255, 255, 0.1);
             color: $at-text;
+            
+            &:hover {
+                background: rgba(255, 255, 255, 0.15);
+            }
         }
     }
 
@@ -248,14 +278,14 @@ $at-text-faint: #2c4060;
     }
 }
 
-// ── Card ─────────────────────────────────────────────────────────────────────
+// ── Card (Enhanced) ──────────────────────────────────────────────────────────
 
 .auto-trades-card {
     background: $at-bg-card;
     border: 1px solid $at-border;
-    border-radius: 1.4rem;
-    padding: 1.8rem;
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.4);
+    border-radius: 1.6rem;
+    padding: 2rem;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
     position: relative;
     overflow: hidden;
 
@@ -265,98 +295,148 @@ $at-text-faint: #2c4060;
         top: 0;
         left: 0;
         right: 0;
-        height: 2px;
-        background: linear-gradient(90deg, $at-crimson-dark, $at-crimson, $at-navy);
-        opacity: 0.6;
+        height: 3px;
+        background: linear-gradient(90deg, $at-crimson, $at-navy, $at-amber);
+        opacity: 0.7;
     }
 
     &__title {
-        font-size: 1.4rem;
-        font-weight: 700;
+        font-size: 1.6rem;
+        font-weight: 800;
         color: $at-text;
-        margin: 0 0 1.6rem;
+        margin: 0 0 2rem;
         letter-spacing: 0.01em;
         display: flex;
         align-items: center;
-        gap: 0.6rem;
+        gap: 0.8rem;
+        text-transform: uppercase;
 
         &::after {
             content: '';
             flex: 1;
-            height: 1px;
+            height: 2px;
             background: $at-border;
         }
     }
 }
 
-// ── L→Digit Strategy Section (NEW) ───────────────────────────────────────────
+// ── L→Digit Strategy Section (Enhanced) ─────────────────────────────────────
 
 .auto-trades-l-digit-section {
-    background: linear-gradient(135deg, rgba(255, 152, 0, 0.08), rgba(196, 32, 56, 0.08));
-    border: 2px solid $at-amber;
-    border-radius: 1.2rem;
-    padding: 1.4rem;
-    margin-bottom: 1.6rem;
+    background: linear-gradient(135deg, $at-l-digit-glow, rgba(196, 32, 56, 0.08));
+    border: 2px solid $at-l-digit;
+    border-radius: 1.4rem;
+    padding: 1.6rem;
+    margin-bottom: 1.8rem;
     position: relative;
-    transition: all 0.2s;
+    transition: all 0.25s ease;
 
     &:hover {
-        border-color: lighten($at-amber, 10%);
-        box-shadow: 0 0 20px rgba(217, 146, 26, 0.15);
+        border-color: lighten($at-l-digit, 15%);
+        box-shadow: 0 0 24px rgba(255, 152, 0, 0.25);
+        background: linear-gradient(135deg, rgba(255, 152, 0, 0.15), rgba(196, 32, 56, 0.1));
     }
 
     &__header {
         display: flex;
         align-items: center;
-        gap: 0.8rem;
-        margin-bottom: 1rem;
+        gap: 1rem;
+        margin-bottom: 1.4rem;
+        flex-wrap: wrap;
     }
 
     &__icon {
-        font-size: 1.8rem;
+        font-size: 2.2rem;
+        filter: drop-shadow(0 0 4px $at-l-digit);
     }
 
     &__title {
-        font-size: 1.2rem;
-        font-weight: 700;
-        color: $at-amber;
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: $at-l-digit;
         margin: 0;
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 1px;
     }
 
     &__badge {
-        background: $at-amber;
+        background: $at-l-digit;
         color: #fff;
-        font-size: 0.7rem;
-        padding: 0.2rem 0.6rem;
-        border-radius: 1rem;
+        font-size: 0.85rem;
+        padding: 0.3rem 0.9rem;
+        border-radius: 1.2rem;
         margin-left: auto;
-        font-weight: 700;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
 
         &--active {
-            background: $at-crimson;
-            animation: pulse 1s infinite;
+            background: $at-l-digit-active;
+            animation: pulse-strong 1.2s infinite;
         }
     }
 
     &__config {
+        margin-top: 1.2rem;
+        padding-top: 1.2rem;
+        border-top: 2px dashed rgba(255, 152, 0, 0.3);
+    }
+
+    &__field {
         margin-top: 1rem;
-        padding-top: 1rem;
-        border-top: 1px dashed rgba(217, 146, 26, 0.3);
+        
+        label {
+            display: block;
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: $at-text-dim;
+            margin-bottom: 0.5rem;
+        }
+    }
+
+    &__lookback {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-top: 0.5rem;
+        
+        input[type="range"] {
+            flex: 1;
+            height: 0.6rem;
+            border-radius: 0.3rem;
+            background: $at-border;
+            accent-color: $at-l-digit;
+            
+            &::-webkit-slider-thumb {
+                width: 1.8rem;
+                height: 1.8rem;
+                border-radius: 50%;
+                background: $at-l-digit;
+                border: 2px solid #fff;
+                cursor: pointer;
+            }
+        }
+        
+        span {
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: $at-l-digit;
+            min-width: 5rem;
+            text-align: center;
+        }
     }
 }
 
-// ── Config panel ─────────────────────────────────────────────────────────────
+// ── Config panel (Enhanced Fonts) ───────────────────────────────────────────
 
 .auto-trades-config {
     display: flex;
     flex-direction: column;
-    gap: 1.2rem;
+    gap: 1.5rem;
 
     &__group {
-        margin-bottom: 1rem;
-        padding-bottom: 1rem;
+        margin-bottom: 1.2rem;
+        padding-bottom: 1.2rem;
         border-bottom: 1px solid $at-border-subtle;
 
         &:last-child {
@@ -367,45 +447,50 @@ $at-text-faint: #2c4060;
     }
 
     &__group-label {
-        font-size: 1.05rem;
-        font-weight: 700;
+        font-size: 1.2rem;
+        font-weight: 800;
         color: $at-text-muted;
-        margin: 0 0 0.8rem;
+        margin: 0 0 1rem;
         text-transform: uppercase;
         letter-spacing: 0.08em;
     }
 
     &__trade-row {
         display: grid;
-        grid-template-columns: minmax(11rem, 0.95fr) minmax(18rem, 1.4fr) minmax(9rem, 0.75fr);
-        gap: 1rem;
+        grid-template-columns: minmax(12rem, 0.9fr) minmax(20rem, 1.5fr) minmax(10rem, 0.75fr);
+        gap: 1.2rem;
         align-items: flex-end;
+
+        @media (max-width: 768px) {
+            grid-template-columns: 1fr;
+            gap: 1rem;
+        }
     }
 
     &__field {
         label {
             display: block;
-            font-size: 1.1rem;
+            font-size: 1.2rem;
+            font-weight: 700;
             color: $at-text-dim;
-            margin-bottom: 0.4rem;
-            font-weight: 600;
+            margin-bottom: 0.5rem;
             letter-spacing: 0.01em;
         }
 
         &--martingale-threshold {
-            max-width: 18rem;
+            max-width: 20rem;
         }
     }
 
     &__streak-row {
         display: flex;
         align-items: center;
-        gap: 1rem;
+        gap: 1.2rem;
     }
 
     &__streak-slider {
         flex: 1;
-        height: 0.5rem;
+        height: 0.6rem;
         accent-color: $at-crimson;
         cursor: pointer;
         border-radius: 0.4rem;
@@ -413,64 +498,59 @@ $at-text-faint: #2c4060;
         -webkit-appearance: none;
 
         &::-webkit-slider-runnable-track {
-            height: 0.5rem;
-            border-radius: 0.4rem;
-            background: linear-gradient(to right, $at-crimson var(--pct, 50%), $at-border-subtle var(--pct, 50%));
-        }
-        &::-moz-range-track {
-            height: 0.5rem;
-            border-radius: 0.4rem;
+            height: 0.6rem;
+            border-radius: 0.3rem;
             background: $at-border-subtle;
         }
-        &::-moz-range-progress {
-            height: 0.5rem;
-            border-radius: 0.4rem;
-            background: $at-crimson;
-        }
-
+        
         &::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 1.6rem;
-            height: 1.6rem;
+            width: 1.8rem;
+            height: 1.8rem;
             border-radius: 50%;
             background: $at-crimson;
             border: 2px solid $at-bg-card;
             box-shadow: 0 0 0 2px $at-crimson;
-            margin-top: -0.55rem;
+            margin-top: -0.6rem;
             cursor: pointer;
+            
+            &:hover {
+                transform: scale(1.1);
+            }
         }
 
         &:disabled {
-            opacity: 0.35;
+            opacity: 0.4;
             cursor: not-allowed;
         }
     }
 
     &__streak-value {
-        font-size: 2rem;
+        font-size: 2.2rem;
         font-weight: 900;
         color: $at-crimson;
-        min-width: 2.8rem;
+        min-width: 3.2rem;
         text-align: center;
         font-variant-numeric: tabular-nums;
+        text-shadow: 0 0 4px rgba(229, 57, 75, 0.3);
     }
 
     &__select {
         width: 100%;
-        padding: 0.8rem 1rem;
+        padding: 0.9rem 1.2rem;
         border: 1px solid $at-border;
-        border-radius: 0.6rem;
+        border-radius: 0.8rem;
         background: $at-bg-deep;
         color: $at-text;
-        font-size: 1.3rem;
+        font-size: 1.35rem;
         font-weight: 600;
         cursor: pointer;
         appearance: none;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%234a6a90' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238aadcc' d='M0 0l6 8 6-8z'/%3E%3C/svg%3E");
         background-repeat: no-repeat;
-        background-position: right 0.9rem center;
-        padding-right: 2.8rem;
-        transition: border-color 0.15s;
+        background-position: right 1rem center;
+        padding-right: 3rem;
+        transition: border-color 0.15s, box-shadow 0.15s;
 
         &:focus {
             outline: none;
@@ -479,58 +559,63 @@ $at-text-faint: #2c4060;
         }
 
         &:disabled {
-            opacity: 0.4;
+            opacity: 0.5;
             cursor: not-allowed;
         }
 
         option {
             background: $at-bg-card;
             color: $at-text;
+            font-size: 1.3rem;
+            padding: 0.8rem;
         }
 
         &--compact {
-            padding: 0.45rem 2rem 0.45rem 0.6rem;
-            font-size: 1.2rem;
-            border-radius: 0.5rem;
+            padding: 0.5rem 2rem 0.5rem 0.8rem;
+            font-size: 1.25rem;
+            border-radius: 0.6rem;
             min-width: 0;
             width: 100%;
-            background-position: right 0.5rem center;
+            background-position: right 0.6rem center;
             padding-right: 2rem;
         }
     }
 
-    // Prediction pair selector
+    // Enhanced Prediction pair selector
     &__prediction-pair {
-        margin-top: 0.4rem;
+        margin-top: 0.5rem;
         min-width: 0;
     }
 
     &__prediction-label {
-        font-size: 1.1rem;
-        font-weight: 700;
+        font-size: 1.2rem;
+        font-weight: 800;
         color: $at-text-dim;
-        margin-bottom: 0.6rem;
+        margin-bottom: 0.7rem;
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        gap: 0.6rem;
         flex-wrap: wrap;
     }
 
     &__prediction-hint {
-        font-size: 0.95rem;
-        font-weight: 500;
-        color: $at-text-muted;
-        letter-spacing: 0.01em;
+        font-size: 1rem;
+        font-weight: 600;
+        color: $at-amber;
+        letter-spacing: 0.02em;
+        background: $at-amber-faint;
+        padding: 0.2rem 0.6rem;
+        border-radius: 1rem;
     }
 
     &__prediction-controls {
         display: flex;
         align-items: center;
-        gap: 0.6rem;
+        gap: 0.8rem;
         background: $at-bg-deep;
         border: 1px solid $at-border;
-        border-radius: 0.8rem;
-        padding: 0.5rem 0.8rem;
+        border-radius: 1rem;
+        padding: 0.6rem 1rem;
         width: 100%;
         min-width: 0;
     }
@@ -538,7 +623,7 @@ $at-text-faint: #2c4060;
     &__prediction-item {
         display: flex;
         align-items: center;
-        gap: 0.4rem;
+        gap: 0.5rem;
         flex: 1;
         min-width: 0;
     }
@@ -547,39 +632,39 @@ $at-text-faint: #2c4060;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 1.8rem;
-        height: 1.8rem;
+        width: 2.2rem;
+        height: 2.2rem;
         border-radius: 50%;
-        font-size: 0.85rem;
-        font-weight: 800;
+        font-size: 1rem;
+        font-weight: 900;
         flex-shrink: 0;
 
         &--win {
             background: $at-win-glow;
             color: $at-win;
-            border: 1px solid rgba(0, 204, 122, 0.25);
+            border: 1px solid rgba(0, 230, 118, 0.3);
         }
 
         &--loss {
             background: $at-crimson-faint;
             color: $at-crimson;
-            border: 1px solid rgba(196, 32, 56, 0.25);
+            border: 1px solid rgba(229, 57, 75, 0.3);
         }
     }
 
     &__prediction-divider {
-        font-size: 1.1rem;
+        font-size: 1.2rem;
         color: $at-border-glow;
-        font-weight: 500;
+        font-weight: 600;
         padding: 0 0.2rem;
     }
 }
 
-// ── Status indicator ─────────────────────────────────────────────────────────
+// ── Status indicator (Enhanced) ─────────────────────────────────────────────
 
 .auto-trades-status {
-    width: 0.7rem;
-    height: 0.7rem;
+    width: 0.9rem;
+    height: 0.9rem;
     border-radius: 50%;
     background: $at-text-faint;
     display: inline-block;
@@ -587,60 +672,66 @@ $at-text-faint: #2c4060;
     &--connected {
         background: $at-amber;
         animation: at-pulse 2s infinite;
+        box-shadow: 0 0 6px $at-amber;
     }
 
     &--running {
         background: $at-win;
         animation: at-pulse 1s infinite;
+        box-shadow: 0 0 8px $at-win;
     }
 
     &--cooldown {
         background: $at-crimson;
         animation: at-pulse 0.6s infinite;
+        box-shadow: 0 0 6px $at-crimson;
     }
 
     &--loading {
         background: $at-navy-bright;
         animation: at-pulse 1s infinite;
+        box-shadow: 0 0 6px $at-navy-bright;
     }
 
     &__label {
-        font-size: 1.2rem;
+        font-size: 1.3rem;
+        font-weight: 700;
         color: $at-text-dim;
     }
 }
 
-// ── Data Loader ──────────────────────────────────────────────────────────────
+// ── Data Loader (Enhanced) ───────────────────────────────────────────────────
 
 .auto-trades-data-loader {
     display: flex;
     align-items: center;
-    gap: 0.9rem;
-    min-height: 4.2rem;
-    padding: 1rem 1.4rem;
-    margin-bottom: 1.6rem;
-    background: rgba(46, 127, 216, 0.08);
-    border: 1px solid rgba(46, 127, 216, 0.24);
-    border-radius: 0.8rem;
+    gap: 1rem;
+    min-height: 4.8rem;
+    padding: 1.2rem 1.6rem;
+    margin-bottom: 1.8rem;
+    background: $at-navy-glow;
+    border: 1px solid rgba(58, 140, 255, 0.3);
+    border-radius: 1rem;
     color: $at-text-dim;
-    font-size: 1.25rem;
+    font-size: 1.35rem;
     font-weight: 700;
 
     &--panel {
-        min-height: 18rem;
-        width: min(100%, 52rem);
+        min-height: 20rem;
+        width: min(100%, 56rem);
         margin: 0;
         justify-content: center;
-        border-radius: 1.2rem;
-        background: rgba(12, 22, 39, 0.95);
-        border-color: rgba(46, 127, 216, 0.32);
-        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+        border-radius: 1.4rem;
+        background: rgba(13, 26, 47, 0.95);
+        border-color: rgba(58, 140, 255, 0.4);
+        box-shadow: 0 20px 48px rgba(0, 0, 0, 0.45);
+        backdrop-filter: blur(4px);
     }
 
     &__spinner {
-        width: 1.6rem;
-        height: 1.6rem;
-        border: 2px solid rgba(138, 168, 204, 0.3);
+        width: 2rem;
+        height: 2rem;
+        border: 2.5px solid rgba(138, 173, 204, 0.3);
         border-top-color: $at-navy-bright;
         border-radius: 50%;
         flex: 0 0 auto;
@@ -650,60 +741,62 @@ $at-text-faint: #2c4060;
     &__copy {
         display: flex;
         flex-direction: column;
-        gap: 0.4rem;
+        gap: 0.5rem;
 
         strong {
             color: $at-text;
-            font-size: 1.5rem;
+            font-size: 1.6rem;
+            font-weight: 800;
         }
 
         span {
             color: $at-text-dim;
-            font-size: 1.25rem;
+            font-size: 1.35rem;
             font-weight: 600;
         }
     }
 }
 
-// ── Controls ─────────────────────────────────────────────────────────────────
+// ── Controls (Enhanced) ──────────────────────────────────────────────────────
 
 .auto-trades-controls {
-    margin-top: 1.6rem;
+    margin-top: 1.8rem;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 1rem;
+    gap: 1.2rem;
 
     &__run,
     &__stop {
         width: 100%;
-        padding: 1.1rem 1.6rem;
+        padding: 1.2rem 1.8rem;
         border: none;
-        border-radius: 0.8rem;
-        font-size: 1.4rem;
-        font-weight: 700;
+        border-radius: 1rem;
+        font-size: 1.5rem;
+        font-weight: 800;
         cursor: pointer;
         transition: opacity 0.15s, transform 0.1s, box-shadow 0.2s;
-        letter-spacing: 0.04em;
+        letter-spacing: 0.05em;
 
         &:active {
             transform: scale(0.98);
         }
         &:disabled {
-            opacity: 0.35;
+            opacity: 0.4;
             cursor: not-allowed;
             transform: none;
         }
     }
 
     &__run {
-        background: linear-gradient(135deg, #007a42, #00a855);
+        background: linear-gradient(135deg, $at-win-dark, #00a855);
         color: #fff;
-        box-shadow: 0 4px 20px rgba(0, 168, 85, 0.25);
+        box-shadow: 0 4px 20px rgba(0, 230, 118, 0.3);
 
         &:not(:disabled):hover {
             opacity: 0.9;
-            box-shadow: 0 6px 24px rgba(0, 168, 85, 0.35);
+            box-shadow: 0 6px 28px rgba(0, 230, 118, 0.45);
+            transform: translateY(-1px);
         }
     }
 
@@ -714,20 +807,21 @@ $at-text-faint: #2c4060;
 
         &:not(:disabled):hover {
             opacity: 0.9;
-            box-shadow: 0 6px 24px rgba(196, 32, 56, 0.4);
+            box-shadow: 0 6px 28px rgba(229, 57, 75, 0.45);
+            transform: translateY(-1px);
         }
     }
 
     &__ai {
-        width: 9.8rem;
-        height: 8.4rem;
+        width: 11rem;
+        height: 9rem;
         border: 0;
         background: transparent;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        gap: 0.4rem;
+        gap: 0.5rem;
         cursor: pointer;
         position: relative;
 
@@ -737,89 +831,90 @@ $at-text-faint: #2c4060;
         }
 
         &:not(:disabled):hover .auto-trades-controls__ai-orbit {
-            transform: translateY(-1px) scale(1.04);
-            box-shadow: 0 0 0 0.8rem rgba(132, 91, 205, 0.12),
-                        0 1rem 2.8rem rgba(132, 91, 205, 0.36),
-                        inset 0 0.2rem 0.8rem rgba(255, 255, 255, 0.24);
+            transform: translateY(-2px) scale(1.05);
+            box-shadow: 0 0 0 1rem rgba(132, 91, 205, 0.15),
+                        0 1.2rem 3.2rem rgba(132, 91, 205, 0.4),
+                        inset 0 0.2rem 0.8rem rgba(255, 255, 255, 0.3);
         }
     }
 
     &__ai-orbit {
-        width: 6.8rem;
-        height: 6.8rem;
+        width: 7.2rem;
+        height: 7.2rem;
         border-radius: 50%;
         display: grid;
         place-items: center;
         position: relative;
         color: #fff;
         font-family: Georgia, 'Times New Roman', serif;
-        font-weight: 800;
-        background: radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.32), transparent 28%),
-                    radial-gradient(circle at 52% 58%, #8b57c8 0, #7442b8 50%, #57339b 100%);
-        box-shadow: 0 0 0 1.2rem rgba(132, 91, 205, 0.08),
-                    0 1rem 3rem rgba(132, 91, 205, 0.32),
-                    inset 0 0.2rem 0.8rem rgba(255, 255, 255, 0.22);
-        transition: transform 0.16s, box-shadow 0.18s;
+        font-weight: 900;
+        background: radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.35), transparent 28%),
+                    radial-gradient(circle at 52% 58%, #9b6fdd 0, #8455c8 50%, #5a3a9b 100%);
+        box-shadow: 0 0 0 1.4rem rgba(132, 91, 205, 0.1),
+                    0 1.2rem 3.5rem rgba(132, 91, 205, 0.35),
+                    inset 0 0.2rem 0.8rem rgba(255, 255, 255, 0.25);
+        transition: transform 0.18s, box-shadow 0.2s;
     }
 
     &__ai-text {
-        font-size: 3.2rem;
+        font-size: 3.6rem;
         line-height: 1;
         letter-spacing: 0;
-        text-shadow: 0 0.2rem 0.4rem rgba(40, 20, 84, 0.35);
+        text-shadow: 0 0.2rem 0.4rem rgba(40, 20, 84, 0.4);
     }
 
     &__ai-dot {
-        width: 1rem;
-        height: 1rem;
-        background: #00c983;
-        border: 0.2rem solid #392364;
+        width: 1.2rem;
+        height: 1.2rem;
+        background: $at-win;
+        border: 0.2rem solid #3a1e64;
         border-radius: 50%;
         position: absolute;
-        top: 1.1rem;
+        top: 1.2rem;
         right: 1rem;
-        box-shadow: 0 0 0.6rem rgba(0, 201, 131, 0.55);
+        box-shadow: 0 0 0.8rem rgba(0, 230, 118, 0.6);
     }
 
     &__ai-label {
-        font-size: 1.2rem;
-        font-weight: 700;
+        font-size: 1.3rem;
+        font-weight: 800;
         color: $at-text-dim;
     }
 }
 
-// ── Cooldown banner ──────────────────────────────────────────────────────────
+// ── Cooldown banner (Enhanced) ───────────────────────────────────────────────
 
 .auto-trades-cooldown {
     display: flex;
     align-items: center;
-    gap: 0.8rem;
-    padding: 1rem 1.4rem;
+    gap: 1rem;
+    padding: 1.2rem 1.8rem;
     background: $at-crimson-faint;
-    border: 1px solid rgba(196, 32, 56, 0.2);
-    border-radius: 0.8rem;
-    font-size: 1.3rem;
+    border: 1px solid rgba(229, 57, 75, 0.3);
+    border-radius: 1rem;
+    font-size: 1.4rem;
+    font-weight: 700;
     color: $at-crimson-light;
-    font-weight: 600;
-    margin-bottom: 1.6rem;
+    margin-bottom: 1.8rem;
 
     &__icon {
-        font-size: 1.5rem;
+        font-size: 1.8rem;
         flex-shrink: 0;
+        animation: pulse 1s infinite;
     }
 }
 
-// ── Strategy button (Direct/Inverse toggle) ──────────────────────────────────
+// ── Strategy button (Direct/Inverse toggle) (Enhanced) ───────────────────────
 
 .auto-trades-strategy-btn {
     width: 100%;
     display: flex;
     align-items: center;
-    gap: 0.8rem;
-    padding: 1rem 1.2rem;
+    gap: 1rem;
+    padding: 1.2rem 1.4rem;
     background: $at-bg-deep;
     border: 1px solid $at-border;
-    border-radius: 0.8rem;
+    border-radius: 1rem;
     cursor: pointer;
     transition: all 0.2s;
     text-align: left;
@@ -830,45 +925,45 @@ $at-text-faint: #2c4060;
     }
 
     &--active {
-        border-color: rgba(196, 32, 56, 0.4);
+        border-color: rgba(229, 57, 75, 0.5);
         background: $at-crimson-faint;
-        box-shadow: 0 0 0 1px rgba(196, 32, 56, 0.15), 0 0 12px $at-crimson-glow;
+        box-shadow: 0 0 0 1px rgba(229, 57, 75, 0.25), 0 0 16px $at-crimson-glow;
     }
 
     &:disabled {
-        opacity: 0.45;
+        opacity: 0.5;
         cursor: not-allowed;
     }
 
     &__badge {
-        padding: 0.2rem 0.7rem;
+        padding: 0.3rem 0.8rem;
         background: $at-bg-card-2;
         border: 1px solid $at-border;
-        border-radius: 1.5rem;
-        font-size: 0.9rem;
-        font-weight: 700;
+        border-radius: 1.6rem;
+        font-size: 1rem;
+        font-weight: 800;
         color: $at-text-dim;
         white-space: nowrap;
     }
 
     &--active &__badge {
-        background: rgba(196, 32, 56, 0.2);
-        border-color: rgba(196, 32, 56, 0.3);
+        background: rgba(229, 57, 75, 0.25);
+        border-color: rgba(229, 57, 75, 0.4);
         color: $at-crimson-light;
     }
 
     &__label {
         flex: 1;
-        font-size: 1.1rem;
-        font-weight: 700;
+        font-size: 1.2rem;
+        font-weight: 800;
         color: $at-text;
     }
 
     &__switch {
-        width: 2.4rem;
-        height: 1.2rem;
+        width: 2.8rem;
+        height: 1.4rem;
         background: $at-border;
-        border-radius: 1.2rem;
+        border-radius: 1.4rem;
         display: flex;
         align-items: center;
         justify-content: flex-end;
@@ -876,8 +971,8 @@ $at-text-faint: #2c4060;
         transition: all 0.2s;
 
         .auto-trades-inverse__toggle-knob {
-            width: 0.9rem;
-            height: 0.9rem;
+            width: 1rem;
+            height: 1rem;
             border-radius: 50%;
             background: $at-text-muted;
             transition: all 0.2s;
@@ -890,30 +985,32 @@ $at-text-faint: #2c4060;
 
         .auto-trades-inverse__toggle-knob {
             background: #fff;
-            transform: translateX(0.1rem);
+            transform: translateX(0.2rem);
         }
     }
 }
 
-// ── Strategy selector ────────────────────────────────────────────────────────
+// ── Strategy selector (Enhanced) ─────────────────────────────────────────────
 
 .auto-trades-strategy-selector {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: 0.6rem;
 
     label {
-        font-size: 0.95rem;
+        font-size: 1.1rem;
+        font-weight: 700;
         color: $at-text-muted;
     }
 
     &__select {
-        padding: 0.6rem 1rem;
-        border-radius: 0.6rem;
+        padding: 0.8rem 1.2rem;
+        border-radius: 0.8rem;
         border: 1px solid $at-border;
         background: $at-bg-deep;
         color: $at-text;
-        font-size: 1rem;
+        font-size: 1.2rem;
+        font-weight: 600;
         cursor: pointer;
         transition: all 0.2s;
 
@@ -923,128 +1020,141 @@ $at-text-faint: #2c4060;
         &:focus {
             outline: none;
             border-color: $at-crimson;
+            box-shadow: 0 0 0 2px $at-crimson-glow;
         }
         option {
             background: $at-bg-card;
+            font-size: 1.2rem;
+            padding: 0.5rem;
         }
     }
 }
 
-// ── Martingale selector ──────────────────────────────────────────────────────
+// ── Martingale selector (Enhanced) ───────────────────────────────────────────
 
 .auto-trades-martingale-selector {
     label {
         display: block;
-        font-size: 1.1rem;
+        font-size: 1.2rem;
+        font-weight: 700;
         color: $at-text-dim;
-        margin-bottom: 0.4rem;
-        font-weight: 600;
+        margin-bottom: 0.5rem;
     }
 
     &__select {
         width: 100%;
-        padding: 0.8rem 2.8rem 0.8rem 1rem;
+        padding: 0.9rem 3rem 0.9rem 1.2rem;
         border: 1px solid $at-border;
-        border-radius: 0.6rem;
+        border-radius: 0.8rem;
         background: $at-bg-deep;
         color: $at-text;
-        font-size: 1.3rem;
+        font-size: 1.35rem;
         font-weight: 600;
         cursor: pointer;
         appearance: none;
-        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%234a6a90' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%238aadcc' d='M0 0l6 8 6-8z'/%3E%3C/svg%3E");
         background-repeat: no-repeat;
-        background-position: right 0.9rem center;
+        background-position: right 1rem center;
 
         &:focus {
             outline: none;
             border-color: $at-crimson;
             box-shadow: 0 0 0 2px $at-crimson-glow;
         }
+        
+        option {
+            background: $at-bg-card;
+            font-size: 1.3rem;
+            padding: 0.5rem;
+        }
     }
 }
 
-// ── Hint text ────────────────────────────────────────────────────────────────
+// ── Hint text (Enhanced) ─────────────────────────────────────────────────────
 
 .auto-trades-inverse__hint,
 .auto-trades-martingale__hint {
-    font-size: 1.05rem;
+    font-size: 1.15rem;
+    font-weight: 600;
     color: $at-text-muted;
-    margin-top: 0.4rem;
-    line-height: 1.4;
+    margin-top: 0.5rem;
+    line-height: 1.45;
 }
 
-// ── Markets grid ─────────────────────────────────────────────────────────────
+// ── Markets grid (Enhanced) ──────────────────────────────────────────────────
 
 .auto-trades-markets {
     &__title {
-        font-size: 1.55rem;
-        font-weight: 700;
+        font-size: 1.8rem;
+        font-weight: 800;
         color: $at-text;
-        margin: 0 0 1.2rem;
+        margin: 0 0 1.4rem;
         display: flex;
         align-items: center;
-        gap: 0.9rem;
+        gap: 1rem;
         flex-wrap: wrap;
     }
 
     &__selected-count {
-        font-size: 1.1rem;
+        font-size: 1.2rem;
+        font-weight: 700;
         color: $at-text-muted;
         background: $at-bg-card-2;
         border: 1px solid $at-border;
         border-radius: 2rem;
-        padding: 0.15rem 0.7rem;
+        padding: 0.2rem 0.9rem;
     }
 
     &__live-badge {
-        font-size: 1rem;
-        font-weight: 700;
+        font-size: 1.1rem;
+        font-weight: 800;
         color: $at-win;
         background: $at-win-glow;
-        border: 1px solid rgba(0, 204, 122, 0.2);
-        padding: 0.15rem 0.7rem;
+        border: 1px solid rgba(0, 230, 118, 0.3);
+        padding: 0.2rem 0.9rem;
         border-radius: 2rem;
         animation: at-pulse 2s infinite;
     }
 
     &__cooldown-badge {
-        font-size: 1rem;
-        font-weight: 700;
+        font-size: 1.1rem;
+        font-weight: 800;
         color: $at-crimson-light;
         background: $at-crimson-faint;
-        border: 1px solid rgba(196, 32, 56, 0.2);
-        padding: 0.15rem 0.7rem;
+        border: 1px solid rgba(229, 57, 75, 0.3);
+        padding: 0.2rem 0.9rem;
         border-radius: 2rem;
         animation: at-pulse 0.6s infinite;
     }
 
     &__l-digit-badge {
-        font-size: 1rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, $at-amber, $at-crimson);
+        font-size: 1.1rem;
+        font-weight: 800;
+        background: linear-gradient(135deg, $at-l-digit, $at-l-digit-active);
         color: #fff;
-        padding: 0.15rem 0.7rem;
+        padding: 0.2rem 0.9rem;
         border-radius: 2rem;
+        text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
 
         &--active {
-            animation: pulse 1s infinite;
+            animation: pulse-strong 1s infinite;
+            background: linear-gradient(135deg, $at-l-digit-active, $at-crimson);
         }
     }
 
     &__actions {
         display: flex;
-        gap: 0.6rem;
-        margin: -0.4rem 0 1.2rem;
+        gap: 0.8rem;
+        margin: -0.4rem 0 1.4rem;
 
         button {
-            min-height: 3.2rem;
-            padding: 0 1.1rem;
+            min-height: 3.5rem;
+            padding: 0 1.3rem;
             border: 1px solid $at-border;
-            border-radius: 0.6rem;
+            border-radius: 0.8rem;
             background: $at-bg-card;
             color: $at-text-dim;
-            font-size: 1.15rem;
+            font-size: 1.2rem;
             font-weight: 700;
             cursor: pointer;
             transition: all 0.15s;
@@ -1059,9 +1169,9 @@ $at-text-faint: #2c4060;
 
     &__grid {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(26rem, 1fr));
-        gap: 1.2rem;
-        margin-bottom: 1.6rem;
+        grid-template-columns: repeat(auto-fill, minmax(28rem, 1fr));
+        gap: 1.4rem;
+        margin-bottom: 1.8rem;
 
         @include mobile-or-tablet-screen {
             grid-template-columns: 1fr;
@@ -1070,177 +1180,200 @@ $at-text-faint: #2c4060;
 
     &__available {
         border-top: 1px solid $at-border-subtle;
-        padding-top: 1.4rem;
-        margin-top: 0.4rem;
+        padding-top: 1.6rem;
+        margin-top: 0.6rem;
     }
 
     &__subtitle {
-        font-size: 1.35rem;
-        font-weight: 700;
+        font-size: 1.5rem;
+        font-weight: 800;
         color: $at-text;
-        margin: 0 0 0.4rem;
+        margin: 0 0 0.5rem;
     }
 
     &__help {
-        font-size: 1.2rem;
+        font-size: 1.3rem;
+        font-weight: 600;
         color: $at-text-muted;
-        margin: 0 0 1rem;
+        margin: 0 0 1.2rem;
     }
 }
 
-// ── Market card ──────────────────────────────────────────────────────────────
+// ── Market card (Enhanced) ───────────────────────────────────────────────────
 
 .auto-trades-market {
     background: $at-bg-card;
     border: 1px solid $at-border;
-    border-radius: 1.2rem;
-    padding: 1.4rem 1.5rem;
+    border-radius: 1.4rem;
+    padding: 1.6rem 1.8rem;
     transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
     position: relative;
     overflow: hidden;
 
     &--ready {
-        border-color: rgba(0, 204, 122, 0.3);
+        border-color: $at-win;
         background: $at-win-glow;
-        box-shadow: 0 0 0 1px rgba(0, 204, 122, 0.1), 0 4px 20px rgba(0, 204, 122, 0.08);
+        box-shadow: 0 0 0 1px rgba(0, 230, 118, 0.15), 0 6px 24px rgba(0, 230, 118, 0.1);
     }
 
     &--trading {
-        border-color: rgba(46, 127, 216, 0.4);
+        border-color: $at-navy-bright;
         background: $at-navy-glow;
-        box-shadow: 0 0 0 1px rgba(46, 127, 216, 0.15);
+        box-shadow: 0 0 0 1px rgba(58, 140, 255, 0.2);
         animation: at-trade-pulse 1s ease-in-out infinite;
     }
 
     &--l-digit-active {
-        border-color: $at-amber;
-        background: $at-amber-glow;
-        box-shadow: 0 0 0 1px rgba(217, 146, 26, 0.2);
+        border-color: $at-l-digit-active;
+        background: $at-l-digit-active-glow;
+        box-shadow: 0 0 0 1px rgba(255, 87, 34, 0.25), 0 0 16px rgba(255, 87, 34, 0.1);
     }
 
     &--win {
-        border-color: rgba(0, 204, 122, 0.2);
+        border-color: $at-win;
+        background: linear-gradient(135deg, $at-win-glow, transparent 70%);
     }
 
     &--loss {
-        border-color: rgba(196, 32, 56, 0.25);
+        border-color: $at-loss;
+        background: linear-gradient(135deg, $at-loss-glow, transparent 70%);
     }
 
     &--cooldown {
-        border-color: rgba(196, 32, 56, 0.15);
-        background: rgba(196, 32, 56, 0.04);
+        border-color: rgba(229, 57, 75, 0.2);
+        background: rgba(229, 57, 75, 0.05);
+        opacity: 0.7;
+    }
+
+    &--loading {
         opacity: 0.6;
+        
+        .auto-trades-market__loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.8rem;
+            padding: 1rem;
+            color: $at-text-dim;
+            font-size: 1.2rem;
+        }
     }
 
     &__top {
         display: flex;
         justify-content: space-between;
         align-items: flex-start;
-        margin-bottom: 1rem;
-        gap: 0.8rem;
+        margin-bottom: 1.2rem;
+        gap: 1rem;
     }
 
     &__name {
-        font-size: 1.35rem;
-        font-weight: 700;
+        font-size: 1.5rem;
+        font-weight: 800;
         color: $at-text;
-        margin: 0 0 0.2rem;
+        margin: 0 0 0.3rem;
     }
 
     &__symbol {
-        font-size: 1.05rem;
+        font-size: 1.15rem;
+        font-weight: 600;
         color: $at-text-muted;
         margin: 0;
     }
 
     &__quote {
-        font-size: 1.65rem;
-        font-weight: 700;
+        font-size: 1.8rem;
+        font-weight: 800;
         font-variant-numeric: tabular-nums;
         color: $at-text;
-        margin-bottom: 0.8rem;
+        margin-bottom: 1rem;
+        text-shadow: 0 0 8px rgba(255, 255, 255, 0.1);
     }
 
     &__badge {
-        padding: 0.25rem 0.8rem;
+        padding: 0.3rem 0.9rem;
         border-radius: 2rem;
-        font-size: 1.1rem;
-        font-weight: 700;
+        font-size: 1.2rem;
+        font-weight: 800;
         background: $at-bg-card-2;
         color: $at-text-muted;
         border: 1px solid $at-border;
-        min-width: 4rem;
+        min-width: 4.5rem;
         text-align: center;
 
         &--ready {
             background: $at-win-glow;
             color: $at-win;
-            border-color: rgba(0, 204, 122, 0.25);
+            border-color: $at-win;
+            text-shadow: 0 0 2px rgba(0, 230, 118, 0.3);
         }
 
         &--trading {
             background: $at-navy-glow;
             color: $at-navy-bright;
-            border-color: rgba(46, 127, 216, 0.25);
+            border-color: $at-navy-bright;
+            animation: pulse 0.8s infinite;
         }
 
         &--l-digit {
-            background: $at-amber-glow;
-            color: $at-amber;
-            border-color: rgba(217, 146, 26, 0.25);
+            background: $at-l-digit-active-glow;
+            color: $at-l-digit-active;
+            border-color: $at-l-digit-active;
+            font-weight: 900;
         }
     }
 
     &__dots {
         display: flex;
         align-items: center;
-        gap: 0.5rem;
-        margin-bottom: 0.9rem;
+        gap: 0.6rem;
+        margin-bottom: 1rem;
     }
 
     &__dot {
-        width: 1.1rem;
-        height: 1.1rem;
+        width: 1.2rem;
+        height: 1.2rem;
         border-radius: 50%;
         background: $at-border-subtle;
-        transition: background 0.2s;
+        transition: all 0.2s;
 
         &--filled {
             background: $at-crimson;
-            box-shadow: 0 0 4px $at-crimson-glow;
+            box-shadow: 0 0 6px $at-crimson-glow;
         }
 
         &--ready {
             background: $at-win;
-            box-shadow: 0 0 4px $at-win-glow;
+            box-shadow: 0 0 6px $at-win-glow;
         }
     }
 
     &__dots-label {
-        font-size: 1.05rem;
+        font-size: 1.15rem;
+        font-weight: 700;
         color: $at-text-muted;
-        margin-left: 0.3rem;
+        margin-left: 0.4rem;
     }
 
     &__digits {
         display: flex;
-        gap: 0.4rem;
+        gap: 0.5rem;
         flex-wrap: wrap;
-        margin-bottom: 0.8rem;
+        margin-bottom: 1rem;
     }
 
     &__digit {
-        width: 2.2rem;
-        height: 2.2rem;
+        width: 2.4rem;
+        height: 2.4rem;
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 0.5rem;
-        font-size: 1.15rem;
-        font-weight: 700;
+        border-radius: 0.6rem;
+        font-size: 1.25rem;
+        font-weight: 800;
 
         &--low {
-            background: rgba(217, 146, 26, 0.12);
+            background: rgba(255, 183, 77, 0.2);
             color: $at-amber;
         }
 
@@ -1254,21 +1387,22 @@ $at-text-faint: #2c4060;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        font-size: 1.1rem;
+        font-size: 1.2rem;
+        font-weight: 700;
         color: $at-text-muted;
         border-top: 1px solid $at-border-subtle;
-        padding-top: 0.8rem;
-        margin-top: 0.4rem;
+        padding-top: 1rem;
+        margin-top: 0.6rem;
     }
 
     &__last-win {
         color: $at-win;
-        font-weight: 700;
+        font-weight: 800;
     }
 
     &__last-loss {
         color: $at-crimson;
-        font-weight: 700;
+        font-weight: 800;
     }
 
     &__btn {
@@ -1276,35 +1410,146 @@ $at-text-faint: #2c4060;
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 2.2rem;
-        height: 2.2rem;
+        width: 2.5rem;
+        height: 2.5rem;
         border-radius: 50%;
         cursor: pointer;
         transition: all 0.2s;
-        font-size: 1.3rem;
-        font-weight: 700;
+        font-size: 1.4rem;
+        font-weight: 800;
 
         &--remove {
             background: $at-crimson-faint;
             color: $at-crimson;
-            border: 1px solid rgba(196, 32, 56, 0.2);
+            border: 1px solid rgba(229, 57, 75, 0.3);
 
             &:hover {
-                background: rgba(196, 32, 56, 0.2);
-                border-color: rgba(196, 32, 56, 0.4);
+                background: rgba(229, 57, 75, 0.25);
+                border-color: rgba(229, 57, 75, 0.5);
+                transform: scale(1.1);
             }
         }
     }
+    
+    &__candle {
+        font-size: 1.2rem;
+        font-weight: 700;
+        margin-bottom: 0.8rem;
+        padding: 0.3rem 0.6rem;
+        border-radius: 0.5rem;
+        display: inline-block;
+        
+        &--bullish {
+            background: $at-win-glow;
+            color: $at-win;
+        }
+        
+        &--bearish {
+            background: $at-crimson-faint;
+            color: $at-crimson;
+        }
+        
+        &--waiting {
+            background: $at-amber-faint;
+            color: $at-amber;
+        }
+    }
+    
+    &__confidence {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: $at-text-muted;
+        margin-bottom: 0.8rem;
+        line-height: 1.4;
+    }
+    
+    &__percentages {
+        margin-top: 1rem;
+        padding-top: 0.8rem;
+        border-top: 1px dashed $at-border-subtle;
+    }
+    
+    &__percentage-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 1.2rem;
+        font-weight: 700;
+        margin-bottom: 0.6rem;
+        color: $at-text-dim;
+    }
+    
+    &__digit-bars {
+        margin-top: 0.8rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.4rem;
+    }
+    
+    &__digit-bar-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    &__digit-num {
+        width: 2rem;
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: $at-text-muted;
+        
+        &--hot {
+            color: $at-win;
+        }
+        
+        &--cold {
+            color: $at-crimson;
+        }
+    }
+    
+    &__digit-bar-bg {
+        flex: 1;
+        height: 0.5rem;
+        background: $at-border-subtle;
+        border-radius: 0.25rem;
+        overflow: hidden;
+    }
+    
+    &__digit-bar-fill {
+        height: 100%;
+        background: $at-navy-bright;
+        border-radius: 0.25rem;
+        transition: width 0.3s ease;
+        
+        &--hot {
+            background: $at-win;
+        }
+        
+        &--cold {
+            background: $at-crimson;
+        }
+    }
+    
+    &__digit-pct {
+        width: 3rem;
+        font-size: 1rem;
+        font-weight: 700;
+        text-align: right;
+        color: $at-text-muted;
+    }
+    
+    &__loading {
+        display: none;
+    }
 }
 
-// ── Add market card ──────────────────────────────────────────────────────────
+// ── Add market card (Enhanced) ───────────────────────────────────────────────
 
 .auto-trades-market-add {
     all: unset;
     background: $at-bg-card;
     border: 1.5px dashed $at-border;
-    border-radius: 1.2rem;
-    padding: 1.4rem 1.5rem;
+    border-radius: 1.4rem;
+    padding: 1.6rem 1.8rem;
     cursor: pointer;
     transition: all 0.2s;
     display: flex;
@@ -1313,138 +1558,163 @@ $at-text-faint: #2c4060;
     min-height: 100%;
 
     &:hover {
-        border-color: rgba(196, 32, 56, 0.4);
+        border-color: $at-crimson;
         background: $at-crimson-faint;
+        transform: translateY(-2px);
     }
 
     &__plus {
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 2.6rem;
-        height: 2.6rem;
+        width: 3rem;
+        height: 3rem;
         border-radius: 50%;
         background: $at-crimson-faint;
         color: $at-crimson;
-        border: 1px solid rgba(196, 32, 56, 0.25);
-        font-size: 1.7rem;
-        font-weight: 700;
+        border: 1px solid rgba(229, 57, 75, 0.35);
+        font-size: 1.8rem;
+        font-weight: 800;
         flex-shrink: 0;
     }
 
     &__name {
-        font-size: 1.35rem;
-        font-weight: 700;
+        font-size: 1.45rem;
+        font-weight: 800;
         color: $at-text;
         margin: 0 0 0.2rem;
     }
 
     &__symbol {
-        font-size: 1.05rem;
+        font-size: 1.15rem;
+        font-weight: 600;
         color: $at-text-muted;
         margin: 0;
     }
 }
 
-// ── Hint / empty state ───────────────────────────────────────────────────────
+// ── Hint / empty state (Enhanced) ────────────────────────────────────────────
 
 .auto-trades-hint {
     background: $at-bg-card-2;
     border: 1px dashed $at-border;
-    border-radius: 0.8rem;
-    padding: 1.4rem 1.6rem;
-    font-size: 1.3rem;
+    border-radius: 1rem;
+    padding: 1.6rem 2rem;
+    font-size: 1.4rem;
+    font-weight: 600;
     color: $at-text-muted;
     text-align: center;
     line-height: 1.6;
 }
 
-// ── Risk disclaimer button ───────────────────────────────────────────────────
+// ── Risk disclaimer button (Enhanced) ────────────────────────────────────────
 
 .auto-trades-disclaimer-btn {
     position: fixed;
     bottom: 8rem;
-    right: 1.6rem;
+    right: 1.8rem;
     z-index: 200;
-    background: rgba(217, 146, 26, 0.85);
-    color: #fff;
+    background: rgba(255, 183, 77, 0.9);
+    color: #1a1a2e;
     border: none;
-    border-radius: 2rem;
-    padding: 0.7rem 1.3rem;
-    font-size: 1.2rem;
-    font-weight: 700;
+    border-radius: 2.4rem;
+    padding: 0.8rem 1.5rem;
+    font-size: 1.25rem;
+    font-weight: 800;
     cursor: pointer;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(4px);
+    backdrop-filter: blur(6px);
     white-space: nowrap;
-    transition: background 0.15s, transform 0.1s;
+    transition: all 0.15s;
 
     &:hover {
-        background: rgba(183, 120, 0, 0.9);
+        background: rgba(255, 183, 77, 1);
+        transform: scale(1.02);
     }
 
     @include mobile-or-tablet-screen {
         bottom: calc(4rem + env(safe-area-inset-bottom));
-        right: 1rem;
-        padding: 0.55rem 1.1rem;
-        font-size: 1.05rem;
+        right: 1.2rem;
+        padding: 0.65rem 1.2rem;
+        font-size: 1.1rem;
     }
 }
 
-// ── Risk disclaimer modal ────────────────────────────────────────────────────
+// ── Risk disclaimer modal (Enhanced) ─────────────────────────────────────────
 
 .auto-trades-disclaimer-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.75);
+    background: rgba(0, 0, 0, 0.85);
     z-index: 9999;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 1.6rem;
-    backdrop-filter: blur(2px);
+    backdrop-filter: blur(4px);
 }
 
 .auto-trades-disclaimer-modal {
     background: $at-bg-card;
     border: 1px solid $at-border;
-    border-radius: 1.6rem;
+    border-radius: 1.8rem;
     width: 100%;
-    max-width: 48rem;
-    box-shadow: 0 8px 48px rgba(0, 0, 0, 0.6);
+    max-width: 52rem;
+    box-shadow: 0 12px 56px rgba(0, 0, 0, 0.7);
     overflow: hidden;
 
     &__header {
         display: flex;
         align-items: center;
-        gap: 1rem;
+        gap: 1.2rem;
         padding: 1.6rem 2rem;
         border-bottom: 1px solid $at-border-subtle;
         background: $at-amber-glow;
     }
 
+    &__icon {
+        font-size: 2rem;
+    }
+
     &__title {
         flex: 1;
-        font-size: 1.6rem;
-        font-weight: 700;
+        font-size: 1.7rem;
+        font-weight: 800;
         color: $at-text;
         margin: 0;
     }
 
+    &__close {
+        background: transparent;
+        border: none;
+        color: $at-text-dim;
+        font-size: 1.8rem;
+        cursor: pointer;
+        padding: 0.5rem;
+        
+        &:hover {
+            color: $at-text;
+        }
+    }
+
     &__body {
-        padding: 2rem;
-        font-size: 1.35rem;
+        padding: 2rem 2.4rem;
+        font-size: 1.4rem;
         color: $at-text;
         line-height: 1.7;
 
         ul {
-            margin: 0;
+            margin: 1rem 0 0;
             padding-left: 2rem;
+        }
+        
+        li {
+            margin: 0.5rem 0;
         }
     }
 
     &__footer {
-        padding: 1.2rem 2rem 1.6rem;
+        padding: 1.2rem 2rem 1.8rem;
         display: flex;
         justify-content: flex-end;
         border-top: 1px solid $at-border-subtle;
@@ -1452,23 +1722,30 @@ $at-text-faint: #2c4060;
 
     &__ok {
         background: linear-gradient(135deg, #a07000, $at-amber);
-        color: #fff;
+        color: #1a1a2e;
         border: none;
-        border-radius: 0.8rem;
-        padding: 0.9rem 2.4rem;
-        font-size: 1.4rem;
-        font-weight: 700;
+        border-radius: 1rem;
+        padding: 1rem 2.5rem;
+        font-size: 1.45rem;
+        font-weight: 800;
         cursor: pointer;
+        transition: all 0.15s;
+        
+        &:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
     }
 }
 
-// ── AI Modal ─────────────────────────────────────────────────────────────────
+// ── AI Modal (Enhanced) ──────────────────────────────────────────────────────
 
 .auto-trades-ai-overlay {
     position: fixed;
     inset: 0;
     z-index: 1000;
-    background: rgba(2, 6, 14, 0.72);
+    background: rgba(2, 6, 14, 0.85);
+    backdrop-filter: blur(6px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1476,46 +1753,120 @@ $at-text-faint: #2c4060;
 }
 
 .auto-trades-ai-modal {
-    width: min(54rem, 100%);
+    width: min(58rem, 100%);
     max-height: calc(100vh - 3.2rem);
     overflow-y: auto;
     background: $at-bg-card;
-    border: 1px solid rgba(132, 91, 205, 0.45);
-    border-radius: 1.2rem;
-    box-shadow: 0 2.2rem 6rem rgba(0, 0, 0, 0.48);
-    padding: 1.6rem;
+    border: 1px solid rgba(132, 91, 205, 0.5);
+    border-radius: 1.6rem;
+    box-shadow: 0 2.5rem 7rem rgba(0, 0, 0, 0.5);
+    padding: 2rem;
 
     &__header {
         display: flex;
         align-items: center;
         gap: 1.2rem;
-        margin-bottom: 1.4rem;
+        margin-bottom: 1.6rem;
     }
 
     &__title {
         color: $at-text;
-        font-size: 1.6rem;
+        font-size: 1.8rem;
+        font-weight: 800;
         margin: 0;
         flex: 1;
     }
 
-    &__textarea {
+    &__close {
+        background: transparent;
+        border: none;
+        color: $at-text-dim;
+        font-size: 2rem;
+        cursor: pointer;
+        padding: 0.4rem 0.8rem;
+        
+        &:hover {
+            color: $at-text;
+        }
+    }
+
+    &__preset {
+        margin-bottom: 1.4rem;
+        
+        label {
+            display: block;
+            font-size: 1.2rem;
+            font-weight: 700;
+            color: $at-text-dim;
+            margin-bottom: 0.4rem;
+        }
+    }
+
+    &__preset-select {
         width: 100%;
-        min-height: 13rem;
-        resize: vertical;
+        padding: 0.8rem 1rem;
         border-radius: 0.8rem;
         border: 1px solid $at-border;
-        background: $at-bg-base;
+        background: $at-bg-deep;
+        color: $at-text;
+        font-size: 1.3rem;
+        cursor: pointer;
+    }
+
+    &__textarea {
+        width: 100%;
+        min-height: 14rem;
+        resize: vertical;
+        border-radius: 1rem;
+        border: 1px solid $at-border;
+        background: $at-bg-deep;
         color: $at-text;
         padding: 1.2rem;
-        font-size: 1.3rem;
+        font-size: 1.4rem;
+        font-family: monospace;
+        
+        &:focus {
+            outline: none;
+            border-color: $at-navy-bright;
+            box-shadow: 0 0 0 2px $at-navy-glow;
+        }
+    }
+
+    &__result {
+        margin-top: 1.4rem;
+        padding: 1rem;
+        background: $at-bg-deep;
+        border-radius: 0.8rem;
+        
+        ul {
+            margin: 0.5rem 0;
+            padding-left: 1.5rem;
+            
+            li {
+                margin: 0.3rem 0;
+                font-size: 1.25rem;
+            }
+        }
+    }
+
+    &__source {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: $at-amber;
+        margin-bottom: 0.6rem;
+    }
+
+    &__warning {
+        color: $at-crimson;
+        font-size: 1.2rem;
+        margin-top: 0.5rem;
     }
 
     &__footer {
         display: flex;
         gap: 1rem;
         justify-content: flex-end;
-        margin-top: 1.4rem;
+        margin-top: 1.8rem;
     }
 
     &__primary {
@@ -1523,17 +1874,39 @@ $at-text-faint: #2c4060;
         color: #fff;
         border: 0;
         border-radius: 0.8rem;
-        padding: 1rem 1.4rem;
-        font-weight: 700;
+        padding: 1rem 1.6rem;
+        font-weight: 800;
+        font-size: 1.3rem;
         cursor: pointer;
+        
+        &:hover {
+            transform: translateY(-1px);
+            background: linear-gradient(135deg, #8455c8, #ac7fed);
+        }
+    }
+    
+    &__secondary {
+        background: $at-bg-card-2;
+        color: $at-text-dim;
+        border: 1px solid $at-border;
+        border-radius: 0.8rem;
+        padding: 1rem 1.6rem;
+        font-weight: 700;
+        font-size: 1.3rem;
+        cursor: pointer;
+        
+        &:hover {
+            background: $at-bg-card-3;
+            color: $at-text;
+        }
     }
 }
 
-// ── Animations ───────────────────────────────────────────────────────────────
+// ── Animations (Enhanced) ────────────────────────────────────────────────────
 
 @keyframes at-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.95); }
 }
 
 @keyframes at-spin {
@@ -1541,21 +1914,26 @@ $at-text-faint: #2c4060;
 }
 
 @keyframes at-trade-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(46, 127, 216, 0.2); }
-    50% { box-shadow: 0 0 0 6px rgba(46, 127, 216, 0); }
+    0%, 100% { box-shadow: 0 0 0 0 rgba(58, 140, 255, 0.25); }
+    50% { box-shadow: 0 0 0 8px rgba(58, 140, 255, 0); }
 }
 
 @keyframes pulse {
     0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
+    50% { opacity: 0.55; }
 }
 
-// ── Mobile overrides ─────────────────────────────────────────────────────────
+@keyframes pulse-strong {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.02); }
+}
+
+// ── Mobile overrides (Enhanced) ──────────────────────────────────────────────
 
 @include mobile-or-tablet-screen {
     .auto-trades-page {
         &__inner {
-            padding: 1rem 0.75rem 7.5rem;
+            padding: 1rem 0.75rem 8rem;
         }
 
         &__header {
@@ -1568,18 +1946,18 @@ $at-text-faint: #2c4060;
         }
 
         &__sidebar {
-            margin-bottom: 1.5rem;
+            margin-bottom: 1.8rem;
         }
     }
 
     .auto-trades-card {
-        padding: 1rem;
+        padding: 1.2rem;
     }
 
     .auto-trades-config {
         &__trade-row {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 0.6rem;
+            grid-template-columns: 1fr;
+            gap: 0.8rem;
         }
     }
 
@@ -1591,22 +1969,22 @@ $at-text-faint: #2c4060;
         z-index: 100;
         background: $at-bg-deep;
         border-top: 1px solid $at-border;
-        padding: 0.6rem 1rem calc(0.6rem + env(safe-area-inset-bottom));
+        padding: 0.8rem 1rem calc(0.8rem + env(safe-area-inset-bottom));
         display: flex;
         flex-direction: row;
-        gap: 0.75rem;
+        gap: 0.8rem;
 
         button {
             flex: 1;
-            min-height: 48px;
+            min-height: 52px;
         }
 
         &__ai {
             position: fixed;
             left: var(--auto-trades-ai-fab-left, auto);
             top: var(--auto-trades-ai-fab-top, auto);
-            width: 6.4rem;
-            height: 6.4rem;
+            width: 7rem;
+            height: 7rem;
             flex: 0 0 auto;
             border-radius: 50%;
             background: transparent;
@@ -1615,5 +1993,9 @@ $at-text-faint: #2c4060;
 
     .auto-trades-markets__grid {
         grid-template-columns: 1fr;
+    }
+    
+    .auto-trades-market {
+        padding: 1.2rem;
     }
 }
