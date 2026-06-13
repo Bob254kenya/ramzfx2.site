@@ -79,6 +79,13 @@ const RISK_MANAGERS_BOTS: TBot[] = [
 
 const TERMICA_BOTS: TBot[] = [
     {
+        id: 'termica-wealth',
+        name: ' 🤑Wealth Bot Best of the Best 2026 v3 🤑',
+        file: 'Wealth Generator.xml',
+        description: 'Ramzfx wealth strategy focused on structured account growth.',
+        emoji: '💰',
+    },
+    {
         id: 'termica-pro',
         name: 'Pro Bot',
         file: 'D1-BY MR.DUKE(+254702490526).xml',
