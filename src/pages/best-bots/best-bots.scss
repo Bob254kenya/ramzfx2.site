@@ -311,3 +311,132 @@
         }
     }
 }
+
+// ─── Page-level Skeleton Loading ─────────────────────────────────────────────
+@keyframes shimmer {
+    0% { background-position: -60rem 0; }
+    100% { background-position: 60rem 0; }
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.best-bots {
+    &__skeleton-grid {
+        max-width: 112rem;
+        margin: 0 auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(22rem, 1fr));
+        gap: 1.2rem;
+
+        @include mobile-or-tablet-screen {
+            grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+            gap: 1rem;
+        }
+    }
+
+    &__empty {
+        color: var(--text-less-prominent);
+        font-size: 1.4rem;
+        padding: 4rem 0;
+        text-align: center;
+        grid-column: 1 / -1;
+    }
+}
+
+%shimmer-base {
+    background: linear-gradient(
+        90deg,
+        var(--general-section-1) 25%,
+        var(--general-section-2, rgba(255 255 255 / 6%)) 50%,
+        var(--general-section-1) 75%
+    );
+    background-size: 60rem 100%;
+    animation: shimmer 1.6s infinite linear;
+    border-radius: 0.6rem;
+}
+
+.bb-skeleton {
+    background: var(--general-main-2);
+    border: 1px solid var(--general-section-1);
+    border-radius: 1.4rem;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+
+    &__header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    &__emoji {
+        @extend %shimmer-base;
+        width: 3.6rem;
+        height: 3.6rem;
+        border-radius: 0.8rem;
+    }
+
+    &__badge {
+        @extend %shimmer-base;
+        width: 5rem;
+        height: 2rem;
+        border-radius: 999rem;
+    }
+
+    &__title {
+        @extend %shimmer-base;
+        height: 1.8rem;
+        width: 100%;
+
+        &--short {
+            width: 60%;
+        }
+    }
+
+    &__stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.7rem;
+    }
+
+    &__stat {
+        @extend %shimmer-base;
+        height: 5.4rem;
+        border-radius: 0.7rem;
+    }
+
+    &__btn {
+        @extend %shimmer-base;
+        height: 4.2rem;
+        border-radius: 0.9rem;
+        margin-top: 0.4rem;
+    }
+}
+
+// ─── Button loading spinner ───────────────────────────────────────────────────
+.bb-card {
+    &__btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.7rem;
+
+        &--loading {
+            cursor: wait;
+        }
+    }
+
+    &__spinner {
+        display: inline-block;
+        width: 1.4rem;
+        height: 1.4rem;
+        border: 2px solid rgba(255 255 255 / 35%);
+        border-top-color: #fff;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        flex-shrink: 0;
+    }
+}
