@@ -80,28 +80,28 @@ const RISK_MANAGERS_BOTS: TBot[] = [
 const TERMICA_BOTS: TBot[] = [
     {
         id: 'termica-pro',
-        name: 'Ramzfx Pro Bot',
+        name: 'Pro Bot',
         file: 'D1-BY MR.DUKE(+254702490526).xml',
         description: 'Professional Ramzfx strategy tuned for consistent signal execution.',
         emoji: '🔥',
     },
     {
         id: 'termica-classic',
-        name: 'Ramzfx Classic Bot',
+        name: 'Classic Bot',
         file: 'D2 BY--MR.DUKE(+254702490526) (1).xml',
         description: 'Classic Ramzfx setup with simple, reliable trade logic.',
         emoji: '⭐',
     },
     {
         id: 'termica-rise-fall',
-        name: 'Ramzfx Rise & Fall Bot',
+        name: 'Rise & Fall Bot',
         file: 'The-D3 rise and fall.xml',
         description: 'Ramzfx trend strategy focused on rise and fall market moves.',
         emoji: '📊',
     },
     {
         id: 'termica-prime',
-        name: 'Ramzfx Prime Bot',
+        name: 'Prime Bot',
         file: 'D4 Update by MR.DUKE(+254702490526)FINAL  (%%%)) (1) (1) (1).xml',
         description: 'Prime Ramzfx configuration with refined entry conditions.',
         emoji: '🏆',
@@ -115,7 +115,7 @@ const TERMICA_BOTS: TBot[] = [
     },
     {
         id: 'termica-fx',
-        name: 'Termica FX Bot',
+        name: 'Ramz FX Bot',
         file: 'D6 Deriv by Duke (1).xml',
         description: 'Ramzfx  edition with smooth execution for active traders.',
         emoji: '🎯',
@@ -157,14 +157,14 @@ const TERMICA_BOTS: TBot[] = [
     },
     {
         id: 'termica-slow',
-        name: 'Ramzfx Pole Bot',
+        name: 'Mwenda Pole Bot',
         file: 'Mwenda Pole By The Risk Manager (1).xml',
         description: 'Slow and steady Ramzfx setup for conservative execution.',
         emoji: '🐢',
     },
     {
         id: 'termica-ai',
-        name: 'Ramzfx AI Bot',
+        name: 'simba AI Bot',
         file: 'Simba Ai v1.xml',
         description: 'AI-styled Ramzfx bot combining pattern logic and smart exits.',
         emoji: '🦁',
@@ -185,7 +185,7 @@ const TERMICA_BOTS: TBot[] = [
     },
     {
         id: 'termica-wealth',
-        name: 'Ramzfx Wealth Bot',
+        name: 'Wealth Bot v2',
         file: 'Wealth Generator.xml',
         description: 'Ramzfx wealth strategy focused on structured account growth.',
         emoji: '💰',
