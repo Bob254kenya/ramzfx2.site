@@ -1,455 +1,278 @@
 @use 'components/shared/styles/constants' as *;
 @use 'components/shared/styles/mixins' as *;
 
-/** @define barspinner */
-.barspinner {
-    margin: auto;
-    width: 7rem;
-    height: 2.5rem;
-    white-space: nowrap;
+// ─── Blue palette ─────────────────────────────────────────────────────────────
+// --rl-blue-bright : #60a5fa  (sky, highlights)
+// --rl-blue-mid   : #3b82f6  (primary)
+// --rl-blue-deep  : #1d4ed8  (dark accent)
+// --rl-bg-base    : #050d1f  (deepest navy)
+// --rl-bg-card    : #0b1630  (container)
+// --rl-bg-ring    : #0f1e42  (subtle ring)
+
+// ─── Keyframes ───────────────────────────────────────────────────────────────
+@keyframes rl-bar-stretch {
+    0%, 40%, 100% { transform: scaleY(0.6); opacity: 0.45; }
+    20%            { transform: scaleY(2);   opacity: 1;    }
+}
+
+@keyframes rl-bar-glow {
+    0%, 100% { box-shadow: 0 0 8px 0 rgba(59, 130, 246, 0.4); }
+    50%      { box-shadow: 0 0 20px 4px rgba(96, 165, 250, 0.7); }
+}
+
+@keyframes rl-logo-pulse {
+    0%, 100% { filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5)); transform: scale(1); }
+    50%      { filter: drop-shadow(0 0 22px rgba(96, 165, 250, 0.9)); transform: scale(1.06); }
+}
+
+@keyframes rl-brand-in {
+    from { opacity: 0; letter-spacing: 0.6em; }
+    to   { opacity: 1; letter-spacing: 0.25em; }
+}
+
+@keyframes rl-highlight-shimmer {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.65; }
+}
+
+@keyframes rl-tagline-blink {
+    0%, 100% { opacity: 0.4; }
+    50%      { opacity: 0.9; }
+}
+
+@keyframes rl-orb-drift-1 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50%      { transform: translate(40px, -60px) scale(1.15); }
+}
+
+@keyframes rl-orb-drift-2 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50%      { transform: translate(-50px, 40px) scale(0.9); }
+}
+
+@keyframes rl-orb-drift-3 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50%      { transform: translate(30px, 50px) scale(1.1); }
+}
+
+@keyframes rl-container-in {
+    from { opacity: 0; transform: translateY(24px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0)    scale(1);    }
+}
+
+@keyframes rl-border-rotate {
+    to { --rl-border-angle: 360deg; }
+}
+
+// ─── Full-screen backdrop ─────────────────────────────────────────────────────
+.initial-loader {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #050d1f;
+    position: relative;
+    overflow: hidden;
+
+    &--fullscreen {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        z-index: 9999;
+    }
+
+    &__barspinner {
+        margin: 0.4rem auto 0;
+    }
+}
+
+// ─── Ambient orbs ────────────────────────────────────────────────────────────
+.rl-orb {
+    position: absolute;
+    border-radius: 50%;
+    pointer-events: none;
+    filter: blur(80px);
+
+    &--1 {
+        width: 45rem;
+        height: 45rem;
+        background: radial-gradient(circle, rgba(29, 78, 216, 0.35) 0%, transparent 70%);
+        top: -15rem;
+        left: -10rem;
+        animation: rl-orb-drift-1 12s ease-in-out infinite;
+    }
+
+    &--2 {
+        width: 38rem;
+        height: 38rem;
+        background: radial-gradient(circle, rgba(59, 130, 246, 0.22) 0%, transparent 70%);
+        bottom: -12rem;
+        right: -8rem;
+        animation: rl-orb-drift-2 15s ease-in-out infinite;
+    }
+
+    &--3 {
+        width: 28rem;
+        height: 28rem;
+        background: radial-gradient(circle, rgba(96, 165, 250, 0.12) 0%, transparent 70%);
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        animation: rl-orb-drift-3 9s ease-in-out infinite;
+    }
+}
+
+// ─── Card container ───────────────────────────────────────────────────────────
+.ramzfx-loading-container {
     position: relative;
     z-index: 2;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+    padding: 4rem 3.6rem;
+    min-width: 30rem;
+    border-radius: 2rem;
+    background: linear-gradient(160deg, #0d1f45 0%, #0b1630 60%, #07112a 100%);
+    border: 1px solid rgba(59, 130, 246, 0.18);
+    box-shadow:
+        0 0 0 1px rgba(96, 165, 250, 0.06),
+        0 24px 60px rgba(0, 0, 0, 0.55),
+        inset 0 1px 0 rgba(96, 165, 250, 0.08);
+    animation: rl-container-in 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+
+    // Glowing top edge
+    &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 10%;
+        width: 80%;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(96, 165, 250, 0.6), transparent);
+        border-radius: 50%;
+    }
+
+    @include mobile-or-tablet-screen {
+        padding: 3rem 2.4rem;
+        min-width: 26rem;
+        gap: 1.6rem;
+    }
+}
+
+// ─── Logo ─────────────────────────────────────────────────────────────────────
+.ramzfx-logo {
+    animation: rl-logo-pulse 2.8s ease-in-out infinite;
+    line-height: 0;
+
+    svg {
+        display: block;
+    }
+
+    @include mobile-or-tablet-screen {
+        svg { width: 52px; height: 52px; }
+    }
+}
+
+// ─── Brand wordmark ──────────────────────────────────────────────────────────
+.ramzfx-brand {
+    font-size: 2.2rem;
+    font-weight: 800;
+    line-height: 1;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    animation: rl-brand-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+
+    &-text {
+        color: #e2eaf8;
+    }
+
+    &-highlight {
+        background: linear-gradient(135deg, #60a5fa 0%, #3b82f6 50%, #1d4ed8 100%);
+        -webkit-background-clip: text;
+        background-clip: text;
+        color: transparent;
+        animation: rl-highlight-shimmer 2s ease-in-out infinite;
+        display: inline-block;
+    }
+
+    @include mobile-or-tablet-screen {
+        font-size: 1.8rem;
+    }
+}
+
+// ─── Bar spinner ─────────────────────────────────────────────────────────────
+.barspinner {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 3rem;
 
     &__rect {
-        margin: 0.4rem;
-        border-radius: 20px;
-        height: 65%;
-        width: 0.7rem;
-        display: inline-block;
-        animation: sk-stretchdelay 1.2s infinite ease-in-out;
-        position: relative;
-        transition: all 0.3s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-        
-        &::after {
-            content: '';
-            position: absolute;
-            top: -2px;
-            left: -2px;
-            right: -2px;
-            bottom: -2px;
-            background: inherit;
-            border-radius: 22px;
-            filter: blur(8px);
-            opacity: 0;
-            transition: opacity 0.3s ease;
-            z-index: -1;
-        }
-        
-        &:hover::after {
-            opacity: 0.6;
+        width: 0.6rem;
+        height: 100%;
+        border-radius: 10rem;
+        animation:
+            rl-bar-stretch 1.1s ease-in-out infinite,
+            rl-bar-glow    1.1s ease-in-out infinite;
+
+        @for $i from 1 through 5 {
+            &--#{$i} {
+                animation-delay: #{($i - 1) * -0.22}s;
+            }
         }
     }
 
     &-ramzfx .barspinner__rect {
-        background: linear-gradient(135deg, #ff6b6b, #4ecdc4, #45b7d1);
-        background-size: 200% 200%;
-        animation: gradientShift 2s ease infinite, sk-stretchdelay 1.2s infinite ease-in-out;
-        box-shadow: 0 0 20px rgba(78, 205, 196, 0.4);
+        background: linear-gradient(180deg, #60a5fa 0%, #3b82f6 50%, #1d4ed8 100%);
     }
-    
+
+    // Keep legacy theme classes working
     &-dark .barspinner__rect {
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        box-shadow: 0 0 20px rgba(102, 126, 234, 0.4);
+        background: linear-gradient(180deg, #93c5fd 0%, #3b82f6 100%);
     }
-    
+
     &-light .barspinner__rect {
-        background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-        box-shadow: 0 0 20px rgba(245, 87, 108, 0.4);
+        background: linear-gradient(180deg, #bfdbfe 0%, #60a5fa 100%);
     }
 }
 
-@keyframes gradientShift {
-    0%, 100% {
-        background-position: 0% 50%;
-    }
-    50% {
-        background-position: 100% 50%;
-    }
+// ─── Tagline ─────────────────────────────────────────────────────────────────
+.ramzfx-tagline {
+    margin: 0;
+    font-size: 1.2rem;
+    font-weight: 500;
+    color: rgba(147, 197, 253, 0.6);
+    letter-spacing: 0.04em;
+    animation: rl-tagline-blink 2s ease-in-out infinite;
 }
 
-@keyframes sk-stretchdelay {
-    0%, 40%, 100% {
-        transform: scaleY(1);
-        opacity: 0.5;
-    }
-    20% {
-        transform: scaleY(2.2);
-        opacity: 1;
-    }
-}
-
-/** @define initial-loader */
-.initial-loader {
-    width: 100%;
-    height: 100%;
-    justify-content: center;
-    align-items: center;
-    flex-direction: column;
-    display: flex;
-    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-    position: relative;
-    overflow: hidden;
-    
-    &::before {
-        content: '';
-        position: absolute;
-        width: 200%;
-        height: 200%;
-        background: radial-gradient(circle, rgba(78, 205, 196, 0.1) 0%, transparent 70%);
-        animation: rotateBg 20s linear infinite;
-        pointer-events: none;
-    }
-    
-    &::after {
-        content: '';
-        position: absolute;
-        width: 100%;
-        height: 100%;
-        background: radial-gradient(circle at 20% 50%, rgba(255, 107, 107, 0.05) 0%, transparent 50%);
-        pointer-events: none;
-    }
-    
-    @keyframes rotateBg {
-        from {
-            transform: rotate(0deg);
-        }
-        to {
-            transform: rotate(360deg);
-        }
-    }
-
-    &--fullscreen {
-        width: 100vw;
-        height: 100vh;
-        position: fixed;
-        top: 0;
-        left: 0;
-        z-index: 9999;
-
-        @include desktop-screen {
-            height: calc(100vh - #{$HEADER_HEIGHT} - #{$FOOTER_HEIGHT});
-        }
-
-        @include mobile-or-tablet-screen {
-            height: calc(100vh - #{$MOBILE_HEADER_HEIGHT});
-        }
-    }
-
-    &__barspinner {
-        margin: 2rem auto;
-        
-        &--rect {
-            background: linear-gradient(135deg, var(--brand-secondary), var(--brand-primary));
-            border-radius: 4px;
-            transition: all 0.3s ease;
-        }
-    }
-}
-
-/* RamzFX Loading Container */
-.ramzfx-loading-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 1.8rem;
-    padding: 3rem;
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(20px);
-    border-radius: 30px;
-    position: relative;
-    z-index: 2;
-    min-width: 320px;
-    border: 1px solid rgba(78, 205, 196, 0.2);
-    box-shadow: 
-        0 8px 32px rgba(0, 0, 0, 0.3),
-        inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    animation: containerFloat 3s ease-in-out infinite;
-    
-    @keyframes containerFloat {
-        0%, 100% {
-            transform: translateY(0px);
-        }
-        50% {
-            transform: translateY(-10px);
-        }
-    }
-    
-    &::before {
-        content: '';
-        position: absolute;
-        top: -2px;
-        left: -2px;
-        right: -2px;
-        bottom: -2px;
-        background: linear-gradient(45deg, #ff6b6b, #4ecdc4, #45b7d1, #ff6b6b);
-        border-radius: 32px;
-        background-size: 300% 300%;
-        z-index: -1;
-        animation: borderGlow 6s ease infinite;
-        opacity: 0.3;
-        transition: opacity 0.3s ease;
-    }
-    
-    &:hover::before {
-        opacity: 0.6;
-    }
-    
-    @keyframes borderGlow {
-        0%, 100% {
-            background-position: 0% 50%;
-        }
-        50% {
-            background-position: 100% 50%;
-        }
-    }
-}
-
-/* RamzFX Logo Styles */
-.ramzfx-logo {
-    position: relative;
-    animation: logoFloat 3s ease-in-out infinite;
-    
-    svg {
-        filter: drop-shadow(0 0 20px rgba(78, 205, 196, 0.6));
-        transition: all 0.3s ease;
-    }
-    
-    @keyframes logoFloat {
-        0%, 100% {
-            transform: translateY(0px) rotate(0deg);
-        }
-        25% {
-            transform: translateY(-5px) rotate(3deg);
-        }
-        75% {
-            transform: translateY(5px) rotate(-3deg);
-        }
-    }
-}
-
-/* Brand Text */
-.ramzfx-brand {
-    font-size: 2rem;
-    font-weight: 800;
-    letter-spacing: 4px;
-    text-transform: uppercase;
-    position: relative;
-    
-    &-text {
-        background: linear-gradient(135deg, #ffffff, #e0e0e0);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
-    }
-    
-    &-highlight {
-        background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
-        -webkit-background-clip: text;
-        background-clip: text;
-        color: transparent;
-        text-shadow: 0 0 20px rgba(78, 205, 196, 0.5);
-        position: relative;
-        display: inline-block;
-        animation: highlightPulse 2s ease-in-out infinite;
-        
-        &::before {
-            content: attr(data-text);
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
-            -webkit-background-clip: text;
-            background-clip: text;
-            color: transparent;
-            filter: blur(10px);
-            opacity: 0.5;
-            z-index: -1;
-        }
-    }
-    
-    @keyframes highlightPulse {
-        0%, 100% {
-            opacity: 1;
-            letter-spacing: 4px;
-        }
-        50% {
-            opacity: 0.8;
-            letter-spacing: 6px;
-        }
-    }
-}
-
-/* Status Messages */
+// ─── Status messages ─────────────────────────────────────────────────────────
 .ramzfx-status {
     text-align: center;
-    margin-top: 0.5rem;
-    
+
     h3 {
-        margin: 0.25rem 0;
-        font-size: 0.85rem;
+        margin: 0.2rem 0;
+        font-size: 1.15rem;
         font-weight: 500;
-        color: rgba(255, 255, 255, 0.7);
-        animation: statusFade 1.5s ease-in-out infinite;
-        
-        @keyframes statusFade {
-            0%, 100% {
-                opacity: 0.5;
-            }
-            50% {
-                opacity: 1;
-            }
-        }
+        color: rgba(147, 197, 253, 0.7);
     }
 }
 
-/* Enhanced bar animations */
-.barspinner__rect {
-    animation: ramzfxStretch 1.2s infinite ease-in-out;
-    
-    @for $i from 1 through 5 {
-        &:nth-child(#{$i}) {
-            animation-delay: -#{$i * 0.1}s;
-        }
-    }
-}
-
-@keyframes ramzfxStretch {
-    0%, 40%, 100% {
-        transform: scaleY(1);
-        opacity: 0.4;
-    }
-    20% {
-        transform: scaleY(2.5);
-        opacity: 1;
-    }
-}
-
-/* Particle Effect */
-.initial-loader {
-    .particle {
-        position: absolute;
-        width: 2px;
-        height: 2px;
-        background: linear-gradient(135deg, #ff6b6b, #4ecdc4);
-        border-radius: 50%;
-        pointer-events: none;
-        animation: particleFloat 4s ease-in-out infinite;
-    }
-    
-    @keyframes particleFloat {
-        0% {
-            transform: translateY(100vh) rotate(0deg);
-            opacity: 0;
-        }
-        10% {
-            opacity: 1;
-        }
-        90% {
-            opacity: 1;
-        }
-        100% {
-            transform: translateY(-100vh) rotate(360deg);
-            opacity: 0;
-        }
-    }
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .barspinner {
-        width: 5rem;
-        height: 2rem;
-        
-        &__rect {
-            width: 0.5rem;
-            margin: 0.3rem;
-        }
-    }
-    
-    .ramzfx-loading-container {
-        padding: 2rem;
-        margin: 1rem;
-        min-width: 280px;
-        gap: 1.5rem;
-    }
-    
-    .ramzfx-brand {
-        font-size: 1.5rem;
-        letter-spacing: 3px;
-    }
-    
-    .ramzfx-logo svg {
-        width: 50px;
-        height: 50px;
-    }
-    
-    .ramzfx-status h3 {
-        font-size: 0.75rem;
-    }
-}
-
-@media (max-width: 480px) {
-    .ramzfx-loading-container {
-        padding: 1.5rem;
-        min-width: 250px;
-        gap: 1.2rem;
-    }
-    
-    .ramzfx-brand {
-        font-size: 1.2rem;
-        letter-spacing: 2px;
-    }
-}
-
-/* Dark mode support */
-@media (prefers-color-scheme: dark) {
-    .initial-loader {
-        background: linear-gradient(135deg, #0a0a0a, #1a1a2e, #16213e);
-    }
-}
-
-/* Reduced motion preference */
+// ─── Reduced motion ──────────────────────────────────────────────────────────
 @media (prefers-reduced-motion: reduce) {
-    .barspinner__rect,
-    .ramzfx-loading-container,
+    .rl-orb,
     .ramzfx-logo,
     .ramzfx-brand-highlight,
-    .ramzfx-status h3,
-    .initial-loader::before {
+    .ramzfx-tagline,
+    .barspinner__rect {
         animation: none;
     }
-    
+
     .ramzfx-loading-container {
-        transform: none;
-    }
-    
-    .ramzfx-logo {
-        transform: none;
-    }
-}
-
-/* Loading screen entrance animation */
-@keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translateY(30px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.ramzfx-loading-container > * {
-    animation: slideUp 0.5s ease-out forwards;
-    
-    @for $i from 1 through 4 {
-        &:nth-child(#{$i}) {
-            animation-delay: #{$i * 0.1}s;
-        }
+        animation: none;
     }
 }
