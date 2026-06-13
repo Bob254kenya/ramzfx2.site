@@ -1,6 +1,3 @@
-Here's the complete, well-styled AutoTrades.tsx file with all imports and proper styling for the L→Digit Strategy section:
-
-```tsx
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
@@ -1158,4 +1155,3 @@ const AutoTrades = observer(() => {
 });
 
 export default AutoTrades;
-```
