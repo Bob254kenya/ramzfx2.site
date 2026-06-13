@@ -193,7 +193,7 @@ export const DOMAIN_CONFIG: Record<string, DomainConfig> = {
             manualTrading: true,
         },
         ui: {
-            brandName: 'Ramzfx traders hub',
+            brandName: 'RAMZFX | YOUR ULTIMATE IN AUTOMATION',
         },
     }),
     // ── Additional production domain ─────────────────────────────────────────
