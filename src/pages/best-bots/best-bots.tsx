@@ -135,6 +135,13 @@ const TERMICA_BOTS: TBot[] = [
         emoji: '🔲',
     },
     {
+        id: 'termica-wealth',
+        name: 'Ramzfx Wealth Bot',
+        file: 'Wealth Generator.xml',
+        description: 'Ramzfx wealth strategy focused on structured account growth.',
+        emoji: '💰',
+    },
+    {
         id: 'termica-shield',
         name: 'Ramzfx Shield Bot',
         file: 'Kiazala v1 by The Risk Manager (1).xml',
