@@ -2134,7 +2134,10 @@ const AutoTrades = observer(() => {
             // Reset L→Digit active flag on win, keep on loss
             if (profit > 0 && state.lDigitActive) {
                 state.lDigitActive = false;
-                state.lDigitOriginalTradeType = null;
+                if (state.lDigitOriginalTradeType) {
+                    tradeTypeRef.current = state.lDigitOriginalTradeType;
+                    state.lDigitOriginalTradeType = null;
+                }
             }
 
             if (!unmountedRef.current) {
@@ -3313,7 +3316,7 @@ const AutoTrades = observer(() => {
                                                 </div>
                                             )}
                                             
-                                            <p className='auto-trades-inverse__hint' style={{ color: '#ff9800', marginTop: '0.8rem' }}>
+                                            <p className='auto-trades-inverse__hint' style={{ color: '#ff9800', marginTop: '0.8rem', fontSize: '1.1rem' }}>
                                                 ⚡ Activates AFTER a loss, deactivates AFTER a win.
                                                 Overrides current trade type with opposite pattern when active.
                                             </p>
