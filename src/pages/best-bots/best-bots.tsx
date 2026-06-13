@@ -171,7 +171,7 @@ const TERMICA_BOTS: TBot[] = [
     },
     {
         id: 'termica-digit-pro',
-        name: 'Termica Digit Pro Bot',
+        name: 'Ramzfx  Digit Pro Bot',
         file: 'under 7,8,9= g2 bot 1==.xml',
         description: 'Ramzfx digit strategy for specialised over/under setups.',
         emoji: '🎲',
@@ -532,11 +532,22 @@ const BotCard = observer(({ bot, stats }: { bot: TBot; stats: TBotStats | undefi
             </div>
 
             <button
-                className={`bb-card__btn${loaded ? ' bb-card__btn--loaded' : ''}${error ? ' bb-card__btn--error' : ''}`}
+                className={`bb-card__btn${loaded ? ' bb-card__btn--loaded' : ''}${error ? ' bb-card__btn--error' : ''}${loading ? ' bb-card__btn--loading' : ''}`}
                 onClick={handleLoad}
                 disabled={loading}
             >
-                {loading ? 'Loading...' : loaded ? 'Loaded' : error ? 'Retry' : 'Load Bot'}
+                {loading ? (
+                    <>
+                        <span className='bb-card__spinner' aria-hidden='true' />
+                        Loading...
+                    </>
+                ) : loaded ? (
+                    <>✓ Loaded</>
+                ) : error ? (
+                    <>⚠ Retry</>
+                ) : (
+                    'Load Bot'
+                )}
             </button>
         </div>
     );
@@ -546,6 +557,7 @@ const BestBots = () => {
     const [statsMap, setStatsMap] = useState<Record<string, TBotStats>>({});
     const botsFolder = getBestBotsFolder();
     const [bots, setBots] = useState<TBot[]>(() => getBestBotsForFolder(botsFolder));
+    const [pageLoading, setPageLoading] = useState(true);
 
     useEffect(() => {
         let isMounted = true;
@@ -577,6 +589,9 @@ const BestBots = () => {
             })
             .catch(() => {
                 if (isMounted) setBots(configuredBots);
+            })
+            .finally(() => {
+                if (isMounted) setPageLoading(false);
             });
 
         return () => {
@@ -616,13 +631,39 @@ const BestBots = () => {
         return la - lb;
     });
 
+    if (pageLoading) {
+        return (
+            <div className='best-bots'>
+                <div className='best-bots__skeleton-grid'>
+                    {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className='bb-skeleton'>
+                            <div className='bb-skeleton__header'>
+                                <div className='bb-skeleton__emoji' />
+                                <div className='bb-skeleton__badge' />
+                            </div>
+                            <div className='bb-skeleton__title' />
+                            <div className='bb-skeleton__title bb-skeleton__title--short' />
+                            <div className='bb-skeleton__stats'>
+                                <div className='bb-skeleton__stat' />
+                                <div className='bb-skeleton__stat' />
+                                <div className='bb-skeleton__stat' />
+                                <div className='bb-skeleton__stat' />
+                            </div>
+                            <div className='bb-skeleton__btn' />
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className='best-bots'>
             <div className='best-bots__grid'>
                 {rankedBots.length > 0 ? (
                     rankedBots.map(bot => <BotCard key={bot.id} bot={bot} stats={statsMap[bot.id]} />)
                 ) : (
-                    <p>No bots configured for this domain yet.</p>
+                    <p className='best-bots__empty'>No bots configured for this domain yet.</p>
                 )}
             </div>
         </div>
