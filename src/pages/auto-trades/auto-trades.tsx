@@ -44,6 +44,16 @@ type FloatingStrategyAlert = {
     symbol: string;
 };
 
+// New: Strategy type for L→digit analysis
+type LDigitStrategy = 'none' | 'even_odd' | 'over_under';
+type LDigitAnalysis = {
+    enabled: boolean;
+    strategy: LDigitStrategy;
+    lookbackTicks: number;
+    thresholdDigit?: number; // For over/under strategy
+    targetParity?: 'even' | 'odd'; // For even/odd strategy
+};
+
 const FIVE_MINUTE_GRANULARITY = 300;
 const AI_FAB_SIZE = 72;
 const AI_FAB_MARGIN = 12;
@@ -74,6 +84,7 @@ type AiAutoTradeSettings = {
     strategyMode?: StrategyMode | null;
     martingaleMode?: MartingaleModeType | null;
     consecutiveLossCount?: string | null;
+    lDigitStrategy?: LDigitAnalysis | null; // New field
 };
 
 type AiCustomStrategy = {
@@ -439,6 +450,11 @@ export const normalizeAiAutoTradePlan = (plan: Partial<AiAutoTradeParseResult>):
     const consecutiveLossCount = getAiBoundedIntString(settings.consecutiveLossCount, 1, 10);
     if (consecutiveLossCount !== undefined) normalizedSettings.consecutiveLossCount = consecutiveLossCount;
 
+    // New: Handle L→digit strategy
+    if (settings.lDigitStrategy) {
+        normalizedSettings.lDigitStrategy = settings.lDigitStrategy;
+    }
+
     return {
         settings: normalizedSettings,
         summary: Array.isArray(plan.summary) ? plan.summary.filter(item => typeof item === 'string') : [],
@@ -475,6 +491,56 @@ export const parseAiAutoTradeStrategy = (rawText: string): AiAutoTradeParseResul
 
     if (!text) {
         return { settings, summary, warnings: ['Enter a strategy before applying settings.'], source: 'local' };
+    }
+
+    // Parse L→digit strategy patterns
+    const lDigitEvenMatch = text.match(/\b(?:l→digit|loss to digit|after loss check)\s*even\s*(?:with|using|lookback)?\s*(\d+)?\s*ticks?\b/i);
+    const lDigitOddMatch = text.match(/\b(?:l→digit|loss to digit|after loss check)\s*odd\s*(?:with|using|lookback)?\s*(\d+)?\s*ticks?\b/i);
+    const lDigitOverMatch = text.match(/\b(?:l→digit|loss to digit|after loss check)\s*over\s*(\d+)\s*(?:with|using|lookback)?\s*(\d+)?\s*ticks?\b/i);
+    const lDigitUnderMatch = text.match(/\b(?:l→digit|loss to digit|after loss check)\s*under\s*(\d+)\s*(?:with|using|lookback)?\s*(\d+)?\s*ticks?\b/i);
+
+    if (lDigitEvenMatch) {
+        const lookback = lDigitEvenMatch[1] ? parseInt(lDigitEvenMatch[1]) : 5;
+        settings.lDigitStrategy = {
+            enabled: true,
+            strategy: 'even_odd',
+            lookbackTicks: Math.min(20, Math.max(1, lookback)),
+            targetParity: 'even'
+        };
+        summary.push(`L→Digit: Check last ${lookback} ticks, if all odd → trade even`);
+    } else if (lDigitOddMatch) {
+        const lookback = lDigitOddMatch[1] ? parseInt(lDigitOddMatch[1]) : 5;
+        settings.lDigitStrategy = {
+            enabled: true,
+            strategy: 'even_odd',
+            lookbackTicks: Math.min(20, Math.max(1, lookback)),
+            targetParity: 'odd'
+        };
+        summary.push(`L→Digit: Check last ${lookback} ticks, if all even → trade odd`);
+    } else if (lDigitOverMatch) {
+        const threshold = parseInt(lDigitOverMatch[1]);
+        const lookback = lDigitOverMatch[2] ? parseInt(lDigitOverMatch[2]) : 5;
+        if (threshold >= 0 && threshold <= 9) {
+            settings.lDigitStrategy = {
+                enabled: true,
+                strategy: 'over_under',
+                lookbackTicks: Math.min(20, Math.max(1, lookback)),
+                thresholdDigit: threshold
+            };
+            summary.push(`L→Digit: Check last ${lookback} ticks, if all ≤ ${threshold} → trade over ${threshold}`);
+        }
+    } else if (lDigitUnderMatch) {
+        const threshold = parseInt(lDigitUnderMatch[1]);
+        const lookback = lDigitUnderMatch[2] ? parseInt(lDigitUnderMatch[2]) : 5;
+        if (threshold >= 0 && threshold <= 9) {
+            settings.lDigitStrategy = {
+                enabled: true,
+                strategy: 'over_under',
+                lookbackTicks: Math.min(20, Math.max(1, lookback)),
+                thresholdDigit: threshold
+            };
+            summary.push(`L→Digit: Check last ${lookback} ticks, if all ≥ ${threshold} → trade under ${threshold}`);
+        }
     }
 
     const afterLossMatch = text.match(
@@ -691,6 +757,47 @@ export const hasRequiredDigitStreak = ({
     return digits
         .slice(-streak)
         .every(digit => isDigitSignalMatch({ trade_type, digit, barrier, inverse }));
+};
+
+// New: Evaluate L→digit strategy across all markets
+const evaluateLDigitStrategy = (
+    lDigitStrategy: LDigitAnalysis | null,
+    marketDigits: Map<string, number[]>
+): Map<string, boolean> => {
+    const results = new Map<string, boolean>();
+    
+    if (!lDigitStrategy?.enabled) return results;
+
+    for (const [symbol, digits] of marketDigits.entries()) {
+        if (digits.length < lDigitStrategy.lookbackTicks) {
+            results.set(symbol, false);
+            continue;
+        }
+
+        const recentDigits = digits.slice(-lDigitStrategy.lookbackTicks);
+        
+        if (lDigitStrategy.strategy === 'even_odd') {
+            // Check if all recent digits match the condition for even/odd
+            const allMatch = recentDigits.every(digit => {
+                if (lDigitStrategy.targetParity === 'even') {
+                    return digit % 2 !== 0; // All digits odd → trade even
+                } else {
+                    return digit % 2 === 0; // All digits even → trade odd
+                }
+            });
+            results.set(symbol, allMatch);
+        } else if (lDigitStrategy.strategy === 'over_under' && lDigitStrategy.thresholdDigit !== undefined) {
+            // Check if all recent digits are ≤ threshold for over, or ≥ threshold for under
+            const allMatch = recentDigits.every(digit => {
+                // For over strategy: if all digits are ≤ threshold, trade over
+                // For under strategy: if all digits are ≥ threshold, trade under
+                return digit <= lDigitStrategy.thresholdDigit!;
+            });
+            results.set(symbol, allMatch);
+        }
+    }
+
+    return results;
 };
 
 const isDirectionMatch = (trade_type: TradeType, direction: Direction) => {
@@ -1080,6 +1187,27 @@ const AutoTrades = observer(() => {
     const [streak, setStreak] = useState(() => loadSavedNum('streak', '4', 1, 10));
     const [analysisTicks, setAnalysisTicks] = useState(() => loadSavedNum('analysisTicks', '1', 1, 10));
     const [selectedMarketSymbols, setSelectedMarketSymbols] = useState<string[]>(loadSavedMarkets);
+    
+    // New: L→Digit strategy state
+    const [lDigitStrategy, setLDigitStrategy] = useState<LDigitAnalysis>(() => {
+        try {
+            const saved = localStorage.getItem('auto_trades_lDigitStrategy');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                return {
+                    enabled: parsed.enabled ?? false,
+                    strategy: parsed.strategy ?? 'none',
+                    lookbackTicks: parsed.lookbackTicks ?? 5,
+                    thresholdDigit: parsed.thresholdDigit,
+                    targetParity: parsed.targetParity,
+                };
+            }
+        } catch {
+            // Ignore parse errors
+        }
+        return { enabled: false, strategy: 'none', lookbackTicks: 5 };
+    });
+    
     const selectedMarkets = useMemo(
         () => AUTO_MARKETS.filter(market => selectedMarketSymbols.includes(market.symbol)),
         [selectedMarketSymbols]
@@ -1247,6 +1375,17 @@ const AutoTrades = observer(() => {
     const unmountedRef = useRef(false);
     const stopTradingRef = useRef<() => void>(() => {});
     const floatingStrategyAlertRef = useRef<FloatingStrategyAlert | null>(null);
+    const lDigitStrategyRef = useRef(lDigitStrategy);
+
+    // Save L→digit strategy to localStorage
+    useEffect(() => {
+        try {
+            localStorage.setItem('auto_trades_lDigitStrategy', JSON.stringify(lDigitStrategy));
+        } catch {
+            // Ignore localStorage write failures
+        }
+        lDigitStrategyRef.current = lDigitStrategy;
+    }, [lDigitStrategy]);
 
     useEffect(() => {
         setAiFabPosition(current => {
@@ -1367,7 +1506,6 @@ const AutoTrades = observer(() => {
         } catch {
             // Ignore localStorage write failures.
         }
-
         const templateConfig = getTemplateTradeConfig(strategyTemplate);
         if (!templateConfig) return;
 
@@ -1682,6 +1820,10 @@ const AutoTrades = observer(() => {
             const normalizedLossCount = clampConsecutiveLossThreshold(settings.consecutiveLossCount);
             setConsecutiveLossCount(normalizedLossCount);
             setConsecutiveLossCountInput(String(normalizedLossCount));
+        }
+        // New: Apply L→digit strategy from AI
+        if (settings.lDigitStrategy != null) {
+            setLDigitStrategy(settings.lDigitStrategy);
         }
     }, []);
 
@@ -2508,6 +2650,67 @@ const AutoTrades = observer(() => {
         refreshDisplays();
     }, [refreshDisplays, selectedMarkets]);
 
+    // New: Evaluate L→digit strategy across all markets during trading
+    useEffect(() => {
+        if (!runningRef.current || !lDigitStrategyRef.current.enabled) return;
+
+        const interval = setInterval(() => {
+            if (!runningRef.current) return;
+
+            // Build map of market symbols to their recent digits
+            const marketDigits = new Map<string, number[]>();
+            for (const symbol of monitoredMarketSymbolsRef.current) {
+                const state = marketStatesRef.current[symbol];
+                if (state && state.lastDigits.length >= lDigitStrategyRef.current.lookbackTicks) {
+                    marketDigits.set(symbol, [...state.lastDigits]);
+                }
+            }
+
+            // Evaluate the strategy
+            const evaluation = evaluateLDigitStrategy(lDigitStrategyRef.current, marketDigits);
+            
+            // For markets that meet the L→digit condition, trigger a trade
+            for (const [symbol, shouldTrigger] of evaluation) {
+                if (shouldTrigger) {
+                    const state = marketStatesRef.current[symbol];
+                    if (state && !state.trading && !globalTradingRef.current && state.lossCooldownLeft === 0) {
+                        // Override the trade type based on the strategy
+                        const originalTradeType = tradeTypeRef.current;
+                        let newTradeType: TradeType | null = null;
+                        
+                        if (lDigitStrategyRef.current.strategy === 'even_odd') {
+                            newTradeType = lDigitStrategyRef.current.targetParity === 'even' ? 'DIGITEVEN' : 'DIGITODD';
+                        } else if (lDigitStrategyRef.current.strategy === 'over_under' && lDigitStrategyRef.current.thresholdDigit !== undefined) {
+                            // For over/under, we trade the opposite of the condition
+                            // If all digits ≤ threshold, trade over (DIGITOVER)
+                            // If all digits ≥ threshold, trade under (DIGITUNDER)
+                            newTradeType = 'DIGITOVER';
+                        }
+                        
+                        if (newTradeType && newTradeType !== originalTradeType) {
+                            // Temporarily override trade type for this trade
+                            const originalTradeTypeRef = tradeTypeRef.current;
+                            tradeTypeRef.current = newTradeType;
+                            
+                            // Execute the trade
+                            state.trading = true;
+                            globalTradingRef.current = true;
+                            const stakeNow = nextStakeRef.current;
+                            
+                            executeTrade(symbol, stakeNow, previousContractResultRef.current)
+                                .then(profit => handleAfterTrade(symbol, profit))
+                                .finally(() => {
+                                    tradeTypeRef.current = originalTradeTypeRef;
+                                });
+                        }
+                    }
+                }
+            }
+        }, 1000); // Check every second
+
+        return () => clearInterval(interval);
+    }, [executeTrade, handleAfterTrade]);
+
     const handleRun = useCallback(() => {
         if (!api_base.is_authorized) {
             setError('Please log in to your Deriv account before trading.');
@@ -2729,9 +2932,26 @@ const AutoTrades = observer(() => {
         (consecutiveLossRef.current > 0 || previousContractResultRef.current === 'loss');
     const activeBarrier = getActiveDigitBarrier(tradeType, previousContractResult, consecutiveLossRef.current);
 
+    // Get L→digit strategy display text
+    const getLDigitStrategyText = () => {
+        if (!lDigitStrategy.enabled) return null;
+        if (lDigitStrategy.strategy === 'even_odd') {
+            return `L→Digit: Check last ${lDigitStrategy.lookbackTicks} ticks, all ${lDigitStrategy.targetParity === 'even' ? 'odd' : 'even'} → trade ${lDigitStrategy.targetParity}`;
+        } else if (lDigitStrategy.strategy === 'over_under' && lDigitStrategy.thresholdDigit !== undefined) {
+            return `L→Digit: Check last ${lDigitStrategy.lookbackTicks} ticks, all ≤ ${lDigitStrategy.thresholdDigit} → trade over ${lDigitStrategy.thresholdDigit}`;
+        }
+        return null;
+    };
+
     const subtitleTxt = (() => {
+        const lDigitText = getLDigitStrategyText();
         const inv = inverseModeRef.current;
         const label = inv ? INVERSE_LABELS[tradeType] : TRADE_TYPE_LABELS[tradeType];
+        
+        if (lDigitText) {
+            return `${lDigitText} | Streak: ${streakNum}+ → ${label}`;
+        }
+        
         if (tradeType === 'DIGITOVER')
             return `Streak: ${streakNum}+ digits ${inv ? '>' : '≤'} ${activeBarrier} → ${label}`;
         if (tradeType === 'DIGITUNDER')
@@ -2750,6 +2970,7 @@ const AutoTrades = observer(() => {
             return `Streak: ${streakNum}+ consecutive ${inv ? 'Odd' : 'Even'} digits → ${label}`;
         if (tradeType === 'DIGITMATCH') return `Streak: ${streakNum}+ digits ${inv ? '=' : '≠'} ${barrier} → ${label}`;
         if (tradeType === 'DIGITDIFF') return `Streak: ${streakNum}+ digits ${inv ? '≠' : '='} ${barrier} → ${label}`;
+        return '';
     })();
 
     const resolvedSubtitleTxt = (() => {
@@ -2878,6 +3099,123 @@ const AutoTrades = observer(() => {
                             {/* Settings card */}
                             <div className='auto-trades-card'>
                                 <h2 className='auto-trades-card__title'>Settings</h2>
+
+                                {/* L→Digit Strategy Section */}
+                                <div className='auto-trades-config__group'>
+                                    <div className='auto-trades-strategy-selector'>
+                                        <label>L→Digit Strategy (Loss to Digit)</label>
+                                        <select
+                                            className='auto-trades-strategy-selector__select'
+                                            value={lDigitStrategy.enabled ? lDigitStrategy.strategy : 'none'}
+                                            onChange={e => {
+                                                const value = e.target.value;
+                                                if (value === 'none') {
+                                                    setLDigitStrategy({ enabled: false, strategy: 'none', lookbackTicks: 5 });
+                                                } else if (value === 'even_odd') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        strategy: 'even_odd',
+                                                        lookbackTicks: 5,
+                                                        targetParity: 'even'
+                                                    });
+                                                } else if (value === 'over_under') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        strategy: 'over_under',
+                                                        lookbackTicks: 5,
+                                                        thresholdDigit: 4
+                                                    });
+                                                }
+                                            }}
+                                            disabled={isRunning}
+                                        >
+                                            <option value='none'>Disabled</option>
+                                            <option value='even_odd'>Even/Odd Strategy</option>
+                                            <option value='over_under'>Over/Under Strategy</option>
+                                        </select>
+                                    </div>
+                                    
+                                    {lDigitStrategy.enabled && (
+                                        <div className='auto-trades-config__group' style={{ marginTop: '0.5rem' }}>
+                                            {lDigitStrategy.strategy === 'even_odd' && (
+                                                <>
+                                                    <div className='auto-trades-config__field'>
+                                                        <label>Lookback Ticks</label>
+                                                        <input
+                                                            type='range'
+                                                            min='1'
+                                                            max='20'
+                                                            step='1'
+                                                            value={lDigitStrategy.lookbackTicks}
+                                                            onChange={e => setLDigitStrategy(prev => ({
+                                                                ...prev,
+                                                                lookbackTicks: parseInt(e.target.value)
+                                                            }))}
+                                                            disabled={isRunning}
+                                                        />
+                                                        <span>{lDigitStrategy.lookbackTicks} ticks</span>
+                                                    </div>
+                                                    <div className='auto-trades-config__field'>
+                                                        <label>Target Trade</label>
+                                                        <select
+                                                            value={lDigitStrategy.targetParity}
+                                                            onChange={e => setLDigitStrategy(prev => ({
+                                                                ...prev,
+                                                                targetParity: e.target.value as 'even' | 'odd'
+                                                            }))}
+                                                            disabled={isRunning}
+                                                        >
+                                                            <option value='even'>Trade Even (if all last digits odd)</option>
+                                                            <option value='odd'>Trade Odd (if all last digits even)</option>
+                                                        </select>
+                                                    </div>
+                                                    <p className='auto-trades-inverse__hint'>
+                                                        Checks last {lDigitStrategy.lookbackTicks} ticks. If all digits are {lDigitStrategy.targetParity === 'even' ? 'odd' : 'even'}, trades {lDigitStrategy.targetParity}.
+                                                    </p>
+                                                </>
+                                            )}
+                                            
+                                            {lDigitStrategy.strategy === 'over_under' && (
+                                                <>
+                                                    <div className='auto-trades-config__field'>
+                                                        <label>Lookback Ticks</label>
+                                                        <input
+                                                            type='range'
+                                                            min='1'
+                                                            max='20'
+                                                            step='1'
+                                                            value={lDigitStrategy.lookbackTicks}
+                                                            onChange={e => setLDigitStrategy(prev => ({
+                                                                ...prev,
+                                                                lookbackTicks: parseInt(e.target.value)
+                                                            }))}
+                                                            disabled={isRunning}
+                                                        />
+                                                        <span>{lDigitStrategy.lookbackTicks} ticks</span>
+                                                    </div>
+                                                    <div className='auto-trades-config__field'>
+                                                        <label>Threshold Digit</label>
+                                                        <select
+                                                            value={lDigitStrategy.thresholdDigit}
+                                                            onChange={e => setLDigitStrategy(prev => ({
+                                                                ...prev,
+                                                                thresholdDigit: parseInt(e.target.value)
+                                                            }))}
+                                                            disabled={isRunning}
+                                                        >
+                                                            {[0,1,2,3,4,5,6,7,8,9].map(d => (
+                                                                <option key={d} value={d}>{d}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <p className='auto-trades-inverse__hint'>
+                                                        Checks last {lDigitStrategy.lookbackTicks} ticks. If all digits ≤ {lDigitStrategy.thresholdDigit}, trades Digit Over {lDigitStrategy.thresholdDigit}.
+                                                    </p>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
 
                                 <div className='auto-trades-config__group'>
                                     <div className='auto-trades-strategy-selector'>
@@ -3281,6 +3619,11 @@ const AutoTrades = observer(() => {
                                         ⏳ {cooldownDisplay}t cooldown
                                     </span>
                                 )}
+                                {lDigitStrategy.enabled && (
+                                    <span className='auto-trades-markets__l-digit-badge'>
+                                        L→Digit: {lDigitStrategy.strategy === 'even_odd' ? `${lDigitStrategy.targetParity}` : `Over ${lDigitStrategy.thresholdDigit}`}
+                                    </span>
+                                )}
                             </h2>
                             {!isRunning && (
                                 <div className='auto-trades-markets__actions'>
@@ -3509,7 +3852,7 @@ const AutoTrades = observer(() => {
                                                                         : `Collecting ${snapshot.sampleSize}/${PERCENTAGE_MIN_SAMPLE_SIZE} samples`}
                                                                     {' · '}
                                                                     {rollingWindowLabel}
-                                                                    {' Â· '}
+                                                                    {' · '}
                                                                     Confidence: {snapshot.confidence.toFixed(0)}%
                                                                 </div>
                                                             </>
