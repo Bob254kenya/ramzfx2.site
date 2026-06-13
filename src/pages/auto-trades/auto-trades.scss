@@ -175,7 +175,239 @@ $at-text-faint: #2c4060;
         }
     }
 }
+// L→Digit Strategy Section Styles
+.auto-trades-l-digit-section {
+    background: linear-gradient(135deg, rgba(33, 33, 33, 0.95) 0%, rgba(25, 25, 25, 0.98) 100%);
+    border-radius: 16px;
+    padding: 1.25rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid rgba(255, 152, 0, 0.2);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 
+    &__header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid rgba(255, 152, 0, 0.3);
+    }
+
+    &__icon {
+        font-size: 1.5rem;
+    }
+
+    &__title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #ff9800;
+        letter-spacing: 0.5px;
+    }
+
+    &__badge {
+        margin-left: auto;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        background: rgba(100, 100, 100, 0.3);
+        color: #aaa;
+        
+        &--active {
+            background: linear-gradient(135deg, #ff9800, #ff6b00);
+            color: white;
+            animation: pulse 1.5s infinite;
+            box-shadow: 0 0 8px rgba(255, 152, 0, 0.6);
+        }
+    }
+
+    &__config {
+        margin-top: 1rem;
+        animation: slideDown 0.3s ease-out;
+    }
+
+    &__field {
+        margin-bottom: 1.25rem;
+    }
+
+    &__label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: #ddd;
+        margin-bottom: 0.5rem;
+    }
+
+    &__label-icon {
+        font-size: 0.9rem;
+    }
+
+    &__label-value {
+        margin-left: auto;
+        background: #ff9800;
+        color: #1a1a1a;
+        padding: 0.2rem 0.6rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 700;
+    }
+
+    &__lookback {
+        position: relative;
+        padding: 0.5rem 0;
+    }
+
+    &__slider {
+        width: 100%;
+        height: 6px;
+        -webkit-appearance: none;
+        background: linear-gradient(90deg, #ff9800 0%, #ff9800 var(--fill-percent, 0%), #444 var(--fill-percent, 0%), #444 100%);
+        border-radius: 3px;
+        outline: none;
+        cursor: pointer;
+
+        &::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ff9800;
+            border: 2px solid white;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            cursor: pointer;
+            transition: transform 0.2s;
+            
+            &:hover {
+                transform: scale(1.2);
+            }
+        }
+
+        &::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ff9800;
+            border: 2px solid white;
+            cursor: pointer;
+        }
+    }
+
+    &__lookback-markers {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 0.5rem;
+        padding: 0 0.25rem;
+    }
+
+    &__lookback-marker {
+        font-size: 0.7rem;
+        color: #666;
+        transition: color 0.2s;
+        
+        &--active {
+            color: #ff9800;
+            font-weight: 600;
+        }
+    }
+
+    &__lookback-value {
+        display: flex;
+        align-items: baseline;
+        justify-content: center;
+        gap: 0.25rem;
+        margin-top: 0.75rem;
+        padding: 0.5rem;
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: 8px;
+    }
+
+    &__lookback-number {
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #ff9800;
+        line-height: 1;
+        text-shadow: 0 0 4px rgba(255, 152, 0, 0.5);
+    }
+
+    &__lookback-unit {
+        font-size: 0.8rem;
+        color: #aaa;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    &__field-hint {
+        font-size: 0.7rem;
+        color: #888;
+        margin-top: 0.5rem;
+        font-style: italic;
+        padding-left: 0.25rem;
+        border-left: 2px solid #ff9800;
+    }
+}
+
+// Markets badge for L→Digit
+.auto-trades-markets__l-digit-badge {
+    margin-left: 0.75rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    background: linear-gradient(135deg, #666, #444);
+    color: #ccc;
+    
+    &--active {
+        background: linear-gradient(135deg, #ff9800, #ff6b00);
+        color: white;
+        animation: pulse 1.5s infinite;
+    }
+}
+
+// Market card L→Digit active state
+.auto-trades-market--l-digit-active {
+    border: 2px solid #ff9800 !important;
+    box-shadow: 0 0 12px rgba(255, 152, 0, 0.3);
+    background: linear-gradient(135deg, rgba(255, 152, 0, 0.05), rgba(255, 107, 0, 0.02));
+    
+    .auto-trades-market__badge--l-digit {
+        background: linear-gradient(135deg, #ff9800, #ff6b00);
+        animation: badgePulse 1s infinite;
+    }
+}
+
+// Animations
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+        box-shadow: 0 0 8px rgba(255, 152, 0, 0.6);
+    }
+    50% {
+        opacity: 0.9;
+        box-shadow: 0 0 16px rgba(255, 152, 0, 0.9);
+    }
+}
+
+@keyframes badgePulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
 // ── Floating Alert ───────────────────────────────────────────────────────────
 
 .auto-trades-floating-alert {
