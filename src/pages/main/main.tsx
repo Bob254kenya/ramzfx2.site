@@ -193,7 +193,7 @@ const SocialPopup: React.FC = () => {
                 <div style={linksContainerStyle}>
                     <a 
                         href="#"
-                        onClick={(e) => handleLinkClick(e, "https://whatsapp.com")}
+                        onClick={(e) => handleLinkClick(e, "https://wa.me/+254757261120")}
                         style={linkStyle}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
@@ -214,7 +214,7 @@ const SocialPopup: React.FC = () => {
                     </a>
                     <a 
                         href="#"
-                        onClick={(e) => handleLinkClick(e, "https://telegram.org")}
+                        onClick={(e) => handleLinkClick(e, "https://t.me/+YDUwvuuVDYg5NjE0")}
                         style={linkStyle}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
@@ -235,7 +235,7 @@ const SocialPopup: React.FC = () => {
                     </a>
                     <a 
                         href="#"
-                        onClick={(e) => handleLinkClick(e, "https://youtube.com")}
+                        onClick={(e) => handleLinkClick(e, "https://www.youtube.com/@ceoramz")}
                         style={linkStyle}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
@@ -256,7 +256,7 @@ const SocialPopup: React.FC = () => {
                     </a>
                     <a 
                         href="#"
-                        onClick={(e) => handleLinkClick(e, "https://tiktok.com")}
+                        onClick={(e) => handleLinkClick(e, "https://tiktok.com/@ceoramz")}
                         style={linkStyle}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
@@ -277,7 +277,7 @@ const SocialPopup: React.FC = () => {
                     </a>
                     <a 
                         href="#"
-                        onClick={(e) => handleLinkClick(e, "https://instagram.com")}
+                        onClick={(e) => handleLinkClick(e, "https://www.instagram.com/ramztrader.site?igsh=aDY1aGFiMGpobHJi")}
                         style={linkStyle}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
@@ -298,7 +298,7 @@ const SocialPopup: React.FC = () => {
                     </a>
                     <a 
                         href="#"
-                        onClick={(e) => handleLinkClick(e, "https://discord.com")}
+                        onClick={(e) => handleLinkClick(e, "https://www.facebook.com/profile.php?id=61573399294689")}
                         style={linkStyle}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
@@ -319,7 +319,7 @@ const SocialPopup: React.FC = () => {
                     </a>
                     <a 
                         href="#"
-                        onClick={(e) => handleLinkClick(e, "https://twitter.com")}
+                        onClick={(e) => handleLinkClick(e, "https://www.instagram.com/ramztrader.site?igsh=aDY1aGFiMGpobHJi")}
                         style={linkStyle}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
