@@ -395,8 +395,146 @@
         padding: 0.8rem;
         background: var(--general-main-1);
         z-index: 1;
+        // ==============================================
+// SOCIAL POPUP STYLES
+// Cyberpunk / Neon Theme
+// ==============================================
 
-        .db-toolbox {
+.social-popup {
+    position: fixed;
+    bottom: 25px;
+    right: 25px;
+    z-index: 1000;
+    animation: slideInRight 0.4s ease-out;
+    font-family: 'Courier New', 'Orbitron', monospace;
+
+    .social-content {
+        background: linear-gradient(135deg, #0a0a0a 0%, #111111 100%);
+        border: 2px solid #00ff00;
+        border-radius: 16px;
+        padding: 20px;
+        min-width: 250px;
+        box-shadow: 0 0 30px rgba(0, 255, 0, 0.3), inset 0 0 20px rgba(0, 255, 0, 0.05);
+        position: relative;
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
+
+        &:hover {
+            box-shadow: 0 0 40px rgba(0, 255, 0, 0.5);
+            border-color: #33ff33;
+        }
+
+        .social-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #ff0044;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 26px;
+            height: 26px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            &:hover {
+                transform: scale(1.1);
+                background: #ff3355;
+                box-shadow: 0 0 10px #ff0044;
+            }
+        }
+
+        h3 {
+            color: #00ff00;
+            margin: 0 0 18px 0;
+            text-align: center;
+            font-size: 0.9rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            font-weight: bold;
+            text-shadow: 0 0 8px #00ff00;
+            word-break: keep-all;
+        }
+
+        .social-links {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+
+            a {
+                color: #00ff00;
+                text-decoration: none;
+                padding: 8px 14px;
+                border: 1px solid rgba(0, 255, 0, 0.3);
+                border-radius: 10px;
+                transition: all 0.25s ease;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                font-size: 0.85rem;
+                font-family: monospace;
+                font-weight: 500;
+                background: rgba(0, 0, 0, 0.4);
+                backdrop-filter: blur(4px);
+
+                &:hover {
+                    background: rgba(0, 255, 0, 0.12);
+                    transform: translateX(6px);
+                    border-color: #00ff00;
+                    box-shadow: 0 0 12px rgba(0, 255, 0, 0.4);
+                    text-shadow: 0 0 4px #00ff00;
+                }
+
+                // Icon emoji spacing
+                &:first-child {
+                    margin-top: 0;
+                }
+            }
+        }
+    }
+}
+
+// Animation keyframes
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(120px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+// Responsive styles
+@media (max-width: 768px) {
+    .social-popup {
+        bottom: 15px;
+        right: 15px;
+
+        .social-content {
+            padding: 16px;
+            min-width: 210px;
+
+            h3 {
+                font-size: 0.8rem;
+                margin-bottom: 14px;
+            }
+
+            .social-links a {
+                padding: 6px 12px;
+                font-size: 0.75rem;
+                gap: 10px;
+            }
+        }
+    }
+}
+.db-toolbox {
             &__title {
                 height: 2.6rem;
                 line-height: 2.6rem;
