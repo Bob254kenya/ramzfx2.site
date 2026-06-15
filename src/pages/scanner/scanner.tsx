@@ -15,13 +15,25 @@ type TTickPoint = {
     quote: number;
 };
 
-type TScannerStrategy = 'Matches & Differs' | 'Even & Odd' | 'Over & Under' | 'Rise & Fall';
+type TScannerStrategy = 
+    | 'Matches & Differs' 
+    | 'Even & Odd' 
+    | 'Over & Under' 
+    | 'Rise & Fall'
+    | 'Scalping Momentum'
+    | 'Mean Reversion'
+    | 'Breakout Hunter'
+    | 'Trend Following'
+    | 'Volatility Sniping';
+
 type TScannerMode = 'Analyze' | 'Trade';
 
 type TScannerSignal = {
     barrier?: string;
     contractType: 'DIGITEVEN' | 'DIGITODD' | 'DIGITOVER' | 'DIGITUNDER' | 'DIGITMATCH' | 'DIGITDIFF' | 'CALL' | 'PUT';
     label: string;
+    entryPoint?: number;
+    confidence?: number;
 };
 
 const MAX_TICKS = 1000;
@@ -44,7 +56,17 @@ const MARKETS = [
     { label: 'Volatility 100(1s) Index', symbol: '1HZ100V' },
 ];
 
-const STRATEGIES: TScannerStrategy[] = ['Matches & Differs', 'Even & Odd', 'Over & Under', 'Rise & Fall'];
+const STRATEGIES: TScannerStrategy[] = [
+    'Matches & Differs', 
+    'Even & Odd', 
+    'Over & Under', 
+    'Rise & Fall',
+    'Scalping Momentum',
+    'Mean Reversion',
+    'Breakout Hunter',
+    'Trend Following',
+    'Volatility Sniping'
+];
 
 const cleanMoneyInput = (value: string) => value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
 
@@ -113,6 +135,284 @@ const getQuoteFromTick = (data: any): TTickPoint | null => {
     return {
         epoch: Number(data?.tick?.epoch) || Math.floor(Date.now() / 1000),
         quote,
+    };
+};
+
+// New strategy: Scalping Momentum
+const analyzeScalpingMomentum = (ticks: TTickPoint[], symbol: string) => {
+    const quotes = ticks.slice(-50).map(t => t.quote);
+    const changes: number[] = [];
+    
+    for (let i = 1; i < quotes.length; i++) {
+        changes.push(quotes[i] - quotes[i-1]);
+    }
+    
+    const avgChange = changes.reduce((a, b) => a + b, 0) / changes.length;
+    const momentum = changes.slice(-10).reduce((a, b) => a + b, 0) / 10;
+    const volatility = Math.abs(avgChange);
+    
+    let prediction = 'CALL';
+    let confidence = 0;
+    
+    if (momentum > avgChange * 1.5 && volatility > 0.05) {
+        prediction = 'CALL';
+        confidence = 75 + Math.min(20, Math.abs(momentum - avgChange) * 100);
+    } else if (momentum < avgChange * 0.5 && volatility > 0.05) {
+        prediction = 'PUT';
+        confidence = 75 + Math.min(20, Math.abs(avgChange - momentum) * 100);
+    } else {
+        prediction = changes.slice(-5).filter(c => c > 0).length > 2 ? 'CALL' : 'PUT';
+        confidence = 60;
+    }
+    
+    return {
+        lines: [
+            `Scalping Analysis Complete!`,
+            `Momentum: ${momentum.toFixed(4)}`,
+            `Average Change: ${avgChange.toFixed(4)}`,
+            `Volatility: ${volatility.toFixed(4)}`,
+            `Confidence: ${confidence.toFixed(1)}%`,
+            `Signal: ${prediction === 'CALL' ? 'BUY (Expected Rise)' : 'SELL (Expected Fall)'}`,
+            `Entry Point: Execute immediately on next tick`
+        ],
+        signal: {
+            contractType: prediction as 'CALL' | 'PUT',
+            label: prediction === 'CALL' ? 'Momentum Up' : 'Momentum Down',
+            confidence
+        }
+    };
+};
+
+// New strategy: Mean Reversion
+const analyzeMeanReversion = (ticks: TTickPoint[], symbol: string) => {
+    const quotes = ticks.slice(-100).map(t => t.quote);
+    const mean = quotes.reduce((a, b) => a + b, 0) / quotes.length;
+    const stdDev = Math.sqrt(quotes.map(x => Math.pow(x - mean, 2)).reduce((a, b) => a + b, 0) / quotes.length);
+    const currentPrice = quotes[quotes.length - 1];
+    const zScore = (currentPrice - mean) / stdDev;
+    
+    let prediction = '';
+    let confidence = 0;
+    
+    if (zScore > 1.5) {
+        prediction = 'PUT';
+        confidence = 70 + Math.min(25, (zScore - 1.5) * 10);
+    } else if (zScore < -1.5) {
+        prediction = 'CALL';
+        confidence = 70 + Math.min(25, Math.abs(zScore + 1.5) * 10);
+    } else {
+        prediction = zScore > 0 ? 'PUT' : 'CALL';
+        confidence = 55;
+    }
+    
+    return {
+        lines: [
+            `Mean Reversion Analysis Complete!`,
+            `Mean Price: ${mean.toFixed(4)}`,
+            `Std Deviation: ${stdDev.toFixed(4)}`,
+            `Current Price: ${currentPrice.toFixed(4)}`,
+            `Z-Score: ${zScore.toFixed(2)}`,
+            `Confidence: ${confidence.toFixed(1)}%`,
+            `Signal: ${prediction === 'CALL' ? 'BUY (Oversold)' : 'SELL (Overbought)'}`,
+            `Entry Point: Enter when price deviates significantly from mean`
+        ],
+        signal: {
+            contractType: prediction as 'CALL' | 'PUT',
+            label: prediction === 'CALL' ? 'Reversion Up' : 'Reversion Down',
+            confidence
+        }
+    };
+};
+
+// New strategy: Breakout Hunter
+const analyzeBreakoutHunter = (ticks: TTickPoint[], symbol: string) => {
+    const quotes = ticks.slice(-50).map(t => t.quote);
+    const highs = Math.max(...quotes.slice(0, -5));
+    const lows = Math.min(...quotes.slice(0, -5));
+    const currentPrice = quotes[quotes.length - 1];
+    const previousPrice = quotes[quotes.length - 2];
+    
+    let prediction = '';
+    let confidence = 0;
+    let breakoutLevel = '';
+    
+    if (currentPrice > highs && currentPrice > previousPrice) {
+        prediction = 'CALL';
+        confidence = 80;
+        breakoutLevel = `Resistance at ${highs.toFixed(4)} broken`;
+    } else if (currentPrice < lows && currentPrice < previousPrice) {
+        prediction = 'PUT';
+        confidence = 80;
+        breakoutLevel = `Support at ${lows.toFixed(4)} broken`;
+    } else {
+        const recentRange = highs - lows;
+        const distanceToHigh = (highs - currentPrice) / recentRange;
+        const distanceToLow = (currentPrice - lows) / recentRange;
+        
+        if (distanceToHigh < 0.1) {
+            prediction = 'CALL';
+            confidence = 65;
+            breakoutLevel = `Approaching resistance at ${highs.toFixed(4)}`;
+        } else if (distanceToLow < 0.1) {
+            prediction = 'PUT';
+            confidence = 65;
+            breakoutLevel = `Approaching support at ${lows.toFixed(4)}`;
+        } else {
+            prediction = currentPrice > (highs + lows) / 2 ? 'CALL' : 'PUT';
+            confidence = 55;
+            breakoutLevel = 'Consolidation phase';
+        }
+    }
+    
+    return {
+        lines: [
+            `Breakout Hunter Analysis Complete!`,
+            `Resistance Level: ${highs.toFixed(4)}`,
+            `Support Level: ${lows.toFixed(4)}`,
+            `Current Price: ${currentPrice.toFixed(4)}`,
+            breakoutLevel,
+            `Confidence: ${confidence.toFixed(1)}%`,
+            `Signal: ${prediction === 'CALL' ? 'BUY (Breakout Expected)' : 'SELL (Breakdown Expected)'}`,
+            `Entry Point: Enter on confirmed breakout`
+        ],
+        signal: {
+            contractType: prediction as 'CALL' | 'PUT',
+            label: prediction === 'CALL' ? 'Breakout Up' : 'Breakout Down',
+            confidence
+        }
+    };
+};
+
+// New strategy: Trend Following
+const analyzeTrendFollowing = (ticks: TTickPoint[], symbol: string) => {
+    const quotes = ticks.slice(-50).map(t => t.quote);
+    
+    // Simple moving averages
+    const sma10 = quotes.slice(-10).reduce((a, b) => a + b, 0) / 10;
+    const sma20 = quotes.slice(-20).reduce((a, b) => a + b, 0) / 20;
+    const sma30 = quotes.slice(-30).reduce((a, b) => a + b, 0) / 30;
+    
+    const currentPrice = quotes[quotes.length - 1];
+    const isUptrend = sma10 > sma20 && sma20 > sma30 && currentPrice > sma10;
+    const isDowntrend = sma10 < sma20 && sma20 < sma30 && currentPrice < sma10;
+    
+    let prediction = '';
+    let confidence = 0;
+    let trendStrength = '';
+    
+    if (isUptrend) {
+        prediction = 'CALL';
+        const strength = ((sma10 - sma30) / sma30) * 100;
+        confidence = 70 + Math.min(25, strength * 5);
+        trendStrength = `Strong Uptrend (${strength.toFixed(2)}%)`;
+    } else if (isDowntrend) {
+        prediction = 'PUT';
+        const strength = ((sma30 - sma10) / sma30) * 100;
+        confidence = 70 + Math.min(25, strength * 5);
+        trendStrength = `Strong Downtrend (${strength.toFixed(2)}%)`;
+    } else {
+        prediction = sma10 > sma20 ? 'CALL' : 'PUT';
+        confidence = 55;
+        trendStrength = 'Weak/Consolidating Trend';
+    }
+    
+    return {
+        lines: [
+            `Trend Following Analysis Complete!`,
+            `SMA 10: ${sma10.toFixed(4)}`,
+            `SMA 20: ${sma20.toFixed(4)}`,
+            `SMA 30: ${sma30.toFixed(4)}`,
+            `Current Price: ${currentPrice.toFixed(4)}`,
+            `Trend: ${trendStrength}`,
+            `Confidence: ${confidence.toFixed(1)}%`,
+            `Signal: ${prediction === 'CALL' ? 'BUY (Follow Uptrend)' : 'SELL (Follow Downtrend)'}`,
+            `Entry Point: Enter on pullback to moving average`
+        ],
+        signal: {
+            contractType: prediction as 'CALL' | 'PUT',
+            label: prediction === 'CALL' ? 'Trend Up' : 'Trend Down',
+            confidence
+        }
+    };
+};
+
+// New strategy: Volatility Sniping
+const analyzeVolatilitySniping = (ticks: TTickPoint[], symbol: string) => {
+    const quotes = ticks.slice(-50).map(t => t.quote);
+    const changes: number[] = [];
+    
+    for (let i = 1; i < quotes.length; i++) {
+        changes.push(Math.abs(quotes[i] - quotes[i-1]));
+    }
+    
+    const avgVolatility = changes.reduce((a, b) => a + b, 0) / changes.length;
+    const recentVolatility = changes.slice(-10).reduce((a, b) => a + b, 0) / 10;
+    const volatilitySpike = recentVolatility / avgVolatility;
+    
+    const lastDigit = getLastDigitFromQuote(quotes[quotes.length - 1], symbol);
+    const secondLastDigit = getLastDigitFromQuote(quotes[quotes.length - 2], symbol);
+    
+    let prediction = '';
+    let confidence = 0;
+    let contractType: any = 'DIGITEVEN';
+    let barrier = '';
+    
+    if (volatilitySpike > 1.5) {
+        // High volatility - use digit strategies
+        if (lastDigit % 2 === 0) {
+            prediction = 'Even number expected';
+            contractType = 'DIGITEVEN';
+            confidence = 65 + Math.min(20, (volatilitySpike - 1.5) * 10);
+        } else {
+            prediction = 'Odd number expected';
+            contractType = 'DIGITODD';
+            confidence = 65 + Math.min(20, (volatilitySpike - 1.5) * 10);
+        }
+    } else if (volatilitySpike > 1.2) {
+        // Moderate volatility - use over/under
+        if (lastDigit <= 4) {
+            prediction = `Under ${lastDigit}`;
+            contractType = 'DIGITUNDER';
+            barrier = String(lastDigit);
+            confidence = 60;
+        } else {
+            prediction = `Over ${lastDigit}`;
+            contractType = 'DIGITOVER';
+            barrier = String(lastDigit);
+            confidence = 60;
+        }
+    } else {
+        // Low volatility - use match/differ
+        if (lastDigit === secondLastDigit) {
+            prediction = `Matches ${lastDigit}`;
+            contractType = 'DIGITMATCH';
+            barrier = String(lastDigit);
+            confidence = 55;
+        } else {
+            prediction = `Differs from ${secondLastDigit}`;
+            contractType = 'DIGITDIFF';
+            barrier = String(secondLastDigit);
+            confidence = 55;
+        }
+    }
+    
+    return {
+        lines: [
+            `Volatility Sniping Analysis Complete!`,
+            `Avg Volatility: ${(avgVolatility * 10000).toFixed(2)} pips`,
+            `Recent Volatility: ${(recentVolatility * 10000).toFixed(2)} pips`,
+            `Volatility Spike Ratio: ${volatilitySpike.toFixed(2)}x`,
+            `Last Digit: ${lastDigit}`,
+            `Confidence: ${confidence.toFixed(1)}%`,
+            `Signal: ${prediction}`,
+            `Entry Point: Enter immediately on volatility confirmation`
+        ],
+        signal: {
+            contractType,
+            label: prediction,
+            barrier,
+            confidence
+        }
     };
 };
 
@@ -199,7 +499,7 @@ const buildAnalysis = (strategy: TScannerStrategy, ticks: TTickPoint[], symbol: 
             lines.push(`Entry Points: ${getRandomEntryPoints(3).join(', ')}`);
             signal = { barrier: String(leastCommonUnder), contractType: 'DIGITUNDER', label: `Under ${leastCommonUnder}` };
         }
-    } else {
+    } else if (strategy === 'Rise & Fall') {
         let ups = 0;
         let downs = 0;
 
@@ -215,6 +515,26 @@ const buildAnalysis = (strategy: TScannerStrategy, ticks: TTickPoint[], symbol: 
             contractType: ups > downs ? 'CALL' : 'PUT',
             label: ups > downs ? 'Rise' : 'Fall',
         };
+    } else if (strategy === 'Scalping Momentum') {
+        const result = analyzeScalpingMomentum(ticks, symbol);
+        lines.push(...result.lines);
+        signal = result.signal;
+    } else if (strategy === 'Mean Reversion') {
+        const result = analyzeMeanReversion(ticks, symbol);
+        lines.push(...result.lines);
+        signal = result.signal;
+    } else if (strategy === 'Breakout Hunter') {
+        const result = analyzeBreakoutHunter(ticks, symbol);
+        lines.push(...result.lines);
+        signal = result.signal;
+    } else if (strategy === 'Trend Following') {
+        const result = analyzeTrendFollowing(ticks, symbol);
+        lines.push(...result.lines);
+        signal = result.signal;
+    } else if (strategy === 'Volatility Sniping') {
+        const result = analyzeVolatilitySniping(ticks, symbol);
+        lines.push(...result.lines);
+        signal = result.signal;
     }
 
     return { lines, signal };
@@ -475,7 +795,8 @@ const Scanner = observer(() => {
                 currency,
             };
 
-            setTerminalDashboard(previous => [...previous, `Buying ${signal.label} with ${stake.toFixed(2)} ${currency}...`]);
+            const confidenceText = signal.confidence ? ` (Confidence: ${signal.confidence.toFixed(1)}%)` : '';
+            setTerminalDashboard(previous => [...previous, `Buying ${signal.label}${confidenceText} with ${stake.toFixed(2)} ${currency}...`]);
             const buy = await buyContractForUi({
                 parameters: buildTradeParameters(signal, stake),
                 price: stake,
@@ -516,8 +837,9 @@ const Scanner = observer(() => {
             }
 
             const analysis = buildAnalysis(strategyRef.current, currentTicks, selectedSymbolRef.current);
+            const confidenceText = analysis.signal.confidence ? ` (Confidence: ${analysis.signal.confidence.toFixed(1)}%)` : '';
             tradeInFlightRef.current = true;
-            setTerminalDashboard(previous => [...previous, `Tick signal found: ${analysis.signal.label}`]);
+            setTerminalDashboard(previous => [...previous, `Tick signal found: ${analysis.signal.label}${confidenceText}`]);
 
             try {
                 const profit = await runSingleTrade(analysis.signal, stakeRef.current);
@@ -586,9 +908,10 @@ const Scanner = observer(() => {
             }
 
             dashboard.setActiveTradingModule('scanner');
+            const confidenceText = firstSignal.confidence ? ` (Confidence: ${firstSignal.confidence.toFixed(1)}%)` : '';
             setTerminalDashboard(previous => [
                 ...previous,
-                `Bot activated with ${firstSignal.label}.`,
+                `Bot activated with ${firstSignal.label}${confidenceText}.`,
                 `Execution is now listening on every live tick. It will check profit after ${PROFIT_CHECK_RUNS} runs.`,
             ]);
             void executeTradeFromTick(ticksRef.current);
@@ -736,7 +1059,7 @@ const Scanner = observer(() => {
                 <div className='scrolling-text'>{scrollingText}</div>
             </div>
             <div className='container'>
-                <h1> Signal Analyzer</h1>
+                <h1>Signal Analyzer</h1>
                 <label htmlFor='strategy'>Select Strategy</label>
                 <select id='strategy' className='dropdown' value={strategy} onChange={event => handleStrategyChange(event.target.value as TScannerStrategy)}>
                     {STRATEGIES.map(item => (
