@@ -52,39 +52,282 @@ import Analysistool from '../analysistool';
 import Scanner from '../scanner';
 import './main.scss';
 
-// ==================== SOCIAL POPUP COMPONENT ====================
+// ==================== SOCIAL POPUP COMPONENT WITH INLINE STYLES ====================
 const SocialPopup: React.FC = () => {
     const [isVisible, setIsVisible] = useState(true);
 
     if (!isVisible) return null;
 
+    // Inline styles to ensure the popup appears
+    const popupStyles: React.CSSProperties = {
+        position: 'fixed',
+        bottom: '25px',
+        right: '25px',
+        zIndex: 9999,
+        animation: 'slideInRight 0.4s ease-out',
+        fontFamily: "'Courier New', 'Orbitron', monospace",
+    };
+
+    const contentStyles: React.CSSProperties = {
+        background: 'linear-gradient(135deg, #0a0a0a 0%, #111111 100%)',
+        border: '2px solid #00ff00',
+        borderRadius: '16px',
+        padding: '20px',
+        minWidth: '250px',
+        boxShadow: '0 0 30px rgba(0, 255, 0, 0.3), inset 0 0 20px rgba(0, 255, 0, 0.05)',
+        position: 'relative',
+        backdropFilter: 'blur(10px)',
+        transition: 'all 0.3s ease',
+    };
+
+    const closeButtonStyles: React.CSSProperties = {
+        position: 'absolute',
+        top: '10px',
+        right: '10px',
+        background: '#ff0044',
+        color: 'white',
+        border: 'none',
+        borderRadius: '50%',
+        width: '26px',
+        height: '26px',
+        cursor: 'pointer',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transition: 'all 0.2s ease',
+    };
+
+    const titleStyles: React.CSSProperties = {
+        color: '#00ff00',
+        margin: '0 0 18px 0',
+        textAlign: 'center',
+        fontSize: '0.9rem',
+        letterSpacing: '2px',
+        textTransform: 'uppercase',
+        fontWeight: 'bold',
+        textShadow: '0 0 8px #00ff00',
+    };
+
+    const linksContainerStyles: React.CSSProperties = {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+    };
+
+    const linkStyles: React.CSSProperties = {
+        color: '#00ff00',
+        textDecoration: 'none',
+        padding: '8px 14px',
+        border: '1px solid rgba(0, 255, 0, 0.3)',
+        borderRadius: '10px',
+        transition: 'all 0.25s ease',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        fontSize: '0.85rem',
+        fontFamily: 'monospace',
+        fontWeight: 500,
+        background: 'rgba(0, 0, 0, 0.4)',
+        backdropFilter: 'blur(4px)',
+    };
+
+    // Add keyframes animation to document head
+    React.useEffect(() => {
+        const styleSheet = document.createElement("style");
+        styleSheet.textContent = `
+            @keyframes slideInRight {
+                from {
+                    opacity: 0;
+                    transform: translateX(120px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateX(0);
+                }
+            }
+        `;
+        document.head.appendChild(styleSheet);
+        
+        return () => {
+            document.head.removeChild(styleSheet);
+        };
+    }, []);
+
     return (
-        <div className="social-popup">
-            <div className="social-content">
-                <button className="social-close" onClick={() => setIsVisible(false)}>
+        <div style={popupStyles}>
+            <div style={contentStyles}>
+                <button 
+                    style={closeButtonStyles}
+                    onClick={() => setIsVisible(false)}
+                    onMouseEnter={(e) => {
+                        e.currentTarget.style.transform = 'scale(1.1)';
+                        e.currentTarget.style.background = '#ff3355';
+                        e.currentTarget.style.boxShadow = '0 0 10px #ff0044';
+                    }}
+                    onMouseLeave={(e) => {
+                        e.currentTarget.style.transform = 'scale(1)';
+                        e.currentTarget.style.background = '#ff0044';
+                        e.currentTarget.style.boxShadow = 'none';
+                    }}
+                >
                     ✕
                 </button>
-                <h3>CONNECT WITH US</h3>
-                <div className="social-links">
-                    <a href="https://whatsapp.com" target="_blank" rel="noopener noreferrer">
+                <h3 style={titleStyles}>CONNECT WITH US</h3>
+                <div style={linksContainerStyles}>
+                    <a 
+                        href="https://whatsapp.com" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={linkStyles}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
+                            e.currentTarget.style.transform = 'translateX(6px)';
+                            e.currentTarget.style.borderColor = '#00ff00';
+                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 255, 0, 0.4)';
+                            e.currentTarget.style.textShadow = '0 0 4px #00ff00';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
+                            e.currentTarget.style.transform = 'translateX(0)';
+                            e.currentTarget.style.borderColor = 'rgba(0, 255, 0, 0.3)';
+                            e.currentTarget.style.boxShadow = 'none';
+                            e.currentTarget.style.textShadow = 'none';
+                        }}
+                    >
                         📱 WhatsApp
                     </a>
-                    <a href="https://telegram.org" target="_blank" rel="noopener noreferrer">
+                    <a 
+                        href="https://telegram.org" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={linkStyles}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
+                            e.currentTarget.style.transform = 'translateX(6px)';
+                            e.currentTarget.style.borderColor = '#00ff00';
+                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 255, 0, 0.4)';
+                            e.currentTarget.style.textShadow = '0 0 4px #00ff00';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
+                            e.currentTarget.style.transform = 'translateX(0)';
+                            e.currentTarget.style.borderColor = 'rgba(0, 255, 0, 0.3)';
+                            e.currentTarget.style.boxShadow = 'none';
+                            e.currentTarget.style.textShadow = 'none';
+                        }}
+                    >
                         ✈️ Telegram
                     </a>
-                    <a href="https://youtube.com" target="_blank" rel="noopener noreferrer">
+                    <a 
+                        href="https://youtube.com" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={linkStyles}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
+                            e.currentTarget.style.transform = 'translateX(6px)';
+                            e.currentTarget.style.borderColor = '#00ff00';
+                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 255, 0, 0.4)';
+                            e.currentTarget.style.textShadow = '0 0 4px #00ff00';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
+                            e.currentTarget.style.transform = 'translateX(0)';
+                            e.currentTarget.style.borderColor = 'rgba(0, 255, 0, 0.3)';
+                            e.currentTarget.style.boxShadow = 'none';
+                            e.currentTarget.style.textShadow = 'none';
+                        }}
+                    >
                         ▶️ YouTube
                     </a>
-                    <a href="https://tiktok.com" target="_blank" rel="noopener noreferrer">
+                    <a 
+                        href="https://tiktok.com" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={linkStyles}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
+                            e.currentTarget.style.transform = 'translateX(6px)';
+                            e.currentTarget.style.borderColor = '#00ff00';
+                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 255, 0, 0.4)';
+                            e.currentTarget.style.textShadow = '0 0 4px #00ff00';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
+                            e.currentTarget.style.transform = 'translateX(0)';
+                            e.currentTarget.style.borderColor = 'rgba(0, 255, 0, 0.3)';
+                            e.currentTarget.style.boxShadow = 'none';
+                            e.currentTarget.style.textShadow = 'none';
+                        }}
+                    >
                         🎵 TikTok
                     </a>
-                    <a href="https://instagram.com" target="_blank" rel="noopener noreferrer">
+                    <a 
+                        href="https://instagram.com" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={linkStyles}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
+                            e.currentTarget.style.transform = 'translateX(6px)';
+                            e.currentTarget.style.borderColor = '#00ff00';
+                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 255, 0, 0.4)';
+                            e.currentTarget.style.textShadow = '0 0 4px #00ff00';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
+                            e.currentTarget.style.transform = 'translateX(0)';
+                            e.currentTarget.style.borderColor = 'rgba(0, 255, 0, 0.3)';
+                            e.currentTarget.style.boxShadow = 'none';
+                            e.currentTarget.style.textShadow = 'none';
+                        }}
+                    >
                         📷 Instagram
                     </a>
-                    <a href="https://discord.com" target="_blank" rel="noopener noreferrer">
+                    <a 
+                        href="https://discord.com" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={linkStyles}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
+                            e.currentTarget.style.transform = 'translateX(6px)';
+                            e.currentTarget.style.borderColor = '#00ff00';
+                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 255, 0, 0.4)';
+                            e.currentTarget.style.textShadow = '0 0 4px #00ff00';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
+                            e.currentTarget.style.transform = 'translateX(0)';
+                            e.currentTarget.style.borderColor = 'rgba(0, 255, 0, 0.3)';
+                            e.currentTarget.style.boxShadow = 'none';
+                            e.currentTarget.style.textShadow = 'none';
+                        }}
+                    >
                         💬 Discord
                     </a>
-                    <a href="https://twitter.com" target="_blank" rel="noopener noreferrer">
+                    <a 
+                        href="https://twitter.com" 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        style={linkStyles}
+                        onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
+                            e.currentTarget.style.transform = 'translateX(6px)';
+                            e.currentTarget.style.borderColor = '#00ff00';
+                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 255, 0, 0.4)';
+                            e.currentTarget.style.textShadow = '0 0 4px #00ff00';
+                        }}
+                        onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
+                            e.currentTarget.style.transform = 'translateX(0)';
+                            e.currentTarget.style.borderColor = 'rgba(0, 255, 0, 0.3)';
+                            e.currentTarget.style.boxShadow = 'none';
+                            e.currentTarget.style.textShadow = 'none';
+                        }}
+                    >
                         🐦 Twitter
                     </a>
                 </div>
