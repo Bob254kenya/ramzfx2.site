@@ -28,8 +28,11 @@ const MAX_TICKS = 1000;
 const DEFAULT_STAKE = '10';
 const DEFAULT_STOP_LOSS = '500';
 const DEFAULT_TAKE_PROFIT = '500';
+const DEFAULT_MARTINGALE_MULTIPLIER = 2;
 const PROFIT_CHECK_RUNS = 5;
 const TIMER_SOUND_URL = 'https://www.fesliyanstudios.com/play-mp3/4386';
+
+const MARTINGALE_MULTIPLIERS = [2, 3, 4, 5];
 
 const MARKETS = [
     { label: 'Volatility 10 Index', symbol: 'R_10' },
@@ -230,6 +233,7 @@ const Scanner = observer(() => {
     const [stakeInput, setStakeInput] = useState(DEFAULT_STAKE);
     const [stopLossInput, setStopLossInput] = useState(DEFAULT_STOP_LOSS);
     const [takeProfitInput, setTakeProfitInput] = useState(DEFAULT_TAKE_PROFIT);
+    const [martingaleMultiplier, setMartingaleMultiplier] = useState(DEFAULT_MARTINGALE_MULTIPLIER);
     const [ticks, setTicks] = useState<TTickPoint[]>([]);
     const [popupOpen, setPopupOpen] = useState(false);
     const [terminalDashboard, setTerminalDashboard] = useState<string[]>(['Analysis Dashboard']);
@@ -237,9 +241,6 @@ const Scanner = observer(() => {
     const [scrollingText, setScrollingText] = useState('');
     const [isWorking, setIsWorking] = useState(false);
     const [sessionProfit, setSessionProfit] = useState(0);
-    const [martingaleMultiplier, setMartingaleMultiplier] = useState(1);
-    const [consecutiveLosses, setConsecutiveLosses] = useState(0);
-    const [isMartingaleEnabled, setIsMartingaleEnabled] = useState(true);
     const subscriptionRef = useRef<{ unsubscribe?: () => void } | null>(null);
     const requestVersionRef = useRef(0);
     const ticksRef = useRef<TTickPoint[]>([]);
@@ -255,6 +256,13 @@ const Scanner = observer(() => {
     const selectedSymbolRef = useRef(selectedSymbol);
     const handleTradeTickRef = useRef<(currentTicks: TTickPoint[]) => void>(() => undefined);
     const timerSoundRef = useRef<HTMLAudioElement | null>(null);
+    
+    // Martingale state refs
+    const currentMartingaleStakeRef = useRef(0);
+    const baseStakeRef = useRef(0);
+    const martingaleMultiplierRef = useRef(DEFAULT_MARTINGALE_MULTIPLIER);
+    const consecutiveLossesRef = useRef(0);
+    
     const currency = client.currency || 'USD';
     const showScanner = active_tab === DBOT_TABS.SCANNER;
     const isCoveredByMobileRunPanel = !isDesktop && run_panel.is_drawer_open;
@@ -274,6 +282,10 @@ const Scanner = observer(() => {
     useEffect(() => {
         selectedSymbolRef.current = selectedSymbol;
     }, [selectedSymbol]);
+    
+    useEffect(() => {
+        martingaleMultiplierRef.current = martingaleMultiplier;
+    }, [martingaleMultiplier]);
 
     useEffect(() => {
         timerSoundRef.current = new Audio(TIMER_SOUND_URL);
@@ -341,8 +353,10 @@ const Scanner = observer(() => {
         tradeActiveRef.current = false;
         setIsWorking(false);
         stopTimerSound();
-        setMartingaleMultiplier(1);
-        setConsecutiveLosses(0);
+        
+        // Reset martingale state on stop
+        consecutiveLossesRef.current = 0;
+        currentMartingaleStakeRef.current = baseStakeRef.current;
 
         try {
             run_panel.setIsRunning(false);
@@ -468,7 +482,7 @@ const Scanner = observer(() => {
     );
 
     const runSingleTrade = useCallback(
-        async (signal: TScannerSignal, stake: number, isMartingaleRound: boolean = false) => {
+        async (signal: TScannerSignal, stake: number): Promise<number> => {
             const tradeStartTime = Math.floor(Date.now() / 1000);
             const fallbackContract = {
                 buy_price: stake,
@@ -480,7 +494,7 @@ const Scanner = observer(() => {
                 currency,
             };
 
-            setTerminalDashboard(previous => [...previous, `Buying ${signal.label} with ${stake.toFixed(2)} ${currency}${isMartingaleRound ? ` (Martingale x${martingaleMultiplier})` : ''}...`]);
+            setTerminalDashboard(previous => [...previous, `Buying ${signal.label} with ${stake.toFixed(2)} ${currency} (Martingale step: ${consecutiveLossesRef.current})...`]);
             const buy = await buyContractForUi({
                 parameters: buildTradeParameters(signal, stake),
                 price: stake,
@@ -503,7 +517,7 @@ const Scanner = observer(() => {
 
             return Number(settledContract.profit ?? 0);
         },
-        [buildTradeParameters, currency, pushContract, selectedMarket.label, selectedSymbol, martingaleMultiplier]
+        [buildTradeParameters, currency, pushContract, selectedMarket.label, selectedSymbol]
     );
 
     const executeTradeFromTick = useCallback(
@@ -522,27 +536,30 @@ const Scanner = observer(() => {
 
             const analysis = buildAnalysis(strategyRef.current, currentTicks, selectedSymbolRef.current);
             tradeInFlightRef.current = true;
-            const currentMultiplier = isMartingaleEnabled && consecutiveLosses > 0 ? Math.min(Math.pow(2, consecutiveLosses), 8) : 1;
-            const currentStake = stakeRef.current * currentMultiplier;
             
-            setMartingaleMultiplier(currentMultiplier);
-            setTerminalDashboard(previous => [...previous, `Tick signal found: ${analysis.signal.label}${currentMultiplier > 1 ? ` (Martingale x${currentMultiplier})` : ''}`]);
+            // Use current martingale stake for this trade
+            const tradeStake = currentMartingaleStakeRef.current;
+            setTerminalDashboard(previous => [...previous, `Tick signal found: ${analysis.signal.label} | Stake: ${tradeStake.toFixed(2)} ${currency}`]);
 
             try {
-                const profit = await runSingleTrade(analysis.signal, currentStake, currentMultiplier > 1);
-                const totalProfit = Number((sessionProfitRef.current + profit).toFixed(8));
+                const profit = await runSingleTrade(analysis.signal, tradeStake);
+                const isWin = profit > 0;
                 
-                if (profit > 0) {
+                // MARTINGALE LOGIC: reset on win, increase on loss
+                if (isWin) {
                     // Reset martingale on win
-                    setConsecutiveLosses(0);
-                    setMartingaleMultiplier(1);
-                    setTerminalDashboard(previous => [...previous, `✓ WIN! Martingale reset to base stake.`]);
+                    consecutiveLossesRef.current = 0;
+                    currentMartingaleStakeRef.current = baseStakeRef.current;
+                    setTerminalDashboard(previous => [...previous, `✓ WIN! Martingale reset to base stake: ${baseStakeRef.current.toFixed(2)} ${currency}`]);
                 } else {
-                    // Increase consecutive losses on loss
-                    setConsecutiveLosses(prev => prev + 1);
-                    setTerminalDashboard(previous => [...previous, `✗ LOSS! Consecutive losses: ${consecutiveLosses + 1}`]);
+                    // Increase stake on loss (Martingale)
+                    consecutiveLossesRef.current += 1;
+                    const newStake = baseStakeRef.current * Math.pow(martingaleMultiplierRef.current, consecutiveLossesRef.current);
+                    currentMartingaleStakeRef.current = newStake;
+                    setTerminalDashboard(previous => [...previous, `✗ LOSS! Martingale activated. Next stake: ${newStake.toFixed(2)} ${currency} (x${martingaleMultiplierRef.current}^${consecutiveLossesRef.current})`]);
                 }
                 
+                const totalProfit = Number((sessionProfitRef.current + profit).toFixed(8));
                 completedRunsRef.current += 1;
                 sessionProfitRef.current = totalProfit;
                 setSessionProfit(totalProfit);
@@ -550,7 +567,7 @@ const Scanner = observer(() => {
                     ...previous,
                     `Run ${completedRunsRef.current} closed: ${analysis.signal.label} ${profit.toFixed(2)} ${currency}`,
                     `Session P/L: ${totalProfit.toFixed(2)} ${currency}`,
-                    `Martingale status: ${consecutiveLosses === 0 ? 'Base stake' : `${consecutiveLosses} losses in row, next x${Math.min(Math.pow(2, consecutiveLosses + 1), 16)}`}`,
+                    `Martingale Status: ${isWin ? 'RESET' : `Active (${consecutiveLossesRef.current} losses)`}`,
                 ]);
 
                 if (
@@ -577,7 +594,7 @@ const Scanner = observer(() => {
                 }
             }
         },
-        [currency, runSingleTrade, stopTrading, isMartingaleEnabled, consecutiveLosses]
+        [currency, runSingleTrade, stopTrading]
     );
 
     useEffect(() => {
@@ -587,7 +604,11 @@ const Scanner = observer(() => {
     }, [executeTradeFromTick]);
 
     const startScannerTrading = useCallback(
-        (firstSignal: TScannerSignal, stake: number, stopLoss: number, takeProfit: number) => {
+        (firstSignal: TScannerSignal, stake: number, stopLoss: number, takeProfit: number, multiplier: number) => {
+            // Initialize martingale state
+            baseStakeRef.current = stake;
+            currentMartingaleStakeRef.current = stake;
+            consecutiveLossesRef.current = 0;
             stakeRef.current = stake;
             stopLossRef.current = stopLoss;
             takeProfitRef.current = takeProfit;
@@ -597,8 +618,6 @@ const Scanner = observer(() => {
             tradeActiveRef.current = true;
             tradeInFlightRef.current = false;
             setSessionProfit(0);
-            setConsecutiveLosses(0);
-            setMartingaleMultiplier(1);
 
             try {
                 run_panel.setRunId(`scanner-${Date.now()}`);
@@ -613,18 +632,16 @@ const Scanner = observer(() => {
             setTerminalDashboard(previous => [
                 ...previous,
                 `Bot activated with ${firstSignal.label}.`,
-                `Martingale: ${isMartingaleEnabled ? 'ENABLED' : 'DISABLED'} (doubles stake on loss, resets on win)`,
-                `Base stake: ${stake.toFixed(2)} ${currency}`,
-                `Stop Loss: ${stopLoss.toFixed(2)} ${currency} | Take Profit: ${takeProfit.toFixed(2)} ${currency}`,
+                `Martingale enabled: multiplier x${multiplier} | Base stake: ${stake} ${currency}`,
                 `Execution is now listening on every live tick. It will check profit after ${PROFIT_CHECK_RUNS} runs.`,
             ]);
             void executeTradeFromTick(ticksRef.current);
         },
-        [dashboard, executeTradeFromTick, run_panel, isMartingaleEnabled, currency]
+        [currency, dashboard, executeTradeFromTick, run_panel]
     );
 
     const startFastMovingCodes = useCallback(
-        (nextMode: TScannerMode, stake: number, stopLoss: number, takeProfit: number) => {
+        (nextMode: TScannerMode, stake: number, stopLoss: number, takeProfit: number, multiplier: number) => {
             playTimerSound();
             setTerminalBody(previous => [...previous, 'Running deep analysis...']);
 
@@ -662,7 +679,7 @@ const Scanner = observer(() => {
                         setTerminalDashboard(previous => [...previous, nextMode === 'Trade' ? 'Bot activated!' : 'Analysis mode complete.']);
 
                         if (nextMode === 'Trade') {
-                            startScannerTrading(analysis.signal, stake, stopLoss, takeProfit);
+                            startScannerTrading(analysis.signal, stake, stopLoss, takeProfit, multiplier);
                         } else {
                             setIsWorking(false);
                         }
@@ -677,6 +694,7 @@ const Scanner = observer(() => {
         const stake = Number(stakeInput);
         const stopLoss = Number(stopLossInput);
         const takeProfit = Number(takeProfitInput);
+        const multiplier = martingaleMultiplier;
 
         if (!strategy || !selectedSymbol) {
             setTerminalDashboard(['Error: Please select both strategy and market!']);
@@ -701,8 +719,6 @@ const Scanner = observer(() => {
         setSessionProfit(0);
         sessionProfitRef.current = 0;
         completedRunsRef.current = 0;
-        setConsecutiveLosses(0);
-        setMartingaleMultiplier(1);
         setPopupOpen(true);
         setTerminalDashboard([`Analysis Dashboard - ${strategy} on ${selectedSymbol}`]);
         setTerminalBody(['Connecting to server...']);
@@ -731,7 +747,7 @@ const Scanner = observer(() => {
                 index++;
             } else {
                 clearInterval(interval);
-                startFastMovingCodes(mode, stake, stopLoss, takeProfit);
+                startFastMovingCodes(mode, stake, stopLoss, takeProfit, multiplier);
             }
         }, 1000);
     };
@@ -765,14 +781,16 @@ const Scanner = observer(() => {
                 <div className='scrolling-text'>{scrollingText}</div>
             </div>
             <div className='container'>
-                <h1> Signal Analyzer</h1>
-                <label htmlFor='strategy'>Select Strategy</label>
+                <h1>⚡ SIGNAL ANALYZER ⚡</h1>
+                
+                <label htmlFor='strategy'>📊 SELECT STRATEGY</label>
                 <select id='strategy' className='dropdown' value={strategy} onChange={event => handleStrategyChange(event.target.value as TScannerStrategy)}>
                     {STRATEGIES.map(item => (
                         <option key={item}>{item}</option>
                     ))}
                 </select>
-                <label htmlFor='market'>Select Market</label>
+                
+                <label htmlFor='market'>🌍 SELECT MARKET</label>
                 <select id='market' className='dropdown' value={selectedSymbol} onChange={event => handleMarketChange(event.target.value)}>
                     {MARKETS.map(market => (
                         <option key={market.symbol} value={market.symbol}>
@@ -780,76 +798,70 @@ const Scanner = observer(() => {
                         </option>
                     ))}
                 </select>
-                <label htmlFor='stake'>Stake</label>
+                
+                <label htmlFor='stake'>💰 BASE STAKE</label>
                 <input id='stake' className='dropdown' inputMode='decimal' value={stakeInput} onChange={event => setStakeInput(cleanMoneyInput(event.target.value))} />
-                <label htmlFor='stop-loss'>SL</label>
+                
+                <label htmlFor='stop-loss'>🛑 STOP LOSS (SL)</label>
                 <input id='stop-loss' className='dropdown' inputMode='decimal' value={stopLossInput} onChange={event => setStopLossInput(cleanMoneyInput(event.target.value))} />
-                <label htmlFor='take-profit'>TP</label>
+                
+                <label htmlFor='take-profit'>🎯 TAKE PROFIT (TP)</label>
                 <input id='take-profit' className='dropdown' inputMode='decimal' value={takeProfitInput} onChange={event => setTakeProfitInput(cleanMoneyInput(event.target.value))} />
                 
-                <div className='martingale-control'>
-                    <label htmlFor='martingale-toggle' className='martingale-label'>
-                        <input
-                            id='martingale-toggle'
-                            type='checkbox'
-                            checked={isMartingaleEnabled}
-                            onChange={e => setIsMartingaleEnabled(e.target.checked)}
-                        />
-                        Enable Martingale (Double on loss, reset on win)
-                    </label>
+                {/* Martingale Selector */}
+                <div className='martingale-row'>
+                    <label>🎲 MARTINGALE MULTIPLIER</label>
+                    <select 
+                        className='martingale-select' 
+                        value={martingaleMultiplier} 
+                        onChange={event => setMartingaleMultiplier(Number(event.target.value))}
+                    >
+                        {MARTINGALE_MULTIPLIERS.map(m => (
+                            <option key={m} value={m}>x{m}</option>
+                        ))}
+                    </select>
+                    <span style={{ fontSize: '11px', color: '#8affc0' }}>resets on WIN</span>
                 </div>
                 
-                {isMartingaleEnabled && (
-                    <div className='martingale-info'>
-                        <span>⚠️ Martingale active: Stake doubles after each loss, resets to base after a win.</span>
-                        {consecutiveLosses > 0 && tradeActiveRef.current && (
-                            <span className='martingale-status'>Current multiplier: x{Math.min(Math.pow(2, consecutiveLosses), 8)} ({consecutiveLosses} loss{consecutiveLosses !== 1 ? 'es' : ''} in a row)</span>
-                        )}
-                    </div>
-                )}
-                
-                <label htmlFor='mode'>Mode</label>
+                <label htmlFor='mode'>⚙️ MODE</label>
                 <select id='mode' className='dropdown' value={mode} onChange={event => handleModeChange(event.target.value as TScannerMode)}>
                     <option>Analyze</option>
                     <option>Trade</option>
                 </select>
-                <br />
+                
                 <div className='contain'>
                     <div className='latest-tick'>
-                        Latest Tick: <span>{latestTick?.quote ?? '--'}</span>
+                        📈 Latest Tick: <span>{latestTick?.quote ?? '--'}</span>
                     </div>
                     <div className='latest-tick'>
-                        Last Digit: <span>{latestDigit ?? '--'}</span>
+                        🔢 Last Digit: <span>{latestDigit ?? '--'}</span>
                     </div>
                     <div className='latest-tick'>
-                        P/L: <span className={sessionProfit >= 0 ? 'profit' : 'loss'}>{sessionProfit.toFixed(2)} {currency}</span>
+                        💵 P/L: <span>{sessionProfit.toFixed(2)} {currency}</span>
                     </div>
-                    {isMartingaleEnabled && tradeActiveRef.current && (
-                        <div className='latest-tick martingale-multiplier'>
-                            Martingale: <span>x{Math.min(Math.pow(2, consecutiveLosses), 8)}</span>
-                        </div>
-                    )}
                 </div>
 
                 <div className='buttons'>
                     <button className='analyse' type='button' onClick={handleAnalyze} disabled={isWorking}>
-                        {isWorking ? 'Running' : 'Analyse'}
+                        {isWorking ? 'PROCESSING...' : '🚀 ANALYSE & RUN'}
                     </button>
                 </div>
             </div>
+            
             <div className='popup' style={{ display: popupOpen ? 'block' : 'none' }}>
                 <div className='popup-content'>
                     <button className='close-btn' type='button' onClick={handleClosePopup}>
-                        X
+                        ✕
                     </button>
                     <div className='terminal-header'>
-                        <span className='dot' />
-                        <span className='dot' />
-                        <span className='dot' />
+                        <span className='dot red' />
+                        <span className='dot yellow' />
+                        <span className='dot green' />
+                        <span className='terminal-title'>QUANTUM TERMINAL v2.0</span>
                     </div>
                     <div className='terminal-dashboard'>
                         {terminalDashboard.map((line, index) => (
-                            <p className='green' key={`${line}-${index}`}>
+                            <p className={line?.startsWith('Error') ? 'red' : 'green'} key={`${line}-${index}`}>
                                 {line ?? ''}
                             </p>
                         ))}
