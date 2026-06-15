@@ -728,7 +728,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
                                                 width='24px'
                                                 fill='#c8a45d'
                                             />
-                                            <Localize i18n_default_text='Bot Ideas' />
+                                            <Localize i18n_default_text='Ramzfx Bot Ideas' />
                                         </>
                                     }
                                     id='id-bot-ideas'
@@ -822,7 +822,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
                                                 width='24px'
                                                 fill='#c8a45d'
                                             />
-                                            <Localize i18n_default_text='Scanner' />
+                                            <Localize i18n_default_text='ProScanner Tool' />
                                         </>
                                     }
                                     id='id-scanner'
