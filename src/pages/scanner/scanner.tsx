@@ -32,7 +32,8 @@ const DEFAULT_MARTINGALE_MULTIPLIER = 2;
 const PROFIT_CHECK_RUNS = 5;
 const TIMER_SOUND_URL = 'https://www.fesliyanstudios.com/play-mp3/4386';
 
-const MARTINGALE_MULTIPLIERS = [2, 3, 4, 5];
+// Martingale multiplier from 1 to 10 with 0.1 increments
+const MARTINGALE_MULTIPLIERS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.2, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 
 const MARKETS = [
     { label: 'Volatility 10 Index', symbol: 'R_10' },
@@ -367,6 +368,14 @@ const Scanner = observer(() => {
 
         dashboard.setActiveTradingModule(null);
     }, [dashboard, run_panel, stopTimerSound]);
+
+    // Manual stop button handler - stops the bot gracefully but doesn't close the popup
+    const handleStopBot = useCallback(() => {
+        if (tradeActiveRef.current || isWorking) {
+            stopTrading();
+            setTerminalDashboard(prev => [...prev, '[USER] Bot manually stopped by user.']);
+        }
+    }, [stopTrading, isWorking]);
 
     const applyLiveTick = useCallback((tick: TTickPoint) => {
         const nextTicks = [...ticksRef.current, tick].slice(-MAX_TICKS);
@@ -754,7 +763,7 @@ const Scanner = observer(() => {
 
     const handleClosePopup = () => {
         stopTimerSound();
-        stopTrading();
+        // Note: We do NOT call stopTrading() here - bot continues running in background
         setPopupOpen(false);
     };
 
@@ -808,16 +817,16 @@ const Scanner = observer(() => {
                 <label htmlFor='take-profit'>🎯 TAKE PROFIT (TP)</label>
                 <input id='take-profit' className='dropdown' inputMode='decimal' value={takeProfitInput} onChange={event => setTakeProfitInput(cleanMoneyInput(event.target.value))} />
                 
-                {/* Martingale Selector */}
+                {/* Martingale Selector with 1-10 range including decimals */}
                 <div className='martingale-row'>
-                    <label>🎲 MARTINGALE MULTIPLIER</label>
+                    <label>🎲 MARTINGALE MULTIPLIER (1x - 10x)</label>
                     <select 
                         className='martingale-select' 
                         value={martingaleMultiplier} 
                         onChange={event => setMartingaleMultiplier(Number(event.target.value))}
                     >
                         {MARTINGALE_MULTIPLIERS.map(m => (
-                            <option key={m} value={m}>x{m}</option>
+                            <option key={m} value={m}>x{m.toFixed(1)}</option>
                         ))}
                     </select>
                     <span style={{ fontSize: '11px', color: '#8affc0' }}>resets on WIN</span>
@@ -848,11 +857,17 @@ const Scanner = observer(() => {
                 </div>
             </div>
             
-            <div className='popup' style={{ display: popupOpen ? 'block' : 'none' }}>
+            {/* Reduced size popup */}
+            <div className='popup popup--reduced' style={{ display: popupOpen ? 'block' : 'none' }}>
                 <div className='popup-content'>
-                    <button className='close-btn' type='button' onClick={handleClosePopup}>
-                        ✕
-                    </button>
+                    <div className='popup-header'>
+                        <button className='stop-bot-btn' type='button' onClick={handleStopBot} disabled={!tradeActiveRef.current && !isWorking}>
+                            ⏹️ STOP BOT
+                        </button>
+                        <button className='close-btn' type='button' onClick={handleClosePopup}>
+                            ✕
+                        </button>
+                    </div>
                     <div className='terminal-header'>
                         <span className='dot red' />
                         <span className='dot yellow' />
