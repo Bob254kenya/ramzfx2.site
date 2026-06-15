@@ -29,7 +29,7 @@ const DEFAULT_STAKE = '10';
 const DEFAULT_STOP_LOSS = '500';
 const DEFAULT_TAKE_PROFIT = '500';
 const DEFAULT_MARTINGALE_MULTIPLIER = 2;
-const PROFIT_CHECK_RUNS = 5;
+const DEFAULT_RUNS_TO_CHECK = '5';
 const TIMER_SOUND_URL = 'https://www.fesliyanstudios.com/play-mp3/4386';
 
 // Martingale multiplier from 1 to 10 with 0.1 increments
@@ -51,6 +51,8 @@ const MARKETS = [
 const STRATEGIES: TScannerStrategy[] = ['Matches & Differs', 'Even & Odd', 'Over & Under', 'Rise & Fall'];
 
 const cleanMoneyInput = (value: string) => value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
+
+const cleanNumberInput = (value: string) => value.replace(/[^\d]/g, '');
 
 const generateRandomCode = () => {
     const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ$#@!%^&*()';
@@ -235,6 +237,7 @@ const Scanner = observer(() => {
     const [stopLossInput, setStopLossInput] = useState(DEFAULT_STOP_LOSS);
     const [takeProfitInput, setTakeProfitInput] = useState(DEFAULT_TAKE_PROFIT);
     const [martingaleMultiplier, setMartingaleMultiplier] = useState(DEFAULT_MARTINGALE_MULTIPLIER);
+    const [runsToCheckInput, setRunsToCheckInput] = useState(DEFAULT_RUNS_TO_CHECK);
     const [ticks, setTicks] = useState<TTickPoint[]>([]);
     const [popupOpen, setPopupOpen] = useState(false);
     const [terminalDashboard, setTerminalDashboard] = useState<string[]>(['Analysis Dashboard']);
@@ -253,6 +256,7 @@ const Scanner = observer(() => {
     const stakeRef = useRef(0);
     const stopLossRef = useRef(0);
     const takeProfitRef = useRef(0);
+    const runsToCheckRef = useRef(5);
     const strategyRef = useRef<TScannerStrategy>(strategy);
     const selectedSymbolRef = useRef(selectedSymbol);
     const handleTradeTickRef = useRef<(currentTicks: TTickPoint[]) => void>(() => undefined);
@@ -287,6 +291,10 @@ const Scanner = observer(() => {
     useEffect(() => {
         martingaleMultiplierRef.current = martingaleMultiplier;
     }, [martingaleMultiplier]);
+
+    useEffect(() => {
+        runsToCheckRef.current = parseInt(runsToCheckInput) || 5;
+    }, [runsToCheckInput]);
 
     useEffect(() => {
         timerSoundRef.current = new Audio(TIMER_SOUND_URL);
@@ -535,10 +543,32 @@ const Scanner = observer(() => {
                 return;
             }
 
-            if (
-                sessionProfitRef.current <= -stopLossRef.current ||
-                (completedRunsRef.current >= PROFIT_CHECK_RUNS && sessionProfitRef.current > 0)
-            ) {
+            // Stop if stop loss is reached
+            if (sessionProfitRef.current <= -stopLossRef.current) {
+                setTerminalDashboard(previous => [
+                    ...previous,
+                    `STOP LOSS REACHED! P/L: ${sessionProfitRef.current.toFixed(2)} ${currency}`,
+                ]);
+                stopTrading();
+                return;
+            }
+
+            // Stop if take profit is reached
+            if (sessionProfitRef.current >= takeProfitRef.current) {
+                setTerminalDashboard(previous => [
+                    ...previous,
+                    `TAKE PROFIT REACHED! P/L: ${sessionProfitRef.current.toFixed(2)} ${currency}`,
+                ]);
+                stopTrading();
+                return;
+            }
+
+            // Check if we've reached the required number of runs and are in profit
+            if (completedRunsRef.current >= runsToCheckRef.current && sessionProfitRef.current > 0) {
+                setTerminalDashboard(previous => [
+                    ...previous,
+                    `${runsToCheckRef.current} runs complete in profit: ${sessionProfitRef.current.toFixed(2)} ${currency}`,
+                ]);
                 stopTrading();
                 return;
             }
@@ -574,21 +604,28 @@ const Scanner = observer(() => {
                 setSessionProfit(totalProfit);
                 setTerminalDashboard(previous => [
                     ...previous,
-                    `Run ${completedRunsRef.current} closed: ${analysis.signal.label} ${profit.toFixed(2)} ${currency}`,
+                    `Run ${completedRunsRef.current}/${runsToCheckRef.current} closed: ${analysis.signal.label} ${profit.toFixed(2)} ${currency}`,
                     `Session P/L: ${totalProfit.toFixed(2)} ${currency}`,
                     `Martingale Status: ${isWin ? 'RESET' : `Active (${consecutiveLossesRef.current} losses)`}`,
                 ]);
 
-                if (
-                    totalProfit <= -stopLossRef.current ||
-                    (completedRunsRef.current >= PROFIT_CHECK_RUNS && totalProfit > 0) ||
-                    (completedRunsRef.current >= PROFIT_CHECK_RUNS && totalProfit >= takeProfitRef.current)
-                ) {
+                // Check conditions again after updating
+                if (totalProfit <= -stopLossRef.current) {
                     setTerminalDashboard(previous => [
                         ...previous,
-                        totalProfit <= -stopLossRef.current
-                            ? `SL reached: ${totalProfit.toFixed(2)} ${currency}`
-                            : `${PROFIT_CHECK_RUNS} runs complete in profit: ${totalProfit.toFixed(2)} ${currency}`,
+                        `STOP LOSS REACHED! P/L: ${totalProfit.toFixed(2)} ${currency}`,
+                    ]);
+                    stopTrading();
+                } else if (totalProfit >= takeProfitRef.current) {
+                    setTerminalDashboard(previous => [
+                        ...previous,
+                        `TAKE PROFIT REACHED! P/L: ${totalProfit.toFixed(2)} ${currency}`,
+                    ]);
+                    stopTrading();
+                } else if (completedRunsRef.current >= runsToCheckRef.current && totalProfit > 0) {
+                    setTerminalDashboard(previous => [
+                        ...previous,
+                        `${runsToCheckRef.current} runs complete in profit: ${totalProfit.toFixed(2)} ${currency}`,
                     ]);
                     stopTrading();
                 }
@@ -613,7 +650,7 @@ const Scanner = observer(() => {
     }, [executeTradeFromTick]);
 
     const startScannerTrading = useCallback(
-        (firstSignal: TScannerSignal, stake: number, stopLoss: number, takeProfit: number, multiplier: number) => {
+        (firstSignal: TScannerSignal, stake: number, stopLoss: number, takeProfit: number, multiplier: number, runsToCheck: number) => {
             // Initialize martingale state
             baseStakeRef.current = stake;
             currentMartingaleStakeRef.current = stake;
@@ -621,6 +658,7 @@ const Scanner = observer(() => {
             stakeRef.current = stake;
             stopLossRef.current = stopLoss;
             takeProfitRef.current = takeProfit;
+            runsToCheckRef.current = runsToCheck;
             sessionProfitRef.current = 0;
             completedRunsRef.current = 0;
             shouldStopRef.current = false;
@@ -642,7 +680,8 @@ const Scanner = observer(() => {
                 ...previous,
                 `Bot activated with ${firstSignal.label}.`,
                 `Martingale enabled: multiplier x${multiplier} | Base stake: ${stake} ${currency}`,
-                `Execution is now listening on every live tick. It will check profit after ${PROFIT_CHECK_RUNS} runs.`,
+                `Will check profit after ${runsToCheck} runs.`,
+                `Stop Loss: ${stopLoss} ${currency} | Take Profit: ${takeProfit} ${currency}`,
             ]);
             void executeTradeFromTick(ticksRef.current);
         },
@@ -650,7 +689,7 @@ const Scanner = observer(() => {
     );
 
     const startFastMovingCodes = useCallback(
-        (nextMode: TScannerMode, stake: number, stopLoss: number, takeProfit: number, multiplier: number) => {
+        (nextMode: TScannerMode, stake: number, stopLoss: number, takeProfit: number, multiplier: number, runsToCheck: number) => {
             playTimerSound();
             setTerminalBody(previous => [...previous, 'Running deep analysis...']);
 
@@ -688,7 +727,7 @@ const Scanner = observer(() => {
                         setTerminalDashboard(previous => [...previous, nextMode === 'Trade' ? 'Bot activated!' : 'Analysis mode complete.']);
 
                         if (nextMode === 'Trade') {
-                            startScannerTrading(analysis.signal, stake, stopLoss, takeProfit, multiplier);
+                            startScannerTrading(analysis.signal, stake, stopLoss, takeProfit, multiplier, runsToCheck);
                         } else {
                             setIsWorking(false);
                         }
@@ -704,6 +743,7 @@ const Scanner = observer(() => {
         const stopLoss = Number(stopLossInput);
         const takeProfit = Number(takeProfitInput);
         const multiplier = martingaleMultiplier;
+        const runsToCheck = parseInt(runsToCheckInput) || 5;
 
         if (!strategy || !selectedSymbol) {
             setTerminalDashboard(['Error: Please select both strategy and market!']);
@@ -713,6 +753,12 @@ const Scanner = observer(() => {
 
         if (!Number.isFinite(stake) || stake <= 0 || !Number.isFinite(stopLoss) || stopLoss <= 0 || !Number.isFinite(takeProfit) || takeProfit <= 0) {
             setTerminalDashboard(['Error: Please enter valid Stake, SL and TP amounts!']);
+            setPopupOpen(true);
+            return;
+        }
+
+        if (runsToCheck < 1 || runsToCheck > 1000) {
+            setTerminalDashboard(['Error: Please enter valid number of runs (1-1000)!']);
             setPopupOpen(true);
             return;
         }
@@ -756,7 +802,7 @@ const Scanner = observer(() => {
                 index++;
             } else {
                 clearInterval(interval);
-                startFastMovingCodes(mode, stake, stopLoss, takeProfit, multiplier);
+                startFastMovingCodes(mode, stake, stopLoss, takeProfit, multiplier, runsToCheck);
             }
         }, 1000);
     };
@@ -817,6 +863,20 @@ const Scanner = observer(() => {
                 <label htmlFor='take-profit'>🎯 TAKE PROFIT (TP)</label>
                 <input id='take-profit' className='dropdown' inputMode='decimal' value={takeProfitInput} onChange={event => setTakeProfitInput(cleanMoneyInput(event.target.value))} />
                 
+                {/* Number of runs to check input */}
+                <label htmlFor='runs-to-check'>🔢 RUNS BEFORE CHECKING PROFIT</label>
+                <input 
+                    id='runs-to-check' 
+                    className='dropdown' 
+                    inputMode='numeric' 
+                    value={runsToCheckInput} 
+                    onChange={event => setRunsToCheckInput(cleanNumberInput(event.target.value))}
+                    placeholder='Number of trades before checking profit'
+                />
+                <div style={{ fontSize: '11px', color: '#8affc0', marginTop: '-10px', marginBottom: '10px' }}>
+                    Bot will stop after this many wins (if in profit) or when SL/TP is reached
+                </div>
+                
                 {/* Martingale Selector with 1-10 range including decimals */}
                 <div className='martingale-row'>
                     <label>🎲 MARTINGALE MULTIPLIER (1x - 10x)</label>
@@ -847,6 +907,9 @@ const Scanner = observer(() => {
                     </div>
                     <div className='latest-tick'>
                         💵 P/L: <span>{sessionProfit.toFixed(2)} {currency}</span>
+                    </div>
+                    <div className='latest-tick'>
+                        🎯 Runs: <span>{completedRunsRef.current}/{runsToCheckInput}</span>
                     </div>
                 </div>
 
