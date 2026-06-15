@@ -232,7 +232,7 @@ const Scanner = observer(() => {
     const { active_tab } = dashboard;
     const [selectedSymbol, setSelectedSymbol] = useState('R_10');
     const [strategy, setStrategy] = useState<TScannerStrategy>('Matches & Differs');
-    const [mode, setMode] = useState<TScannerMode>('Trade'); // Default mode set to 'Trade'
+    const [mode, setMode] = useState<TScannerMode>('Trade');
     const [stakeInput, setStakeInput] = useState(DEFAULT_STAKE);
     const [stopLossInput, setStopLossInput] = useState(DEFAULT_STOP_LOSS);
     const [takeProfitInput, setTakeProfitInput] = useState(DEFAULT_TAKE_PROFIT);
@@ -563,14 +563,25 @@ const Scanner = observer(() => {
                 return;
             }
 
-            // Check if we've reached the required number of runs and are in profit
-            if (completedRunsRef.current >= runsToCheckRef.current && sessionProfitRef.current > 0) {
-                setTerminalDashboard(previous => [
-                    ...previous,
-                    `${runsToCheckRef.current} runs complete in profit: ${sessionProfitRef.current.toFixed(2)} ${currency}`,
-                ]);
-                stopTrading();
-                return;
+            // FIXED: Check if we've reached the required number of runs
+            // Continue trading until profit > 0.1, even after minimum runs are completed
+            if (completedRunsRef.current >= runsToCheckRef.current) {
+                // If we've completed the minimum runs but are still in loss or profit <= 0.1, continue trading
+                if (sessionProfitRef.current <= 0.1) {
+                    setTerminalDashboard(previous => [
+                        ...previous,
+                        `${runsToCheckRef.current} runs completed but profit (${sessionProfitRef.current.toFixed(2)} ${currency}) <= 0.1. Continuing until profit > 0.1...`,
+                    ]);
+                    // Don't stop - continue trading
+                } else {
+                    // Only stop if profit is greater than 0.1
+                    setTerminalDashboard(previous => [
+                        ...previous,
+                        `${runsToCheckRef.current} runs complete with profit > 0.1: ${sessionProfitRef.current.toFixed(2)} ${currency}`,
+                    ]);
+                    stopTrading();
+                    return;
+                }
             }
 
             const analysis = buildAnalysis(strategyRef.current, currentTicks, selectedSymbolRef.current);
@@ -622,10 +633,10 @@ const Scanner = observer(() => {
                         `TAKE PROFIT REACHED! P/L: ${totalProfit.toFixed(2)} ${currency}`,
                     ]);
                     stopTrading();
-                } else if (completedRunsRef.current >= runsToCheckRef.current && totalProfit > 0) {
+                } else if (completedRunsRef.current >= runsToCheckRef.current && totalProfit > 0.1) {
                     setTerminalDashboard(previous => [
                         ...previous,
-                        `${runsToCheckRef.current} runs complete in profit: ${totalProfit.toFixed(2)} ${currency}`,
+                        `${runsToCheckRef.current} runs complete with profit > 0.1: ${totalProfit.toFixed(2)} ${currency}`,
                     ]);
                     stopTrading();
                 }
@@ -680,7 +691,7 @@ const Scanner = observer(() => {
                 ...previous,
                 `Bot activated with ${firstSignal.label}.`,
                 `Martingale enabled: multiplier x${multiplier} | Base stake: ${stake} ${currency}`,
-                `Will check profit after ${runsToCheck} runs.`,
+                `Will check profit after ${runsToCheck} runs (will continue until profit > 0.1).`,
                 `Stop Loss: ${stopLoss} ${currency} | Take Profit: ${takeProfit} ${currency}`,
             ]);
             void executeTradeFromTick(ticksRef.current);
