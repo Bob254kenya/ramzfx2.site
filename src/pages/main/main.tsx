@@ -473,7 +473,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
                                             width='24px'
                                             fill='#c8a45d'
                                         />
-                                        <Localize i18n_default_text='Best Bots' />
+                                        <Localize i18n_default_text='Free Bots' />
                                     </>
                                 }
                                 id='id-best-bots'
@@ -517,7 +517,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
                                                 width='24px'
                                                 fill='#c8a45d'
                                             />
-                                            <Localize i18n_default_text='Auto Trades' />
+                                            <Localize i18n_default_text='Ramzfx Ultimate Bot' />
                                         </>
                                     }
                                     id='id-auto-trades'
@@ -567,7 +567,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
                                             width='24px'
                                             fill='#c8a45d'
                                         />
-                                        <Localize i18n_default_text='Analysis Tool' />
+                                        <Localize i18n_default_text='Ramzfx Analysis Tool' />
                                     </>
                                 }
                                 id='id-analysistool'
