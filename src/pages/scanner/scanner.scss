@@ -5,7 +5,7 @@
     height: var(--tab-content-height);
     min-height: var(--tab-content-height);
     flex: 1 1 auto;
-    align-items: center;
+    align-items: flex-start; /* Changed from center to flex-start */
     justify-content: center;
     padding: 20px;
     position: relative;
@@ -33,7 +33,7 @@
         border: 1px solid rgba(42, 255, 158, 0.5);
         box-shadow: 0 30px 50px rgba(0, 255, 200, 0.15), inset 0 1px 2px rgba(255, 255, 255, 0.05);
         z-index: 10;
-        margin-top: 30px;
+        margin-top: 20%; /* Changed from 30px to 20% */
         transition: all 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1);
         padding: 28px 26px 34px;
         
@@ -85,6 +85,8 @@
         font-weight: 800;
         text-transform: uppercase;
         filter: drop-shadow(0 0 8px #2aff9e66);
+        position: relative;
+        z-index: 20; /* Ensure header is above everything */
     }
 
     label {
@@ -250,18 +252,17 @@
         left: 50%;
         transform: translate(-50%, -50%);
         width: 88%;
-        max-width: 680px;  // Reduced from 980px
-        height: 65vh;      // Reduced from 78vh
+        max-width: 680px;
+        height: 65vh;
         background: #030c12f2;
         backdrop-filter: blur(24px);
         border: 1.5px solid #0ff;
-        border-radius: 32px;  // Slightly smaller border radius
+        border-radius: 32px;
         box-shadow: 0 0 60px #0ff6;
         z-index: 1000;
         overflow: hidden;
         animation: slideGlow 0.22s ease-out;
 
-        // Additional reduced size for smaller screens
         @media (max-width: 760px) {
             max-width: 92%;
             height: 70vh;
@@ -269,7 +270,6 @@
         }
     }
 
-    // Popup header with stop button and close button
     .popup-header {
         display: flex;
         justify-content: flex-end;
@@ -283,7 +283,6 @@
         z-index: 1002;
     }
 
-    // Stop bot button styles
     .stop-bot-btn {
         background: linear-gradient(105deg, #ff4444, #cc0000);
         color: white;
@@ -314,7 +313,6 @@
         }
     }
 
-    // Close button styles (repositioned to header)
     .close-btn {
         background: #ff4466;
         color: white;
@@ -406,7 +404,7 @@
         padding: 14px 16px;
         background: #010b10cc;
         border-bottom: 1px solid #2aff9e;
-        max-height: 180px;  // Slightly reduced for smaller popup
+        max-height: 180px;
         overflow-y: auto;
         
         p {
@@ -429,7 +427,7 @@
 
     .terminal-scroll {
         padding: 12px 16px;
-        height: calc(100% - 220px);  // Adjusted for smaller popup
+        height: calc(100% - 220px);
         overflow-y: auto;
         
         .terminal-scroll-content p {
@@ -454,9 +452,16 @@
 // Mobile responsive styles
 @media (max-width: 760px) {
     .scanner-page {
+        align-items: flex-start; /* Keep at top for mobile */
+        
         .container {
             padding: 20px 18px;
-            margin-top: 25px;
+            margin-top: 15%; /* Slightly smaller for mobile */
+        }
+        
+        h1 {
+            font-size: 1.4rem;
+            margin-bottom: 20px;
         }
         
         .martingale-row {
@@ -518,9 +523,13 @@
     }
 }
 
-// Small desktop adjustments
+// Tablet adjustments
 @media (min-width: 761px) and (max-width: 1024px) {
     .scanner-page {
+        .container {
+            margin-top: 18%; /* Slightly adjusted for tablets */
+        }
+        
         .popup {
             max-width: 600px;
             height: 60vh;
@@ -532,6 +541,15 @@
         
         .terminal-scroll {
             height: calc(100% - 200px);
+        }
+    }
+}
+
+// Large screens
+@media (min-width: 1440px) {
+    .scanner-page {
+        .container {
+            margin-top: 22%; /* Slightly more on larger screens */
         }
     }
 }
