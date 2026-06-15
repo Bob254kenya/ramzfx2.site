@@ -165,7 +165,7 @@
             color: #c6ffdb;
             font-weight: bold;
             font-family: monospace;
-            width: 90px;
+            width: 100px;
             text-align: center;
             cursor: pointer;
             
@@ -242,6 +242,7 @@
         }
     }
 
+    // Popup styles with reduced size
     .popup {
         display: none;
         position: fixed;
@@ -249,16 +250,92 @@
         left: 50%;
         transform: translate(-50%, -50%);
         width: 88%;
-        max-width: 980px;
-        height: 78vh;
+        max-width: 680px;  // Reduced from 980px
+        height: 65vh;      // Reduced from 78vh
         background: #030c12f2;
         backdrop-filter: blur(24px);
         border: 1.5px solid #0ff;
-        border-radius: 42px;
+        border-radius: 32px;  // Slightly smaller border radius
         box-shadow: 0 0 60px #0ff6;
         z-index: 1000;
         overflow: hidden;
         animation: slideGlow 0.22s ease-out;
+
+        // Additional reduced size for smaller screens
+        @media (max-width: 760px) {
+            max-width: 92%;
+            height: 70vh;
+            border-radius: 28px;
+        }
+    }
+
+    // Popup header with stop button and close button
+    .popup-header {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 16px;
+        background: rgba(3, 22, 30, 0.95);
+        border-bottom: 1px solid rgba(42, 255, 158, 0.4);
+        position: sticky;
+        top: 0;
+        z-index: 1002;
+    }
+
+    // Stop bot button styles
+    .stop-bot-btn {
+        background: linear-gradient(105deg, #ff4444, #cc0000);
+        color: white;
+        border: none;
+        padding: 6px 18px;
+        cursor: pointer;
+        border-radius: 40px;
+        font-weight: bold;
+        font-size: 0.8rem;
+        letter-spacing: 1px;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 8px rgba(255, 0, 0, 0.3);
+        
+        &:hover:not(:disabled) {
+            transform: scale(1.02);
+            background: linear-gradient(105deg, #ff6666, #ee2222);
+            box-shadow: 0 4px 12px rgba(255, 0, 0, 0.5);
+        }
+        
+        &:active:not(:disabled) {
+            transform: scale(0.98);
+        }
+        
+        &:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+    }
+
+    // Close button styles (repositioned to header)
+    .close-btn {
+        background: #ff4466;
+        color: white;
+        border: none;
+        padding: 6px 16px;
+        cursor: pointer;
+        border-radius: 40px;
+        font-weight: bold;
+        font-size: 0.8rem;
+        transition: all 0.2s ease;
+        box-shadow: 0 2px 6px rgba(255, 68, 102, 0.3);
+        
+        &:hover {
+            background: #ff6688;
+            transform: scale(1.02);
+            box-shadow: 0 4px 10px rgba(255, 68, 102, 0.4);
+        }
+        
+        &:active {
+            transform: scale(0.98);
+        }
     }
 
     @keyframes slideGlow {
@@ -294,7 +371,7 @@
 
     .terminal-header {
         background: #03161ee6;
-        padding: 12px 18px;
+        padding: 10px 18px;
         border-bottom: 1px solid #2aff9e;
         display: flex;
         align-items: center;
@@ -304,8 +381,8 @@
         z-index: 2;
         
         .dot {
-            height: 12px;
-            width: 12px;
+            height: 10px;
+            width: 10px;
             border-radius: 50%;
             display: inline-block;
             animation: pulse 1.2s infinite;
@@ -321,39 +398,20 @@
             font-weight: bold;
             letter-spacing: 2.5px;
             color: #6effc4;
-        }
-    }
-
-    .close-btn {
-        position: absolute;
-        top: 14px;
-        right: 18px;
-        background: #ff4466;
-        color: white;
-        border: none;
-        padding: 6px 16px;
-        cursor: pointer;
-        border-radius: 40px;
-        font-weight: bold;
-        z-index: 1001;
-        transition: all 0.2s;
-        
-        &:hover {
-            background: #ff6688;
-            transform: scale(1.03);
+            font-size: 0.8rem;
         }
     }
 
     .terminal-dashboard {
-        padding: 18px;
+        padding: 14px 16px;
         background: #010b10cc;
         border-bottom: 1px solid #2aff9e;
-        max-height: 210px;
+        max-height: 180px;  // Slightly reduced for smaller popup
         overflow-y: auto;
         
         p {
-            margin: 6px 0;
-            font-size: 12px;
+            margin: 5px 0;
+            font-size: 11px;
             line-height: 1.4;
             
             &.red {
@@ -363,19 +421,27 @@
                 color: #9effcf;
             }
         }
+        
+        &::-webkit-scrollbar {
+            width: 4px;
+        }
     }
 
     .terminal-scroll {
-        padding: 16px 18px;
-        height: calc(100% - 250px);
+        padding: 12px 16px;
+        height: calc(100% - 220px);  // Adjusted for smaller popup
         overflow-y: auto;
         
         .terminal-scroll-content p {
-            margin: 4px 0;
-            font-size: 11px;
+            margin: 3px 0;
+            font-size: 10px;
             
             &.red { color: #ff8888; }
             &.green { color: #b5ffd0; }
+        }
+        
+        &::-webkit-scrollbar {
+            width: 4px;
         }
     }
 
@@ -385,20 +451,87 @@
     }
 }
 
+// Mobile responsive styles
 @media (max-width: 760px) {
-    .scanner-page .container {
-        padding: 20px 18px;
-        margin-top: 25px;
+    .scanner-page {
+        .container {
+            padding: 20px 18px;
+            margin-top: 25px;
+        }
+        
+        .martingale-row {
+            flex-wrap: wrap;
+            gap: 10px;
+            
+            .martingale-select {
+                width: 100%;
+                max-width: 120px;
+            }
+        }
+        
+        .contain {
+            flex-direction: column;
+            gap: 12px;
+            text-align: center;
+        }
+        
+        .popup-header {
+            padding: 6px 12px;
+        }
+        
+        .stop-bot-btn,
+        .close-btn {
+            padding: 4px 12px;
+            font-size: 0.7rem;
+        }
+        
+        .terminal-header {
+            padding: 8px 12px;
+            
+            .dot {
+                height: 8px;
+                width: 8px;
+            }
+            
+            .terminal-title {
+                font-size: 0.7rem;
+            }
+        }
+        
+        .terminal-dashboard {
+            padding: 10px 12px;
+            max-height: 150px;
+            
+            p {
+                font-size: 10px;
+            }
+        }
+        
+        .terminal-scroll {
+            padding: 10px 12px;
+            height: calc(100% - 190px);
+            
+            .terminal-scroll-content p {
+                font-size: 9px;
+            }
+        }
     }
-    
-    .martingale-row {
-        flex-wrap: wrap;
-        gap: 10px;
-    }
-    
-    .contain {
-        flex-direction: column;
-        gap: 12px;
-        text-align: center;
+}
+
+// Small desktop adjustments
+@media (min-width: 761px) and (max-width: 1024px) {
+    .scanner-page {
+        .popup {
+            max-width: 600px;
+            height: 60vh;
+        }
+        
+        .terminal-dashboard {
+            max-height: 160px;
+        }
+        
+        .terminal-scroll {
+            height: calc(100% - 200px);
+        }
     }
 }
