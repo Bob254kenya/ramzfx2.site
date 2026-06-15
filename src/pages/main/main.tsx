@@ -52,6 +52,48 @@ import Analysistool from '../analysistool';
 import Scanner from '../scanner';
 import './main.scss';
 
+// ==================== SOCIAL POPUP COMPONENT ====================
+const SocialPopup: React.FC = () => {
+    const [isVisible, setIsVisible] = useState(true);
+
+    if (!isVisible) return null;
+
+    return (
+        <div className="social-popup">
+            <div className="social-content">
+                <button className="social-close" onClick={() => setIsVisible(false)}>
+                    ✕
+                </button>
+                <h3>CONNECT WITH US</h3>
+                <div className="social-links">
+                    <a href="https://whatsapp.com" target="_blank" rel="noopener noreferrer">
+                        📱 WhatsApp
+                    </a>
+                    <a href="https://telegram.org" target="_blank" rel="noopener noreferrer">
+                        ✈️ Telegram
+                    </a>
+                    <a href="https://youtube.com" target="_blank" rel="noopener noreferrer">
+                        ▶️ YouTube
+                    </a>
+                    <a href="https://tiktok.com" target="_blank" rel="noopener noreferrer">
+                        🎵 TikTok
+                    </a>
+                    <a href="https://instagram.com" target="_blank" rel="noopener noreferrer">
+                        📷 Instagram
+                    </a>
+                    <a href="https://discord.com" target="_blank" rel="noopener noreferrer">
+                        💬 Discord
+                    </a>
+                    <a href="https://twitter.com" target="_blank" rel="noopener noreferrer">
+                        🐦 Twitter
+                    </a>
+                </div>
+            </div>
+        </div>
+    );
+};
+// ==============================================
+
 const AppWrapper = observer(() => {
     const { connectionStatus } = useApiBase();
     const { dashboard, load_modal, run_panel, quick_strategy, summary_card, blockly_store } = useStore();
@@ -647,6 +689,9 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
                     />
                 );
             })()}
+
+            {/* Social Popup Component */}
+            <SocialPopup />
         </React.Fragment>
     );
 });
