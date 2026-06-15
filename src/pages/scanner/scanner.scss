@@ -154,6 +154,100 @@
         }
     }
 
+    // Martingale Control Styles
+    .martingale-control {
+        margin: 15px 0 10px 0;
+        padding: 10px;
+        background: rgba(0, 255, 0, 0.05);
+        border-radius: 8px;
+        border: 1px solid rgba(0, 255, 0, 0.2);
+        
+        .martingale-label {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            cursor: pointer;
+            color: #00ff00;
+            font-size: 13px;
+            font-weight: bold;
+            
+            input {
+                width: 18px;
+                height: 18px;
+                cursor: pointer;
+                accent-color: #00ff00;
+            }
+            
+            &:hover {
+                text-shadow: 0 0 5px #00ff00;
+            }
+        }
+    }
+    
+    .martingale-info {
+        margin-bottom: 15px;
+        padding: 8px 12px;
+        background: rgba(255, 100, 0, 0.1);
+        border-left: 3px solid #ff6600;
+        border-radius: 4px;
+        font-size: 11px;
+        color: #ffaa44;
+        
+        span {
+            display: block;
+            
+            &.martingale-status {
+                margin-top: 5px;
+                color: #00ff00;
+                font-weight: bold;
+                animation: pulse 1.5s infinite;
+            }
+        }
+    }
+    
+    .contain {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        justify-content: space-between;
+        margin: 15px 0;
+        padding: 10px;
+        background: rgba(0, 0, 0, 0.5);
+        border-radius: 8px;
+        border: 1px solid rgba(0, 255, 0, 0.2);
+        
+        .latest-tick {
+            flex: 1;
+            text-align: center;
+            color: #00ff00;
+            font-size: 12px;
+            font-weight: bold;
+            
+            span {
+                display: block;
+                font-size: 18px;
+                margin-top: 5px;
+                color: #ffffff;
+                text-shadow: 0 0 5px #00ff00;
+                
+                &.profit {
+                    color: #00ff00;
+                }
+                
+                &.loss {
+                    color: #ff4444;
+                }
+            }
+            
+            &.martingale-multiplier span {
+                color: #ffaa00;
+                font-size: 20px;
+                font-weight: bold;
+                animation: glowPulse 1s infinite;
+            }
+        }
+    }
+
     // Checkbox styles
     .checkbox-group {
         display: flex;
@@ -593,9 +687,9 @@
             display: inline-block;
             animation: pulse 1s infinite;
             
-            &.red { background-color: #ff4444; }
-            &.yellow { background-color: #ffff44; }
-            &.green { background-color: #44ff44; }
+            &:nth-child(1) { background-color: #ff4444; }
+            &:nth-child(2) { background-color: #ffff44; }
+            &:nth-child(3) { background-color: #44ff44; }
         }
         
         .terminal-title {
@@ -1000,6 +1094,14 @@
             }
         }
         
+        .contain {
+            flex-wrap: wrap;
+            
+            .latest-tick {
+                min-width: calc(50% - 10px);
+            }
+        }
+        
         .stats-container {
             grid-template-columns: repeat(2, 1fr);
         }
@@ -1013,6 +1115,10 @@
         .recovery-modal {
             width: 95%;
             padding: 15px;
+        }
+        
+        .martingale-control .martingale-label {
+            font-size: 11px;
         }
     }
     
