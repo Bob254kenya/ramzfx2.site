@@ -40,6 +40,8 @@ const MAX_TICKS = 1000;
 const DEFAULT_STAKE = '10';
 const DEFAULT_STOP_LOSS = '500';
 const DEFAULT_TAKE_PROFIT = '500';
+const DEFAULT_MARTINGALE_MULTIPLIER = '2';
+const DEFAULT_RECOVERY_STAKE = '20';
 const PROFIT_CHECK_RUNS = 5;
 const TIMER_SOUND_URL = 'https://www.fesliyanstudios.com/play-mp3/4386';
 
@@ -550,6 +552,10 @@ const Scanner = observer(() => {
     const [stakeInput, setStakeInput] = useState(DEFAULT_STAKE);
     const [stopLossInput, setStopLossInput] = useState(DEFAULT_STOP_LOSS);
     const [takeProfitInput, setTakeProfitInput] = useState(DEFAULT_TAKE_PROFIT);
+    const [martingaleMultiplier, setMartingaleMultiplier] = useState(DEFAULT_MARTINGALE_MULTIPLIER);
+    const [recoveryStake, setRecoveryStake] = useState(DEFAULT_RECOVERY_STAKE);
+    const [selectedBarrier, setSelectedBarrier] = useState<string>('');
+    const [selectedContractType, setSelectedContractType] = useState<string>('');
     const [ticks, setTicks] = useState<TTickPoint[]>([]);
     const [popupOpen, setPopupOpen] = useState(false);
     const [terminalDashboard, setTerminalDashboard] = useState<string[]>(['Analysis Dashboard']);
@@ -557,6 +563,7 @@ const Scanner = observer(() => {
     const [scrollingText, setScrollingText] = useState('');
     const [isWorking, setIsWorking] = useState(false);
     const [sessionProfit, setSessionProfit] = useState(0);
+    const [lossStreak, setLossStreak] = useState(0);
     const subscriptionRef = useRef<{ unsubscribe?: () => void } | null>(null);
     const requestVersionRef = useRef(0);
     const ticksRef = useRef<TTickPoint[]>([]);
@@ -579,6 +586,31 @@ const Scanner = observer(() => {
     const latestTick = ticks[ticks.length - 1];
     const latestDigit = latestTick ? getLastDigitFromQuote(latestTick.quote, selectedSymbol) : null;
     const canAnalyze = ticks.length >= MAX_TICKS;
+
+    // Available barrier options based on strategy
+    const getBarrierOptions = () => {
+        if (strategy === 'Over & Under') {
+            return ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        } else if (strategy === 'Matches & Differs') {
+            return ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        }
+        return [];
+    };
+
+    // Available contract types based on strategy
+    const getContractTypeOptions = () => {
+        if (strategy === 'Even & Odd') {
+            return ['DIGITEVEN', 'DIGITODD'];
+        } else if (strategy === 'Over & Under') {
+            return ['DIGITOVER', 'DIGITUNDER'];
+        } else if (strategy === 'Matches & Differs') {
+            return ['DIGITMATCH', 'DIGITDIFF'];
+        } else if (strategy === 'Rise & Fall' || strategy.includes('Scalping') || strategy.includes('Mean') || 
+                   strategy.includes('Breakout') || strategy.includes('Trend') || strategy.includes('Volatility')) {
+            return ['CALL', 'PUT'];
+        }
+        return [];
+    };
 
     useEffect(() => {
         ticksRef.current = ticks;
@@ -658,6 +690,7 @@ const Scanner = observer(() => {
         tradeActiveRef.current = false;
         setIsWorking(false);
         stopTimerSound();
+        setLossStreak(0);
 
         try {
             run_panel.setIsRunning(false);
@@ -765,25 +798,26 @@ const Scanner = observer(() => {
     );
 
     const buildTradeParameters = useCallback(
-        (signal: TScannerSignal, stake: number) => {
+        (signal: TScannerSignal, stake: number, customBarrier?: string, customContractType?: string) => {
             const parameters: Record<string, number | string> = {
                 amount: stake,
                 basis: 'stake',
-                contract_type: signal.contractType,
+                contract_type: customContractType || signal.contractType,
                 currency,
                 duration: 1,
                 duration_unit: 't',
                 symbol: selectedSymbol,
             };
 
-            if (signal.barrier) parameters.barrier = signal.barrier;
+            const barrierToUse = customBarrier || signal.barrier;
+            if (barrierToUse) parameters.barrier = barrierToUse;
             return parameters;
         },
         [currency, selectedSymbol]
     );
 
     const runSingleTrade = useCallback(
-        async (signal: TScannerSignal, stake: number) => {
+        async (signal: TScannerSignal, stake: number, isRecovery: boolean = false) => {
             const tradeStartTime = Math.floor(Date.now() / 1000);
             const fallbackContract = {
                 buy_price: stake,
@@ -796,9 +830,14 @@ const Scanner = observer(() => {
             };
 
             const confidenceText = signal.confidence ? ` (Confidence: ${signal.confidence.toFixed(1)}%)` : '';
-            setTerminalDashboard(previous => [...previous, `Buying ${signal.label}${confidenceText} with ${stake.toFixed(2)} ${currency}...`]);
+            const recoveryText = isRecovery ? ' [RECOVERY TRADE]' : '';
+            setTerminalDashboard(previous => [...previous, `Buying ${signal.label}${confidenceText}${recoveryText} with ${stake.toFixed(2)} ${currency}...`]);
+            
+            const contractTypeToUse = selectedContractType || signal.contractType;
+            const barrierToUse = selectedBarrier || signal.barrier;
+            
             const buy = await buyContractForUi({
-                parameters: buildTradeParameters(signal, stake),
+                parameters: buildTradeParameters(signal, stake, barrierToUse, contractTypeToUse),
                 price: stake,
                 source: 'Scanner',
             });
@@ -819,7 +858,7 @@ const Scanner = observer(() => {
 
             return Number(settledContract.profit ?? 0);
         },
-        [buildTradeParameters, currency, pushContract, selectedMarket.label, selectedSymbol]
+        [buildTradeParameters, currency, pushContract, selectedMarket.label, selectedSymbol, selectedBarrier, selectedContractType]
     );
 
     const executeTradeFromTick = useCallback(
@@ -839,11 +878,32 @@ const Scanner = observer(() => {
             const analysis = buildAnalysis(strategyRef.current, currentTicks, selectedSymbolRef.current);
             const confidenceText = analysis.signal.confidence ? ` (Confidence: ${analysis.signal.confidence.toFixed(1)}%)` : '';
             tradeInFlightRef.current = true;
+            
+            // Calculate stake with martingale if in loss streak
+            let currentStake = stakeRef.current;
+            if (lossStreak > 0) {
+                const multiplier = Math.pow(Number(martingaleMultiplier), lossStreak);
+                currentStake = stakeRef.current * multiplier;
+                currentStake = Math.min(currentStake, Number(recoveryStake) * 10); // Cap at 10x recovery stake
+                setTerminalDashboard(previous => [...previous, `Martingale activated: Loss streak ${lossStreak}, Stake: ${currentStake.toFixed(2)} ${currency}`]);
+            }
+            
             setTerminalDashboard(previous => [...previous, `Tick signal found: ${analysis.signal.label}${confidenceText}`]);
 
             try {
-                const profit = await runSingleTrade(analysis.signal, stakeRef.current);
+                const profit = await runSingleTrade(analysis.signal, currentStake, lossStreak > 0);
                 const totalProfit = Number((sessionProfitRef.current + profit).toFixed(8));
+                
+                if (profit > 0) {
+                    // Reset loss streak on win
+                    setLossStreak(0);
+                    setTerminalDashboard(previous => [...previous, `WIN! Loss streak reset to 0`]);
+                } else {
+                    // Increment loss streak on loss
+                    setLossStreak(prev => prev + 1);
+                    setTerminalDashboard(previous => [...previous, `LOSS! Loss streak: ${lossStreak + 1}`]);
+                }
+                
                 completedRunsRef.current += 1;
                 sessionProfitRef.current = totalProfit;
                 setSessionProfit(totalProfit);
@@ -877,7 +937,7 @@ const Scanner = observer(() => {
                 }
             }
         },
-        [currency, runSingleTrade, stopTrading]
+        [currency, runSingleTrade, stopTrading, martingaleMultiplier, lossStreak, recoveryStake]
     );
 
     useEffect(() => {
@@ -897,6 +957,7 @@ const Scanner = observer(() => {
             tradeActiveRef.current = true;
             tradeInFlightRef.current = false;
             setSessionProfit(0);
+            setLossStreak(0);
 
             try {
                 run_panel.setRunId(`scanner-${Date.now()}`);
@@ -909,14 +970,17 @@ const Scanner = observer(() => {
 
             dashboard.setActiveTradingModule('scanner');
             const confidenceText = firstSignal.confidence ? ` (Confidence: ${firstSignal.confidence.toFixed(1)}%)` : '';
+            const barrierText = selectedBarrier ? ` | Barrier: ${selectedBarrier}` : '';
+            const contractText = selectedContractType ? ` | Contract: ${selectedContractType}` : '';
             setTerminalDashboard(previous => [
                 ...previous,
-                `Bot activated with ${firstSignal.label}${confidenceText}.`,
+                `Bot activated with ${firstSignal.label}${confidenceText}${barrierText}${contractText}.`,
+                `Martingale Multiplier: ${martingaleMultiplier}x | Recovery Stake: ${recoveryStake} ${currency}`,
                 `Execution is now listening on every live tick. It will check profit after ${PROFIT_CHECK_RUNS} runs.`,
             ]);
             void executeTradeFromTick(ticksRef.current);
         },
-        [dashboard, executeTradeFromTick, run_panel]
+        [dashboard, executeTradeFromTick, run_panel, selectedBarrier, selectedContractType, martingaleMultiplier, recoveryStake, currency]
     );
 
     const startFastMovingCodes = useCallback(
@@ -973,6 +1037,7 @@ const Scanner = observer(() => {
         const stake = Number(stakeInput);
         const stopLoss = Number(stopLossInput);
         const takeProfit = Number(takeProfitInput);
+        const recoveryAmount = Number(recoveryStake);
 
         if (!strategy || !selectedSymbol) {
             setTerminalDashboard(['Error: Please select both strategy and market!']);
@@ -982,6 +1047,12 @@ const Scanner = observer(() => {
 
         if (!Number.isFinite(stake) || stake <= 0 || !Number.isFinite(stopLoss) || stopLoss <= 0 || !Number.isFinite(takeProfit) || takeProfit <= 0) {
             setTerminalDashboard(['Error: Please enter valid Stake, SL and TP amounts!']);
+            setPopupOpen(true);
+            return;
+        }
+
+        if (!Number.isFinite(recoveryAmount) || recoveryAmount <= 0) {
+            setTerminalDashboard(['Error: Please enter valid Recovery Stake amount!']);
             setPopupOpen(true);
             return;
         }
@@ -997,6 +1068,7 @@ const Scanner = observer(() => {
         setSessionProfit(0);
         sessionProfitRef.current = 0;
         completedRunsRef.current = 0;
+        setLossStreak(0);
         setPopupOpen(true);
         setTerminalDashboard([`Analysis Dashboard - ${strategy} on ${selectedSymbol}`]);
         setTerminalBody(['Connecting to server...']);
@@ -1044,6 +1116,9 @@ const Scanner = observer(() => {
     const handleStrategyChange = (nextStrategy: TScannerStrategy) => {
         stopTrading();
         setStrategy(nextStrategy);
+        // Reset barrier and contract type when strategy changes
+        setSelectedBarrier('');
+        setSelectedContractType('');
     };
 
     const handleModeChange = (nextMode: TScannerMode) => {
@@ -1059,64 +1134,132 @@ const Scanner = observer(() => {
                 <div className='scrolling-text'>{scrollingText}</div>
             </div>
             <div className='container'>
-                <h1>Signal Analyzer</h1>
-                <label htmlFor='strategy'>Select Strategy</label>
-                <select id='strategy' className='dropdown' value={strategy} onChange={event => handleStrategyChange(event.target.value as TScannerStrategy)}>
-                    {STRATEGIES.map(item => (
-                        <option key={item}>{item}</option>
-                    ))}
-                </select>
-                <label htmlFor='market'>Select Market</label>
-                <select id='market' className='dropdown' value={selectedSymbol} onChange={event => handleMarketChange(event.target.value)}>
-                    {MARKETS.map(market => (
-                        <option key={market.symbol} value={market.symbol}>
-                            {market.label}
-                        </option>
-                    ))}
-                </select>
-                <label htmlFor='stake'>Stake</label>
-                <input id='stake' className='dropdown' inputMode='decimal' value={stakeInput} onChange={event => setStakeInput(cleanMoneyInput(event.target.value))} />
-                <label htmlFor='stop-loss'>SL</label>
-                <input id='stop-loss' className='dropdown' inputMode='decimal' value={stopLossInput} onChange={event => setStopLossInput(cleanMoneyInput(event.target.value))} />
-                <label htmlFor='take-profit'>TP</label>
-                <input id='take-profit' className='dropdown' inputMode='decimal' value={takeProfitInput} onChange={event => setTakeProfitInput(cleanMoneyInput(event.target.value))} />
-                <label htmlFor='mode'>Mode</label>
-                <select id='mode' className='dropdown' value={mode} onChange={event => handleModeChange(event.target.value as TScannerMode)}>
-                    <option>Analyze</option>
-                    <option>Trade</option>
-                </select>
-                <br />
-                <div className='contain'>
-                    <div className='latest-tick'>
-                        Latest Tick: <span>{latestTick?.quote ?? '--'}</span>
+                <div className='content-wrapper'>
+                    <h1>Signal Analyzer</h1>
+                    
+                    <div className='form-group'>
+                        <label htmlFor='strategy'>Select Strategy</label>
+                        <select id='strategy' className='dropdown' value={strategy} onChange={event => handleStrategyChange(event.target.value as TScannerStrategy)}>
+                            {STRATEGIES.map(item => (
+                                <option key={item}>{item}</option>
+                            ))}
+                        </select>
                     </div>
-                    <div className='latest-tick'>
-                        Last Digit: <span>{latestDigit ?? '--'}</span>
-                    </div>
-                    <div className='latest-tick'>
-                        P/L: <span>{sessionProfit.toFixed(2)} {currency}</span>
-                    </div>
-                </div>
 
-                <div className='buttons'>
-                    <button className='analyse' type='button' onClick={handleAnalyze} disabled={isWorking}>
-                        {isWorking ? 'Running' : 'Analyse'}
-                    </button>
+                    {getBarrierOptions().length > 0 && (
+                        <div className='form-group'>
+                            <label htmlFor='barrier'>Select Barrier (Optional)</label>
+                            <select id='barrier' className='dropdown' value={selectedBarrier} onChange={event => setSelectedBarrier(event.target.value)}>
+                                <option value=''>Auto-detect</option>
+                                {getBarrierOptions().map(barrier => (
+                                    <option key={barrier} value={barrier}>{barrier}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
+                    {getContractTypeOptions().length > 0 && (
+                        <div className='form-group'>
+                            <label htmlFor='contract-type'>Select Contract Type (Optional)</label>
+                            <select id='contract-type' className='dropdown' value={selectedContractType} onChange={event => setSelectedContractType(event.target.value)}>
+                                <option value=''>Auto-detect</option>
+                                {getContractTypeOptions().map(type => (
+                                    <option key={type} value={type}>{type}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
+
+                    <div className='form-group'>
+                        <label htmlFor='market'>Select Market</label>
+                        <select id='market' className='dropdown' value={selectedSymbol} onChange={event => handleMarketChange(event.target.value)}>
+                            {MARKETS.map(market => (
+                                <option key={market.symbol} value={market.symbol}>
+                                    {market.label}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className='form-row'>
+                        <div className='form-group half'>
+                            <label htmlFor='stake'>Stake</label>
+                            <input id='stake' className='dropdown' inputMode='decimal' value={stakeInput} onChange={event => setStakeInput(cleanMoneyInput(event.target.value))} />
+                        </div>
+                        <div className='form-group half'>
+                            <label htmlFor='recovery-stake'>Recovery Stake</label>
+                            <input id='recovery-stake' className='dropdown' inputMode='decimal' value={recoveryStake} onChange={event => setRecoveryStake(cleanMoneyInput(event.target.value))} />
+                        </div>
+                    </div>
+
+                    <div className='form-row'>
+                        <div className='form-group half'>
+                            <label htmlFor='stop-loss'>Stop Loss</label>
+                            <input id='stop-loss' className='dropdown' inputMode='decimal' value={stopLossInput} onChange={event => setStopLossInput(cleanMoneyInput(event.target.value))} />
+                        </div>
+                        <div className='form-group half'>
+                            <label htmlFor='take-profit'>Take Profit</label>
+                            <input id='take-profit' className='dropdown' inputMode='decimal' value={takeProfitInput} onChange={event => setTakeProfitInput(cleanMoneyInput(event.target.value))} />
+                        </div>
+                    </div>
+
+                    <div className='form-group'>
+                        <label htmlFor='martingale'>Martingale Multiplier</label>
+                        <input id='martingale' className='dropdown' inputMode='decimal' value={martingaleMultiplier} onChange={event => setMartingaleMultiplier(cleanMoneyInput(event.target.value))} />
+                    </div>
+
+                    <div className='form-group'>
+                        <label htmlFor='mode'>Mode</label>
+                        <select id='mode' className='dropdown' value={mode} onChange={event => handleModeChange(event.target.value as TScannerMode)}>
+                            <option>Analyze</option>
+                            <option>Trade</option>
+                        </select>
+                    </div>
+
+                    <div className='stats-container'>
+                        <div className='stat-card'>
+                            <span className='stat-label'>Latest Tick:</span>
+                            <span className='stat-value'>{latestTick?.quote ?? '--'}</span>
+                        </div>
+                        <div className='stat-card'>
+                            <span className='stat-label'>Last Digit:</span>
+                            <span className='stat-value'>{latestDigit ?? '--'}</span>
+                        </div>
+                        <div className='stat-card'>
+                            <span className='stat-label'>P/L:</span>
+                            <span className={`stat-value ${sessionProfit >= 0 ? 'profit' : 'loss'}`}>
+                                {sessionProfit.toFixed(2)} {currency}
+                            </span>
+                        </div>
+                        {lossStreak > 0 && (
+                            <div className='stat-card'>
+                                <span className='stat-label'>Loss Streak:</span>
+                                <span className='stat-value loss'>{lossStreak}</span>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className='buttons'>
+                        <button className='analyse' type='button' onClick={handleAnalyze} disabled={isWorking}>
+                            {isWorking ? 'Running...' : 'Analyse & Trade'}
+                        </button>
+                    </div>
                 </div>
             </div>
             <div className='popup' style={{ display: popupOpen ? 'block' : 'none' }}>
                 <div className='popup-content'>
                     <button className='close-btn' type='button' onClick={handleClosePopup}>
-                        X
+                        ✕
                     </button>
                     <div className='terminal-header'>
-                        <span className='dot' />
-                        <span className='dot' />
-                        <span className='dot' />
+                        <span className='dot red' />
+                        <span className='dot yellow' />
+                        <span className='dot green' />
+                        <span className='terminal-title'>Scanner Terminal</span>
                     </div>
                     <div className='terminal-dashboard'>
                         {terminalDashboard.map((line, index) => (
-                            <p className='green' key={`${line}-${index}`}>
+                            <p className={line?.includes('Error') ? 'red' : line?.includes('WIN') ? 'green-bold' : line?.includes('LOSS') ? 'red-bold' : 'green'} key={`${line}-${index}`}>
                                 {line ?? ''}
                             </p>
                         ))}
