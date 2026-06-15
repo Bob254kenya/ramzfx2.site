@@ -1,5 +1,4 @@
 // Export all pages for convenient imports
-export { default as BotIdeas } from './bot-ideas';
 export { default as BestBots } from './best-bots';
 export { default as Dashboard } from './dashboard';
 export { default as BotBuilder } from './bot-builder';
