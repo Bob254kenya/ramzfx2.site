@@ -52,86 +52,9 @@ import Analysistool from '../analysistool';
 import Scanner from '../scanner';
 import './main.scss';
 
-// ==================== SOCIAL POPUP COMPONENT WITH INLINE STYLES ====================
+// ==================== SOCIAL POPUP COMPONENT ====================
 const SocialPopup: React.FC = () => {
     const [isVisible, setIsVisible] = useState(true);
-
-    if (!isVisible) return null;
-
-    // Inline styles to ensure the popup appears
-    const popupStyles: React.CSSProperties = {
-        position: 'fixed',
-        bottom: '25px',
-        right: '25px',
-        zIndex: 9999,
-        animation: 'slideInRight 0.4s ease-out',
-        fontFamily: "'Courier New', 'Orbitron', monospace",
-    };
-
-    const contentStyles: React.CSSProperties = {
-        background: 'linear-gradient(135deg, #0a0a0a 0%, #111111 100%)',
-        border: '2px solid #00ff00',
-        borderRadius: '16px',
-        padding: '20px',
-        minWidth: '250px',
-        boxShadow: '0 0 30px rgba(0, 255, 0, 0.3), inset 0 0 20px rgba(0, 255, 0, 0.05)',
-        position: 'relative',
-        backdropFilter: 'blur(10px)',
-        transition: 'all 0.3s ease',
-    };
-
-    const closeButtonStyles: React.CSSProperties = {
-        position: 'absolute',
-        top: '10px',
-        right: '10px',
-        background: '#ff0044',
-        color: 'white',
-        border: 'none',
-        borderRadius: '50%',
-        width: '26px',
-        height: '26px',
-        cursor: 'pointer',
-        fontSize: '12px',
-        fontWeight: 'bold',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        transition: 'all 0.2s ease',
-    };
-
-    const titleStyles: React.CSSProperties = {
-        color: '#00ff00',
-        margin: '0 0 18px 0',
-        textAlign: 'center',
-        fontSize: '0.9rem',
-        letterSpacing: '2px',
-        textTransform: 'uppercase',
-        fontWeight: 'bold',
-        textShadow: '0 0 8px #00ff00',
-    };
-
-    const linksContainerStyles: React.CSSProperties = {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
-    };
-
-    const linkStyles: React.CSSProperties = {
-        color: '#00ff00',
-        textDecoration: 'none',
-        padding: '8px 14px',
-        border: '1px solid rgba(0, 255, 0, 0.3)',
-        borderRadius: '10px',
-        transition: 'all 0.25s ease',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        fontSize: '0.85rem',
-        fontFamily: 'monospace',
-        fontWeight: 500,
-        background: 'rgba(0, 0, 0, 0.4)',
-        backdropFilter: 'blur(4px)',
-    };
 
     // Add keyframes animation to document head
     React.useEffect(() => {
@@ -155,12 +78,103 @@ const SocialPopup: React.FC = () => {
         };
     }, []);
 
+    if (!isVisible) return null;
+
+    // Handle close button click with proper event prevention
+    const handleClose = (e: React.MouseEvent<HTMLButtonElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsVisible(false);
+    };
+
+    // Handle link clicks to prevent any issues
+    const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, url: string) => {
+        e.preventDefault();
+        e.stopPropagation();
+        window.open(url, '_blank', 'noopener,noreferrer');
+    };
+
+    const popupContainerStyle: React.CSSProperties = {
+        position: 'fixed',
+        bottom: '25px',
+        right: '25px',
+        zIndex: 9999,
+        animation: 'slideInRight 0.4s ease-out',
+        fontFamily: "'Courier New', 'Orbitron', monospace",
+    };
+
+    const contentStyle: React.CSSProperties = {
+        background: 'linear-gradient(135deg, #0a0a0a 0%, #111111 100%)',
+        border: '2px solid #00ff00',
+        borderRadius: '16px',
+        padding: '20px',
+        minWidth: '250px',
+        boxShadow: '0 0 30px rgba(0, 255, 0, 0.3), inset 0 0 20px rgba(0, 255, 0, 0.05)',
+        position: 'relative',
+        backdropFilter: 'blur(10px)',
+        transition: 'all 0.3s ease',
+    };
+
+    const closeButtonStyle: React.CSSProperties = {
+        position: 'absolute',
+        top: '10px',
+        right: '10px',
+        background: '#ff0044',
+        color: 'white',
+        border: 'none',
+        borderRadius: '50%',
+        width: '26px',
+        height: '26px',
+        cursor: 'pointer',
+        fontSize: '12px',
+        fontWeight: 'bold',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        transition: 'all 0.2s ease',
+        zIndex: 10000,
+    };
+
+    const titleStyle: React.CSSProperties = {
+        color: '#00ff00',
+        margin: '0 0 18px 0',
+        textAlign: 'center',
+        fontSize: '0.9rem',
+        letterSpacing: '2px',
+        textTransform: 'uppercase',
+        fontWeight: 'bold',
+        textShadow: '0 0 8px #00ff00',
+    };
+
+    const linksContainerStyle: React.CSSProperties = {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '10px',
+    };
+
+    const linkStyle: React.CSSProperties = {
+        color: '#00ff00',
+        textDecoration: 'none',
+        padding: '8px 14px',
+        border: '1px solid rgba(0, 255, 0, 0.3)',
+        borderRadius: '10px',
+        transition: 'all 0.25s ease',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        fontSize: '0.85rem',
+        fontFamily: 'monospace',
+        fontWeight: 500,
+        background: 'rgba(0, 0, 0, 0.4)',
+        backdropFilter: 'blur(4px)',
+    };
+
     return (
-        <div style={popupStyles}>
-            <div style={contentStyles}>
+        <div style={popupContainerStyle} onClick={(e) => e.stopPropagation()}>
+            <div style={contentStyle}>
                 <button 
-                    style={closeButtonStyles}
-                    onClick={() => setIsVisible(false)}
+                    style={closeButtonStyle}
+                    onClick={handleClose}
                     onMouseEnter={(e) => {
                         e.currentTarget.style.transform = 'scale(1.1)';
                         e.currentTarget.style.background = '#ff3355';
@@ -171,16 +185,16 @@ const SocialPopup: React.FC = () => {
                         e.currentTarget.style.background = '#ff0044';
                         e.currentTarget.style.boxShadow = 'none';
                     }}
+                    type="button"
                 >
                     ✕
                 </button>
-                <h3 style={titleStyles}>CONNECT WITH US</h3>
-                <div style={linksContainerStyles}>
+                <h3 style={titleStyle}>CONNECT WITH US</h3>
+                <div style={linksContainerStyle}>
                     <a 
-                        href="https://whatsapp.com" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        style={linkStyles}
+                        href="#"
+                        onClick={(e) => handleLinkClick(e, "https://whatsapp.com")}
+                        style={linkStyle}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
                             e.currentTarget.style.transform = 'translateX(6px)';
@@ -199,10 +213,9 @@ const SocialPopup: React.FC = () => {
                         📱 WhatsApp
                     </a>
                     <a 
-                        href="https://telegram.org" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        style={linkStyles}
+                        href="#"
+                        onClick={(e) => handleLinkClick(e, "https://telegram.org")}
+                        style={linkStyle}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
                             e.currentTarget.style.transform = 'translateX(6px)';
@@ -221,10 +234,9 @@ const SocialPopup: React.FC = () => {
                         ✈️ Telegram
                     </a>
                     <a 
-                        href="https://youtube.com" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        style={linkStyles}
+                        href="#"
+                        onClick={(e) => handleLinkClick(e, "https://youtube.com")}
+                        style={linkStyle}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
                             e.currentTarget.style.transform = 'translateX(6px)';
@@ -243,10 +255,9 @@ const SocialPopup: React.FC = () => {
                         ▶️ YouTube
                     </a>
                     <a 
-                        href="https://tiktok.com" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        style={linkStyles}
+                        href="#"
+                        onClick={(e) => handleLinkClick(e, "https://tiktok.com")}
+                        style={linkStyle}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
                             e.currentTarget.style.transform = 'translateX(6px)';
@@ -265,10 +276,9 @@ const SocialPopup: React.FC = () => {
                         🎵 TikTok
                     </a>
                     <a 
-                        href="https://instagram.com" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        style={linkStyles}
+                        href="#"
+                        onClick={(e) => handleLinkClick(e, "https://instagram.com")}
+                        style={linkStyle}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
                             e.currentTarget.style.transform = 'translateX(6px)';
@@ -287,10 +297,9 @@ const SocialPopup: React.FC = () => {
                         📷 Instagram
                     </a>
                     <a 
-                        href="https://discord.com" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        style={linkStyles}
+                        href="#"
+                        onClick={(e) => handleLinkClick(e, "https://discord.com")}
+                        style={linkStyle}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
                             e.currentTarget.style.transform = 'translateX(6px)';
@@ -309,10 +318,9 @@ const SocialPopup: React.FC = () => {
                         💬 Discord
                     </a>
                     <a 
-                        href="https://twitter.com" 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        style={linkStyles}
+                        href="#"
+                        onClick={(e) => handleLinkClick(e, "https://twitter.com")}
+                        style={linkStyle}
                         onMouseEnter={(e) => {
                             e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
                             e.currentTarget.style.transform = 'translateX(6px)';
@@ -467,7 +475,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
             },
             {
                 root: null,
-                threshold: 0.5, // set offset 0.1 means trigger if atleast 10% of element in viewport
+                threshold: 0.5,
             }
         );
 
@@ -481,7 +489,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
             },
             {
                 root: null,
-                threshold: 0.5, // set offset 0.1 means trigger if atleast 10% of element in viewport
+                threshold: 0.5,
             }
         );
         if (el_dashboard) observer_dashboard.observe(el_dashboard);
@@ -548,48 +556,35 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
 
         // Handle URL trade type parameters when switching to Bot Builder tab
         if (active_tab === BOT_BUILDER) {
-            // Use requestAnimationFrame to ensure Blockly workspace is fully initialized
             requestAnimationFrame(() => {
-                // Disable automatic URL parameter application to prevent changes before modal
                 disableUrlParameterApplication();
-
-                // Set up listener for manual trade type changes (only once)
                 setupTradeTypeChangeListener();
 
-                // Create unified handler for both immediate and delayed execution
                 const handleTradeTypeModal = () => {
                     checkAndShowTradeTypeModal(
-                        // onConfirm: Changes are now handled by the modal component
                         () => {
-                            // Re-enable URL parameter application for future parameters
                             enableUrlParameterApplication();
                         },
-                        // onCancel: URL parameter removal is now handled by the modal component
                         () => {}
                     );
                 };
 
-                // Wait for Blockly to finish loading before checking for URL parameters
                 if (!blockly_store.is_loading) {
-                    // Blockly is loaded, but add longer delay to ensure workspace is fully initialized
-                    // and trade type fields are populated
                     setTimeout(() => {
                         handleTradeTypeModal();
                     }, 500);
                 } else {
-                    // Blockly is still loading, wait for it to finish with optimized polling
                     let pollAttempts = 0;
-                    const maxPollAttempts = 10; // Maximum 5 seconds (10 * 500ms) - optimized performance
+                    const maxPollAttempts = 10;
 
                     const checkBlocklyLoaded = () => {
                         if (!blockly_store.is_loading) {
                             handleTradeTypeModal();
-                            return; // Exit polling once loaded
+                            return;
                         }
 
                         if (pollAttempts < maxPollAttempts) {
                             pollAttempts++;
-                            // Use 500ms intervals for better performance (5x improvement from 100ms)
                             pollTimeoutId = setTimeout(checkBlocklyLoaded, 500);
                         } else {
                             console.warn(
@@ -603,7 +598,6 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
             });
         }
 
-        // Cleanup function to prevent memory leaks
         return () => {
             if (pollTimeoutId) {
                 clearTimeout(pollTimeoutId);
@@ -613,7 +607,6 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
     }, [active_tab, is_loading]);
 
     React.useEffect(() => {
-        // Run on mount and when active tab changes
         updateTabShadowsHeight();
 
         if (is_open) {
@@ -624,7 +617,6 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
             if (!isDesktop) handleTabChange(Number(active_hash_tab));
             init_render.current = false;
         } else {
-            // Preserve URL parameters when navigating
             const currentSearch = window.location.search;
             navigate(`${currentSearch}#${hash[active_tab] || hash[0]}`);
         }
@@ -632,8 +624,6 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
             setActiveTour('');
         }
 
-        // Keep tab content scrollable. Older tutorial handling added a page-level
-        // scroll lock, which can make every tab feel unscrollable.
         const mainElement = document.querySelector('.main__container');
         if (document.body.style.overflow === 'hidden') {
             document.body.style.overflow = '';
@@ -641,7 +631,6 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
         if (mainElement instanceof HTMLElement) {
             mainElement.classList.remove('no-scroll');
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [active_tab]);
 
     React.useEffect(() => {
@@ -659,9 +648,8 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
         }, 100);
 
         return () => {
-            clearTimeout(trashcan_init_id); // Clear the timeout on unmount
+            clearTimeout(trashcan_init_id);
         };
-        //eslint-disable-next-line react-hooks/exhaustive-deps
     }, [active_tab, is_drawer_open]);
 
     useEffect(() => {
@@ -684,8 +672,6 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout>;
         if (dashboard_strategies.length > 0) {
-            // Needed to pass this to the Callback Queue as on tab changes
-            // document title getting override by 'Bot | Deriv' only
             timer = setTimeout(() => {
                 updateWorkspaceName();
             });
@@ -707,7 +693,6 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
                 }, 10);
             }
         },
-        // eslint-disable-next-line react-hooks/exhaustive-deps
         [dashboard, setActiveTab]
     );
 
@@ -721,6 +706,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
         }
     };
     // [/AI]
+    
     return (
         <React.Fragment>
             <div className='main'>
@@ -810,7 +796,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
                                     <AutoTrades />
                                 </div>
                             )}
-{show_manual_trading && (
+                            {show_manual_trading && (
                                 <div
                                     label={
                                         <>
@@ -912,7 +898,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
                 portal_element_id='modal_root'
                 title={title}
                 login={handleLoginGeneration}
-                dismissable={dismissable} // Prevents closing on outside clicks
+                dismissable={dismissable}
                 is_closed_on_cancel={is_closed_on_cancel}
             >
                 {message}
