@@ -1,5 +1,3 @@
-Here is the complete, fixed React component with updated styling for the Pro Scanner Bot.
-```tsx
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDevice } from '@deriv-com/ui';
@@ -1035,4 +1033,3 @@ const Scanner = observer(() => {
 });
 
 export default Scanner;
-```
