@@ -232,7 +232,7 @@ const Scanner = observer(() => {
     const { active_tab } = dashboard;
     const [selectedSymbol, setSelectedSymbol] = useState('R_10');
     const [strategy, setStrategy] = useState<TScannerStrategy>('Matches & Differs');
-    const [mode, setMode] = useState<TScannerMode>('Analyze');
+    const [mode, setMode] = useState<TScannerMode>('Trade'); // Default mode set to 'Trade'
     const [stakeInput, setStakeInput] = useState(DEFAULT_STAKE);
     const [stopLossInput, setStopLossInput] = useState(DEFAULT_STOP_LOSS);
     const [takeProfitInput, setTakeProfitInput] = useState(DEFAULT_TAKE_PROFIT);
@@ -863,7 +863,6 @@ const Scanner = observer(() => {
                 <label htmlFor='take-profit'>🎯 TAKE PROFIT (TP)</label>
                 <input id='take-profit' className='dropdown' inputMode='decimal' value={takeProfitInput} onChange={event => setTakeProfitInput(cleanMoneyInput(event.target.value))} />
                 
-                {/* Number of runs to check input */}
                 <label htmlFor='runs-to-check'>🔢 RUNS BEFORE CHECKING PROFIT</label>
                 <input 
                     id='runs-to-check' 
@@ -871,13 +870,8 @@ const Scanner = observer(() => {
                     inputMode='numeric' 
                     value={runsToCheckInput} 
                     onChange={event => setRunsToCheckInput(cleanNumberInput(event.target.value))}
-                    placeholder='Number of trades before checking profit'
                 />
-                <div style={{ fontSize: '11px', color: '#8affc0', marginTop: '-10px', marginBottom: '10px' }}>
-                    Bot will stop after this many wins (if in profit) or when SL/TP is reached
-                </div>
                 
-                {/* Martingale Selector with 1-10 range including decimals */}
                 <div className='martingale-row'>
                     <label>🎲 MARTINGALE MULTIPLIER (1x - 10x)</label>
                     <select 
@@ -889,7 +883,6 @@ const Scanner = observer(() => {
                             <option key={m} value={m}>x{m.toFixed(1)}</option>
                         ))}
                     </select>
-                    <span style={{ fontSize: '11px', color: '#8affc0' }}>resets on WIN</span>
                 </div>
                 
                 <label htmlFor='mode'>⚙️ MODE</label>
@@ -920,7 +913,6 @@ const Scanner = observer(() => {
                 </div>
             </div>
             
-            {/* Reduced size popup */}
             <div className='popup popup--reduced' style={{ display: popupOpen ? 'block' : 'none' }}>
                 <div className='popup-content'>
                     <div className='popup-header'>
