@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+Here is the complete, fixed React component with updated styling for the Pro Scanner Bot.
+```tsx
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDevice } from '@deriv-com/ui';
 import { contract_stages } from '@/constants/contract-stage';
@@ -966,7 +968,13 @@ const Scanner = observer(() => {
                                 <tbody>
                                     {logs.slice().reverse().slice(0, 20).map((log, idx) => (
                                         <tr key={idx} className={log.result.includes('Win') ? 'win-row' : (log.result.includes('Loss') ? 'loss-row' : '')}>
-                                            <td>{log.time}</td><td>{log.market}</td><td>{log.symbol}</td><td>{log.contractType}</td><td>{log.stake}</td><td>{log.exitDigit}</td><td>{log.result}</td>
+                                            <td>{log.time}</td>
+                                            <td>{log.market}</td>
+                                            <td>{log.symbol}</td>
+                                            <td>{log.contractType}</td>
+                                            <td>{log.stake}</td>
+                                            <td>{log.exitDigit}</td>
+                                            <td>{log.result}</td>
                                             <td className={log.pnl >= 0 ? 'profit' : 'loss'}>{log.pnl >= 0 ? '+' : ''}{log.pnl.toFixed(2)}</td>
                                         </tr>
                                     ))}
@@ -1027,3 +1035,4 @@ const Scanner = observer(() => {
 });
 
 export default Scanner;
+```
