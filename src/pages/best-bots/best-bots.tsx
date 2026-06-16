@@ -502,13 +502,9 @@ const BotCard = observer(({ bot, stats }: { bot: TBot; stats: TBotStats | undefi
         }
     };
 
-    const totalRuns = stats?.total_runs ?? 0;
-    const profits = stats?.profits ?? 0;
-    const losses = stats?.losses ?? 0;
     const profitAmount = stats?.profit_amount ?? 0;
     const lossAmount = stats?.loss_amount ?? 0;
     const netAmount = Number(profitAmount || 0) - Number(lossAmount || 0);
-    const winRate = totalRuns > 0 ? Math.round((profits / totalRuns) * 100) : 0;
 
     return (
         <div className='bb-card'>
@@ -522,24 +518,7 @@ const BotCard = observer(({ bot, stats }: { bot: TBot; stats: TBotStats | undefi
 
             <p className='bb-card__desc'>{bot.description}</p>
 
-            <div className='bb-card__performance' aria-label={`${bot.name} performance`}>
-                <span>
-                    <strong>{totalRuns}</strong>
-                    Runs
-                </span>
-                <span>
-                    <strong>{winRate}%</strong>
-                    Win rate
-                </span>
-                <span>
-                    <strong>{profits}</strong>
-                    Wins
-                </span>
-                <span>
-                    <strong>{losses}</strong>
-                    Losses
-                </span>
-            </div>
+            {/* REMOVED: Performance stats section (runs, win rate, wins, losses) */}
 
             <button
                 className={`bb-card__btn${loaded ? ' bb-card__btn--loaded' : ''}${error ? ' bb-card__btn--error' : ''}${loading ? ' bb-card__btn--loading' : ''}`}
