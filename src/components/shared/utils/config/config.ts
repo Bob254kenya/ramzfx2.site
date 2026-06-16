@@ -183,7 +183,7 @@ export const DOMAIN_CONFIG: Record<string, DomainConfig> = {
     ...createHostedDomainEntries({
         primaryDomain: 'ramzfx.site',
         aliases: ['www.ramzfx.site'],
-        clientId: '33aa3kMiZIo6H3svJWwvu',
+        clientId: '33zfFsMQ8YGsK3A6PnHvY',
         appId: '133749',
         redirectUri: 'https://ramzfx.site/',
         botsFolder: 'termicafx.site',
