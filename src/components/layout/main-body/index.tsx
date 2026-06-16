@@ -8,7 +8,7 @@ type TMainBodyProps = {
 };
 
 const MainBody: React.FC<TMainBodyProps> = ({ children }) => {
-    const current_theme = localStorage.getItem('theme') ?? 'light';
+    const current_theme = localStorage.getItem('theme') ?? 'dark';
     const { ui } = useStore() ?? {
         ui: {
             setDevice: () => {},
