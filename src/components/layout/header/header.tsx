@@ -30,6 +30,9 @@ const AppHeader = observer(() => {
     const [isTokenLoginLoading, setIsTokenLoginLoading] = useState(false);
     const is_account_regenerating = client?.is_account_regenerating || false;
 
+    // Affiliate link constant
+    const AFFILIATE_LINK = 'https://partner-tracking.deriv.com/click?a=28526&o=1&c=3&link_id=1';
+
     // Detect OAuth callback on mount (before App.tsx cleans up the URL).
     // When ?code=...&state=... is present the full auth flow can take 7-15 s
     // (token exchange → accounts fetch → OTP → WebSocket auth), so we must
@@ -89,6 +92,19 @@ const AppHeader = observer(() => {
 
         return () => clearTimeout(timer);
     }, [isAuthorizing, activeLoginid, setIsAuthorizing, authTimeout, isOAuthPending]);
+
+    const handleAffiliateSignup = useCallback(() => {
+        // Open affiliate link in new tab
+        window.open(AFFILIATE_LINK, '_blank');
+        
+        // Optional: Add analytics tracking here
+        // if (window.dataLayer) {
+        //     window.dataLayer.push({ 
+        //         event: 'affiliate_signup_click', 
+        //         affiliate_id: '28526' 
+        //     });
+        // }
+    }, []);
 
     const handleSignup = useCallback(async () => {
         try {
@@ -203,7 +219,7 @@ const AppHeader = observer(() => {
                         <Button tertiary type='button' onClick={handleLogin}>
                             <Localize i18n_default_text='Log in' />
                         </Button>
-                        <Button primary_light type='button' onClick={handleSignup}>
+                        <Button primary_light type='button' onClick={handleAffiliateSignup}>
                             <Localize i18n_default_text='Sign up' />
                         </Button>
                     </div>
@@ -247,7 +263,7 @@ const AppHeader = observer(() => {
             isOAuthPending,
             authData,
             handleLogin,
-            handleSignup,
+            handleAffiliateSignup,
             handleTransfer,
         ]
     );
