@@ -122,6 +122,103 @@ const getQuoteFromTick = (data: any): TTickPoint | null => {
     };
 };
 
+// NEW: Enhanced Over & Under analysis with specific signal rules
+const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
+    const lastDigits = ticks.slice(-MAX_TICKS).map(tick => getLastDigitFromQuote(tick.quote, symbol));
+    const sampleSize = Math.max(lastDigits.length, 1);
+    const lines: string[] = ['Analysis Complete!'];
+    
+    // Count OVER (0-4) and UNDER (5-9)
+    let overCount = 0;
+    let underCount = 0;
+    const overDigits: number[] = [];
+    const underDigits: number[] = [];
+
+    for (const digit of lastDigits) {
+        if (digit <= 4) {
+            overCount++;
+            overDigits.push(digit);
+        } else {
+            underCount++;
+            underDigits.push(digit);
+        }
+    }
+
+    const overPercentage = ((overCount / sampleSize) * 100).toFixed(2);
+    const underPercentage = ((underCount / sampleSize) * 100).toFixed(2);
+
+    let signal: TScannerSignal;
+    
+    // NEW LOGIC: Determine primary signal based on what's less frequent
+    if (overCount < underCount) {
+        // OVER is the primary signal (less common)
+        // Find the least common OVER digit (recovery: Over 1 or Over 4)
+        const leastCommonOver = findLeastCommonDigit(overDigits);
+        const overCounts: Record<number, number> = {};
+        for (const digit of overDigits) {
+            overCounts[digit] = (overCounts[digit] || 0) + 1;
+        }
+        
+        // Find second least common OVER digit for recovery
+        const sortedOverDigits = Object.entries(overCounts)
+            .sort((a, b) => a[1] - b[1])
+            .map(entry => Number(entry[0]));
+        
+        const primaryOver = sortedOverDigits[0] || 0;
+        const recoveryOver = sortedOverDigits[1] || 4; // Default to 4 if not available
+        
+        lines.push(`📊 OVER dominates with ${overPercentage}% (${overCount} occurrences)`);
+        lines.push(`🎯 Primary Signal: OVER ${primaryOver} (least common)`);
+        lines.push(`🔄 Recovery Signal: OVER ${recoveryOver} (second least common)`);
+        lines.push(`📈 Entry Points: ${getRandomEntryPoints(3).join(', ')}`);
+        lines.push(`💡 Strategy: Trade OVER ${primaryOver}, if loss recover with OVER ${recoveryOver}`);
+        
+        signal = { 
+            barrier: String(primaryOver), 
+            contractType: 'DIGITOVER', 
+            label: `Over ${primaryOver}`,
+            // Store recovery barrier for use in trade logic
+            recoveryBarrier: String(recoveryOver),
+            recoveryContractType: 'DIGITOVER',
+            recoveryLabel: `Over ${recoveryOver}`
+        };
+        
+    } else {
+        // UNDER is the primary signal (less common)
+        const leastCommonUnder = findLeastCommonDigit(underDigits);
+        const underCounts: Record<number, number> = {};
+        for (const digit of underDigits) {
+            underCounts[digit] = (underCounts[digit] || 0) + 1;
+        }
+        
+        // Find second least common UNDER digit for recovery
+        const sortedUnderDigits = Object.entries(underCounts)
+            .sort((a, b) => a[1] - b[1])
+            .map(entry => Number(entry[0]));
+        
+        const primaryUnder = sortedUnderDigits[0] || 8;
+        const recoveryUnder = sortedUnderDigits[1] || 5;
+        
+        lines.push(`📊 UNDER dominates with ${underPercentage}% (${underCount} occurrences)`);
+        lines.push(`🎯 Primary Signal: UNDER ${primaryUnder} (least common)`);
+        lines.push(`🔄 Recovery Signal: UNDER ${recoveryUnder} (second least common)`);
+        lines.push(`📈 Entry Points: ${getRandomEntryPoints(3).join(', ')}`);
+        lines.push(`💡 Strategy: Trade UNDER ${primaryUnder}, if loss recover with UNDER ${recoveryUnder}`);
+        
+        signal = { 
+            barrier: String(primaryUnder), 
+            contractType: 'DIGITUNDER', 
+            label: `Under ${primaryUnder}`,
+            recoveryBarrier: String(recoveryUnder),
+            recoveryContractType: 'DIGITUNDER',
+            recoveryLabel: `Under ${recoveryUnder}`
+        };
+    }
+
+    return { lines, signal };
+};
+
+// Modified buildAnalysis to use the new Over & Under logic
 const buildAnalysis = (strategy: TScannerStrategy, ticks: TTickPoint[], symbol: string) => {
     const lastDigits = ticks.slice(-MAX_TICKS).map(tick => getLastDigitFromQuote(tick.quote, symbol));
     const sampleSize = Math.max(lastDigits.length, 1);
@@ -179,32 +276,9 @@ const buildAnalysis = (strategy: TScannerStrategy, ticks: TTickPoint[], symbol: 
             signal = { contractType: 'DIGITODD', label: 'Odd' };
         }
     } else if (strategy === 'Over & Under') {
-        let overCount = 0;
-        let underCount = 0;
-
-        for (const digit of lastDigits) {
-            if (digit <= 4) overCount++;
-            else underCount++;
-        }
-
-        const overPercentage = ((overCount / sampleSize) * 100).toFixed(2);
-        const underPercentage = ((underCount / sampleSize) * 100).toFixed(2);
-
-        if (overCount < underCount) {
-            const overDigits = lastDigits.filter(digit => digit <= 4);
-            const leastCommonOver = findLeastCommonDigit(overDigits);
-            lines.push(`OVER (0-4) with ${overPercentage}%`);
-            lines.push(`Recommended digit: ${leastCommonOver}`);
-            lines.push(`Entry Points: ${getRandomEntryPoints(3).join(', ')}`);
-            signal = { barrier: String(leastCommonOver), contractType: 'DIGITOVER', label: `Over ${leastCommonOver}` };
-        } else {
-            const underDigits = lastDigits.filter(digit => digit >= 5);
-            const leastCommonUnder = findLeastCommonDigit(underDigits);
-            lines.push(`UNDER (5-9) with ${underPercentage}%`);
-            lines.push(`Recommended digit: ${leastCommonUnder}`);
-            lines.push(`Entry Points: ${getRandomEntryPoints(3).join(', ')}`);
-            signal = { barrier: String(leastCommonUnder), contractType: 'DIGITUNDER', label: `Under ${leastCommonUnder}` };
-        }
+        // Use the new enhanced Over & Under analysis
+        const result = buildOverUnderAnalysis(ticks, symbol);
+        return result;
     } else {
         let ups = 0;
         let downs = 0;
@@ -231,7 +305,7 @@ const Scanner = observer(() => {
     const { isDesktop } = useDevice();
     const { active_tab } = dashboard;
     const [selectedSymbol, setSelectedSymbol] = useState('R_10');
-    const [strategy, setStrategy] = useState<TScannerStrategy>('Matches & Differs');
+    const [strategy, setStrategy] = useState<TScannerStrategy>('Over & Under');
     const [mode, setMode] = useState<TScannerMode>('Trade');
     const [stakeInput, setStakeInput] = useState(DEFAULT_STAKE);
     const [stopLossInput, setStopLossInput] = useState(DEFAULT_STOP_LOSS);
@@ -267,6 +341,12 @@ const Scanner = observer(() => {
     const baseStakeRef = useRef(0);
     const martingaleMultiplierRef = useRef(DEFAULT_MARTINGALE_MULTIPLIER);
     const consecutiveLossesRef = useRef(0);
+    
+    // NEW: Recovery signal tracking
+    const isRecoveryTradeRef = useRef(false);
+    const recoverySignalRef = useRef<TScannerSignal | null>(null);
+    const primarySignalRef = useRef<TScannerSignal | null>(null);
+    const consecutiveRecoveryLossesRef = useRef(0);
     
     const currency = client.currency || 'USD';
     const showScanner = active_tab === DBOT_TABS.SCANNER;
@@ -366,6 +446,10 @@ const Scanner = observer(() => {
         // Reset martingale state on stop
         consecutiveLossesRef.current = 0;
         currentMartingaleStakeRef.current = baseStakeRef.current;
+        consecutiveRecoveryLossesRef.current = 0;
+        isRecoveryTradeRef.current = false;
+        recoverySignalRef.current = null;
+        primarySignalRef.current = null;
 
         try {
             run_panel.setIsRunning(false);
@@ -537,8 +621,9 @@ const Scanner = observer(() => {
         [buildTradeParameters, currency, pushContract, selectedMarket.label, selectedSymbol]
     );
 
-    const executeTradeFromTick = useCallback(
-        async (currentTicks: TTickPoint[]) => {
+    // NEW: Execute trade with recovery logic for Over & Under
+    const executeTradeWithRecovery = useCallback(
+        async (primarySignal: TScannerSignal, recoverySignal: TScannerSignal, currentTicks: TTickPoint[]) => {
             if (!tradeActiveRef.current || tradeInFlightRef.current || shouldStopRef.current || currentTicks.length < MAX_TICKS) {
                 return;
             }
@@ -563,18 +648,14 @@ const Scanner = observer(() => {
                 return;
             }
 
-            // FIXED: Check if we've reached the required number of runs
-            // Continue trading until profit > 0.1, even after minimum runs are completed
+            // Check if we've reached the required number of runs
             if (completedRunsRef.current >= runsToCheckRef.current) {
-                // If we've completed the minimum runs but are still in loss or profit <= 0.1, continue trading
                 if (sessionProfitRef.current <= 0.1) {
                     setTerminalDashboard(previous => [
                         ...previous,
                         `${runsToCheckRef.current} runs completed but profit (${sessionProfitRef.current.toFixed(2)} ${currency}) <= 0.1. Continuing until profit > 0.1...`,
                     ]);
-                    // Don't stop - continue trading
                 } else {
-                    // Only stop if profit is greater than 0.1
                     setTerminalDashboard(previous => [
                         ...previous,
                         `${runsToCheckRef.current} runs complete with profit > 0.1: ${sessionProfitRef.current.toFixed(2)} ${currency}`,
@@ -584,40 +665,75 @@ const Scanner = observer(() => {
                 }
             }
 
-            const analysis = buildAnalysis(strategyRef.current, currentTicks, selectedSymbolRef.current);
-            tradeInFlightRef.current = true;
+            // Determine which signal to use (primary or recovery)
+            const currentSignal = isRecoveryTradeRef.current ? recoverySignal : primarySignal;
+            const signalType = isRecoveryTradeRef.current ? 'RECOVERY' : 'PRIMARY';
             
-            // Use current martingale stake for this trade
+            tradeInFlightRef.current = true;
             const tradeStake = currentMartingaleStakeRef.current;
-            setTerminalDashboard(previous => [...previous, `Tick signal found: ${analysis.signal.label} | Stake: ${tradeStake.toFixed(2)} ${currency}`]);
+            
+            setTerminalDashboard(previous => [
+                ...previous, 
+                `🎯 ${signalType} signal found: ${currentSignal.label} | Stake: ${tradeStake.toFixed(2)} ${currency}`,
+                `📊 Consecutive losses: ${consecutiveLossesRef.current}`
+            ]);
 
             try {
-                const profit = await runSingleTrade(analysis.signal, tradeStake);
+                const profit = await runSingleTrade(currentSignal, tradeStake);
                 const isWin = profit > 0;
                 
-                // MARTINGALE LOGIC: reset on win, increase on loss
                 if (isWin) {
-                    // Reset martingale on win
+                    // WIN: Reset everything
                     consecutiveLossesRef.current = 0;
+                    consecutiveRecoveryLossesRef.current = 0;
                     currentMartingaleStakeRef.current = baseStakeRef.current;
-                    setTerminalDashboard(previous => [...previous, `✓ WIN! Martingale reset to base stake: ${baseStakeRef.current.toFixed(2)} ${currency}`]);
+                    isRecoveryTradeRef.current = false;
+                    
+                    setTerminalDashboard(previous => [
+                        ...previous, 
+                        `✅ WIN! All systems reset. Base stake: ${baseStakeRef.current.toFixed(2)} ${currency}`,
+                        `🔄 Back to PRIMARY signal for next trade`
+                    ]);
                 } else {
-                    // Increase stake on loss (Martingale)
+                    // LOSS: Determine recovery strategy
                     consecutiveLossesRef.current += 1;
-                    const newStake = baseStakeRef.current * Math.pow(martingaleMultiplierRef.current, consecutiveLossesRef.current);
-                    currentMartingaleStakeRef.current = newStake;
-                    setTerminalDashboard(previous => [...previous, `✗ LOSS! Martingale activated. Next stake: ${newStake.toFixed(2)} ${currency} (x${martingaleMultiplierRef.current}^${consecutiveLossesRef.current})`]);
+                    
+                    if (isRecoveryTradeRef.current) {
+                        // Loss on recovery trade - activate martingale on recovery
+                        consecutiveRecoveryLossesRef.current += 1;
+                        const newStake = baseStakeRef.current * Math.pow(martingaleMultiplierRef.current, consecutiveRecoveryLossesRef.current);
+                        currentMartingaleStakeRef.current = newStake;
+                        
+                        setTerminalDashboard(previous => [
+                            ...previous, 
+                            `❌ RECOVERY LOSS! Recovery losses: ${consecutiveRecoveryLossesRef.current}`,
+                            `💰 Next recovery stake: ${newStake.toFixed(2)} ${currency} (x${martingaleMultiplierRef.current}^${consecutiveRecoveryLossesRef.current})`
+                        ]);
+                    } else {
+                        // Loss on primary trade - switch to recovery
+                        isRecoveryTradeRef.current = true;
+                        consecutiveRecoveryLossesRef.current = 1;
+                        const newStake = baseStakeRef.current * martingaleMultiplierRef.current;
+                        currentMartingaleStakeRef.current = newStake;
+                        
+                        setTerminalDashboard(previous => [
+                            ...previous, 
+                            `❌ PRIMARY LOSS! Switching to RECOVERY signal: ${recoverySignal.label}`,
+                            `💰 First recovery stake: ${newStake.toFixed(2)} ${currency} (x${martingaleMultiplierRef.current})`
+                        ]);
+                    }
                 }
                 
                 const totalProfit = Number((sessionProfitRef.current + profit).toFixed(8));
                 completedRunsRef.current += 1;
                 sessionProfitRef.current = totalProfit;
                 setSessionProfit(totalProfit);
+                
                 setTerminalDashboard(previous => [
                     ...previous,
-                    `Run ${completedRunsRef.current}/${runsToCheckRef.current} closed: ${analysis.signal.label} ${profit.toFixed(2)} ${currency}`,
-                    `Session P/L: ${totalProfit.toFixed(2)} ${currency}`,
-                    `Martingale Status: ${isWin ? 'RESET' : `Active (${consecutiveLossesRef.current} losses)`}`,
+                    `📈 Run ${completedRunsRef.current}/${runsToCheckRef.current} closed: ${currentSignal.label} ${profit.toFixed(2)} ${currency}`,
+                    `💰 Session P/L: ${totalProfit.toFixed(2)} ${currency}`,
+                    `🎯 Next trade: ${isRecoveryTradeRef.current ? 'RECOVERY' : 'PRIMARY'} signal`
                 ]);
 
                 // Check conditions again after updating
@@ -651,7 +767,123 @@ const Scanner = observer(() => {
                 }
             }
         },
-        [currency, runSingleTrade, stopTrading]
+        [currency, runSingleTrade, stopTrading, stopLossRef, takeProfitRef, runsToCheckRef]
+    );
+
+    // Modified executeTradeFromTick to use recovery logic for Over & Under
+    const executeTradeFromTick = useCallback(
+        async (currentTicks: TTickPoint[]) => {
+            if (!tradeActiveRef.current || tradeInFlightRef.current || shouldStopRef.current || currentTicks.length < MAX_TICKS) {
+                return;
+            }
+
+            // Stop if stop loss is reached
+            if (sessionProfitRef.current <= -stopLossRef.current) {
+                setTerminalDashboard(previous => [
+                    ...previous,
+                    `STOP LOSS REACHED! P/L: ${sessionProfitRef.current.toFixed(2)} ${currency}`,
+                ]);
+                stopTrading();
+                return;
+            }
+
+            // Stop if take profit is reached
+            if (sessionProfitRef.current >= takeProfitRef.current) {
+                setTerminalDashboard(previous => [
+                    ...previous,
+                    `TAKE PROFIT REACHED! P/L: ${sessionProfitRef.current.toFixed(2)} ${currency}`,
+                ]);
+                stopTrading();
+                return;
+            }
+
+            // Check if we've reached the required number of runs
+            if (completedRunsRef.current >= runsToCheckRef.current) {
+                if (sessionProfitRef.current <= 0.1) {
+                    setTerminalDashboard(previous => [
+                        ...previous,
+                        `${runsToCheckRef.current} runs completed but profit (${sessionProfitRef.current.toFixed(2)} ${currency}) <= 0.1. Continuing until profit > 0.1...`,
+                    ]);
+                } else {
+                    setTerminalDashboard(previous => [
+                        ...previous,
+                        `${runsToCheckRef.current} runs complete with profit > 0.1: ${sessionProfitRef.current.toFixed(2)} ${currency}`,
+                    ]);
+                    stopTrading();
+                    return;
+                }
+            }
+
+            // For Over & Under strategy, use the recovery logic
+            if (strategyRef.current === 'Over & Under' && primarySignalRef.current && recoverySignalRef.current) {
+                await executeTradeWithRecovery(primarySignalRef.current, recoverySignalRef.current, currentTicks);
+                return;
+            }
+
+            // Original logic for other strategies
+            const analysis = buildAnalysis(strategyRef.current, currentTicks, selectedSymbolRef.current);
+            tradeInFlightRef.current = true;
+            
+            const tradeStake = currentMartingaleStakeRef.current;
+            setTerminalDashboard(previous => [...previous, `Tick signal found: ${analysis.signal.label} | Stake: ${tradeStake.toFixed(2)} ${currency}`]);
+
+            try {
+                const profit = await runSingleTrade(analysis.signal, tradeStake);
+                const isWin = profit > 0;
+                
+                if (isWin) {
+                    consecutiveLossesRef.current = 0;
+                    currentMartingaleStakeRef.current = baseStakeRef.current;
+                    setTerminalDashboard(previous => [...previous, `✓ WIN! Martingale reset to base stake: ${baseStakeRef.current.toFixed(2)} ${currency}`]);
+                } else {
+                    consecutiveLossesRef.current += 1;
+                    const newStake = baseStakeRef.current * Math.pow(martingaleMultiplierRef.current, consecutiveLossesRef.current);
+                    currentMartingaleStakeRef.current = newStake;
+                    setTerminalDashboard(previous => [...previous, `✗ LOSS! Martingale activated. Next stake: ${newStake.toFixed(2)} ${currency} (x${martingaleMultiplierRef.current}^${consecutiveLossesRef.current})`]);
+                }
+                
+                const totalProfit = Number((sessionProfitRef.current + profit).toFixed(8));
+                completedRunsRef.current += 1;
+                sessionProfitRef.current = totalProfit;
+                setSessionProfit(totalProfit);
+                setTerminalDashboard(previous => [
+                    ...previous,
+                    `Run ${completedRunsRef.current}/${runsToCheckRef.current} closed: ${analysis.signal.label} ${profit.toFixed(2)} ${currency}`,
+                    `Session P/L: ${totalProfit.toFixed(2)} ${currency}`,
+                    `Martingale Status: ${isWin ? 'RESET' : `Active (${consecutiveLossesRef.current} losses)`}`,
+                ]);
+
+                if (totalProfit <= -stopLossRef.current) {
+                    setTerminalDashboard(previous => [
+                        ...previous,
+                        `STOP LOSS REACHED! P/L: ${totalProfit.toFixed(2)} ${currency}`,
+                    ]);
+                    stopTrading();
+                } else if (totalProfit >= takeProfitRef.current) {
+                    setTerminalDashboard(previous => [
+                        ...previous,
+                        `TAKE PROFIT REACHED! P/L: ${totalProfit.toFixed(2)} ${currency}`,
+                    ]);
+                    stopTrading();
+                } else if (completedRunsRef.current >= runsToCheckRef.current && totalProfit > 0.1) {
+                    setTerminalDashboard(previous => [
+                        ...previous,
+                        `${runsToCheckRef.current} runs complete with profit > 0.1: ${totalProfit.toFixed(2)} ${currency}`,
+                    ]);
+                    stopTrading();
+                }
+            } catch (error) {
+                const message = error instanceof Error ? error.message : 'Trade mode failed.';
+                setTerminalDashboard(previous => [...previous, `Error: ${message}`]);
+                stopTrading();
+            } finally {
+                tradeInFlightRef.current = false;
+                if (tradeActiveRef.current && !shouldStopRef.current) {
+                    setTimeout(() => handleTradeTickRef.current(ticksRef.current), 0);
+                }
+            }
+        },
+        [currency, runSingleTrade, stopTrading, executeTradeWithRecovery]
     );
 
     useEffect(() => {
@@ -660,12 +892,15 @@ const Scanner = observer(() => {
         };
     }, [executeTradeFromTick]);
 
+    // Modified startScannerTrading to store primary and recovery signals
     const startScannerTrading = useCallback(
         (firstSignal: TScannerSignal, stake: number, stopLoss: number, takeProfit: number, multiplier: number, runsToCheck: number) => {
             // Initialize martingale state
             baseStakeRef.current = stake;
             currentMartingaleStakeRef.current = stake;
             consecutiveLossesRef.current = 0;
+            consecutiveRecoveryLossesRef.current = 0;
+            isRecoveryTradeRef.current = false;
             stakeRef.current = stake;
             stopLossRef.current = stopLoss;
             takeProfitRef.current = takeProfit;
@@ -676,6 +911,30 @@ const Scanner = observer(() => {
             tradeActiveRef.current = true;
             tradeInFlightRef.current = false;
             setSessionProfit(0);
+
+            // Store primary and recovery signals for Over & Under strategy
+            if (strategyRef.current === 'Over & Under' && firstSignal.recoveryBarrier) {
+                primarySignalRef.current = {
+                    barrier: firstSignal.barrier,
+                    contractType: firstSignal.contractType,
+                    label: firstSignal.label
+                };
+                recoverySignalRef.current = {
+                    barrier: firstSignal.recoveryBarrier,
+                    contractType: firstSignal.recoveryContractType as any,
+                    label: firstSignal.recoveryLabel || `Over ${firstSignal.recoveryBarrier}`
+                };
+                setTerminalDashboard(previous => [
+                    ...previous,
+                    `🔄 Recovery strategy enabled:`,
+                    `   PRIMARY: ${primarySignalRef.current?.label}`,
+                    `   RECOVERY: ${recoverySignalRef.current?.label}`,
+                    `   Rule: Trade PRIMARY, if loss -> switch to RECOVERY with martingale`
+                ]);
+            } else {
+                primarySignalRef.current = null;
+                recoverySignalRef.current = null;
+            }
 
             try {
                 run_panel.setRunId(`scanner-${Date.now()}`);
@@ -820,7 +1079,6 @@ const Scanner = observer(() => {
 
     const handleClosePopup = () => {
         stopTimerSound();
-        // Note: We do NOT call stopTrading() here - bot continues running in background
         setPopupOpen(false);
     };
 
