@@ -12,7 +12,7 @@ import './app-root.scss';
 const AppContent = lazy(() => import('./app-content'));
 
 const AppRootLoader = () => {
-    return <ChunkLoader message={localize('Loading...')} />;
+    return <ChunkLoader message={localize('Ramzfx...')} />;
 };
 
 const ErrorComponentWrapper = observer(() => {
