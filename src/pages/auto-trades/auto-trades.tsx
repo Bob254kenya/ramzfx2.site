@@ -18,14 +18,6 @@ import './auto-trades.scss';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
-type MartingaleModeType =
-    | 'no_martingale'
-    | 'after_one_loss'
-    | 'after_two_losses'
-    | 'custom_consecutive_loss_trigger';
-
-type ComparisonOperator = '>' | '<' | '>=' | '<=' | '==';
-
 type AutoMarket = { symbol: string; label: string; pip: number };
 type Direction = 1 | -1 | 0;
 
@@ -127,15 +119,6 @@ const getDigitNumber = (value: unknown, fallback: number) => {
     return Number.isFinite(digit) ? Math.min(9, Math.max(0, Math.trunc(digit))) : fallback;
 };
 
-const normalizeMartingaleMode = (value: unknown): MartingaleModeType => {
-    if (value === 'no_martingale') return 'no_martingale';
-    if (value === 'after_two_losses') return 'after_two_losses';
-    if (value === 'custom_consecutive_loss_trigger' || value === 'consecutive_loss_trigger') {
-        return 'custom_consecutive_loss_trigger';
-    }
-    return 'after_one_loss';
-};
-
 const clampConsecutiveLossThreshold = (value: unknown) => {
     const numeric = Number(value);
     if (!Number.isFinite(numeric)) return 2;
@@ -195,6 +178,8 @@ interface MarketState {
     baseStake: number;
     martingaleMultiplier: number;
     isExecuting: boolean;
+    lastPrice: number | null;
+    priceHistory: number[];
 }
 
 interface MarketDisplay extends MarketState {
@@ -227,6 +212,8 @@ const createMarketState = (prev?: Partial<MarketState>): MarketState => ({
     baseStake: 1,
     martingaleMultiplier: 1,
     isExecuting: false,
+    lastPrice: null,
+    priceHistory: [],
     ...prev,
 });
 
@@ -317,24 +304,21 @@ const isCandleMatch = (trade_type: TradeType, candle_direction: Direction) => {
     return true;
 };
 
-// ── FIXED: Martingale Logic ─────────────────────────────────────────────
+// ── Martingale Logic ─────────────────────────────────────────────────────
 
 const getNextMartingaleState = ({
     profit,
     base_stake,
     multiplier,
-    martingale_mode,
+    martingale_enabled,
     consecutive_losses,
-    consecutive_loss_trigger,
 }: {
     profit: number;
     base_stake: number;
     multiplier: number;
-    martingale_mode: MartingaleModeType;
+    martingale_enabled: boolean;
     consecutive_losses: number;
-    consecutive_loss_trigger: number;
 }) => {
-    // On profit: Reset everything
     if (profit >= 0) {
         return {
             consecutiveLosses: 0,
@@ -345,12 +329,8 @@ const getNextMartingaleState = ({
         };
     }
 
-    // Calculate next consecutive losses (after this loss)
     const nextConsecutiveLosses = consecutive_losses + 1;
-    const normalizedMode = normalizeMartingaleMode(martingale_mode);
-    const normalizedTrigger = clampConsecutiveLossThreshold(consecutive_loss_trigger);
 
-    // Check if we've reached max losses (after this loss)
     if (nextConsecutiveLosses >= MAX_CONSECUTIVE_LOSSES) {
         return {
             consecutiveLosses: nextConsecutiveLosses,
@@ -361,8 +341,8 @@ const getNextMartingaleState = ({
         };
     }
 
-    // No martingale mode
-    if (normalizedMode === 'no_martingale') {
+    // If martingale is disabled, always use base stake
+    if (!martingale_enabled) {
         return {
             consecutiveLosses: nextConsecutiveLosses,
             lastResult: 'loss' as const,
@@ -372,31 +352,9 @@ const getNextMartingaleState = ({
         };
     }
 
-    let shouldApplyMartingale = false;
-    let martingaleMultiplier = 1;
-
-    if (normalizedMode === 'after_one_loss') {
-        shouldApplyMartingale = true;
-        martingaleMultiplier = Math.pow(multiplier, nextConsecutiveLosses);
-    } 
-    else if (normalizedMode === 'after_two_losses') {
-        shouldApplyMartingale = nextConsecutiveLosses >= 3;
-        if (shouldApplyMartingale) {
-            martingaleMultiplier = Math.pow(multiplier, nextConsecutiveLosses - 2);
-        }
-    } 
-    else if (normalizedMode === 'custom_consecutive_loss_trigger') {
-        shouldApplyMartingale = nextConsecutiveLosses >= normalizedTrigger + 1;
-        if (shouldApplyMartingale) {
-            const lossesBeyondTrigger = nextConsecutiveLosses - normalizedTrigger;
-            martingaleMultiplier = Math.pow(multiplier, lossesBeyondTrigger);
-        }
-    }
-
-    let nextStake = base_stake;
-    if (shouldApplyMartingale) {
-        nextStake = parseFloat((base_stake * martingaleMultiplier).toFixed(2));
-    }
+    // Martingale enabled: increase stake by multiplier for each consecutive loss
+    const martingaleMultiplier = Math.pow(multiplier, nextConsecutiveLosses);
+    const nextStake = parseFloat((base_stake * martingaleMultiplier).toFixed(2));
 
     return {
         consecutiveLosses: nextConsecutiveLosses,
@@ -465,29 +423,17 @@ const AutoTrades = observer(() => {
     // ── Global Settings State ─────────────────────────────────────────────
 
     const [stake, setStake] = useState(() => loadSavedNum('stake', '1', 0.35, 100000));
-    const [martingale, setMartingale] = useState(() => loadSavedNum('martingale', '2', 1.01, 100));
+    
+    // Simplified Martingale: enabled/disabled + multiplier
+    const [martingaleEnabled, setMartingaleEnabled] = useState(() => loadSavedBoolean('martingaleEnabled', true));
+    const [martingaleMultiplier, setMartingaleMultiplier] = useState(() => {
+        const saved = loadSaved('martingaleMultiplier', '2');
+        const num = parseFloat(saved);
+        return !isNaN(num) && num >= 1 && num <= 10 ? num : 2;
+    });
+    
     const [takeProfit, setTakeProfit] = useState(() => loadSavedNum('takeProfit', '100', 1, 1000000));
     const [stopLoss, setStopLoss] = useState(() => loadSavedNum('stopLoss', '100', 1, 1000000));
-    const [martingaleMode, setMartingaleMode] = useState<MartingaleModeType>(() => {
-        try {
-            return normalizeMartingaleMode(localStorage.getItem('auto_trades_martingaleMode'));
-        } catch {
-            return 'after_one_loss';
-        }
-    });
-    const [consecutiveLossCount, setConsecutiveLossCount] = useState(() => {
-        try {
-            const saved = localStorage.getItem('auto_trades_consecutiveLossCount');
-            return clampConsecutiveLossThreshold(saved || 2);
-        } catch {
-            return 2;
-        }
-    });
-    const [consecutiveLossCountInput, setConsecutiveLossCountInput] = useState(() =>
-        String(clampConsecutiveLossThreshold(localStorage.getItem('auto_trades_consecutiveLossCount') || 2))
-    );
-
-    // Market switching feature
     const [switchOnLoss, setSwitchOnLoss] = useState(() => loadSavedBoolean('switchOnLoss', false));
     const [scanAllMarkets, setScanAllMarkets] = useState(() => loadSavedBoolean('scanAllMarkets', false));
 
@@ -591,8 +537,8 @@ const AutoTrades = observer(() => {
     const activeTradingMarketRef = useRef<string | null>(null);
     const isPrimaryMarketActiveRef = useRef<boolean>(true);
     const pendingTradePromisesRef = useRef<Record<string, Promise<number> | null>>({});
-    // FIXED: Track which market is currently trading to prevent double execution
     const currentTradingMarketRef = useRef<string | null>(null);
+    const forceUpdateCounterRef = useRef(0);
 
     // ── Update Refs ──────────────────────────────────────────────────────
 
@@ -615,10 +561,8 @@ const AutoTrades = observer(() => {
             selectedMarketsRef.current = markets;
         }
 
-        // FIXED: Initialize active trading market when switching is enabled
         if (switchOnLoss && market1Enabled && market2Enabled && !scanAllMarkets) {
             if (!activeTradingMarketRef.current) {
-                // Start with primary market
                 const primary = market1Enabled ? market1Symbol : market2Symbol;
                 setActiveTradingMarket(primary);
                 activeTradingMarketRef.current = primary;
@@ -687,7 +631,6 @@ const AutoTrades = observer(() => {
         market2ComparisonOperator, market2InputSequence, market2AnalysisTicks, market2Inverse, market2Enabled
     ]);
 
-    // Update market configs ref whenever settings change
     useEffect(() => {
         const configs: Record<string, MarketConfig> = {};
         
@@ -742,11 +685,10 @@ const AutoTrades = observer(() => {
             localStorage.setItem('auto_trades_market2_enabled', String(market2Enabled));
             
             localStorage.setItem('auto_trades_stake', stake);
-            localStorage.setItem('auto_trades_martingale', martingale);
+            localStorage.setItem('auto_trades_martingaleEnabled', String(martingaleEnabled));
+            localStorage.setItem('auto_trades_martingaleMultiplier', String(martingaleMultiplier));
             localStorage.setItem('auto_trades_takeProfit', takeProfit);
             localStorage.setItem('auto_trades_stopLoss', stopLoss);
-            localStorage.setItem('auto_trades_martingaleMode', martingaleMode);
-            localStorage.setItem('auto_trades_consecutiveLossCount', String(consecutiveLossCount));
             localStorage.setItem('auto_trades_switchOnLoss', String(switchOnLoss));
             localStorage.setItem('auto_trades_scanAllMarkets', String(scanAllMarkets));
             localStorage.setItem('auto_trades_markets', JSON.stringify([market1Symbol, market2Symbol]));
@@ -758,7 +700,7 @@ const AutoTrades = observer(() => {
         market1ComparisonOperator, market1InputSequence, market1AnalysisTicks, market1Inverse, market1Enabled,
         market2TradeType, market2Barrier, market2PredictionDigit,
         market2ComparisonOperator, market2InputSequence, market2AnalysisTicks, market2Inverse, market2Enabled,
-        stake, martingale, takeProfit, stopLoss, martingaleMode, consecutiveLossCount,
+        stake, martingaleEnabled, martingaleMultiplier, takeProfit, stopLoss,
         market1Symbol, market2Symbol, switchOnLoss, scanAllMarkets
     ]);
 
@@ -775,6 +717,7 @@ const AutoTrades = observer(() => {
     const flushDisplays = useCallback(() => {
         if (unmountedRef.current || !show_auto_ref.current) return;
         lastUiRefreshAtRef.current = Date.now();
+        forceUpdateCounterRef.current++;
         setTotalPnl(prev => prev);
     }, []);
 
@@ -977,8 +920,6 @@ const AutoTrades = observer(() => {
         return null;
     }, [scanAllMarkets, market1Symbol, market2Symbol, market1Enabled, market2Enabled]);
 
-    // ── Get Primary Market ───────────────────────────────────────────────
-
     const getPrimaryMarket = useCallback((): string | null => {
         if (scanAllMarkets) {
             return selectedMarketsRef.current[0] || null;
@@ -988,18 +929,13 @@ const AutoTrades = observer(() => {
         return null;
     }, [scanAllMarkets, market1Symbol, market2Symbol, market1Enabled, market2Enabled]);
 
-    // ── FIXED: Check if market should trade based on switching logic ────
-
     const shouldMarketTrade = useCallback((symbol: string): boolean => {
-        // If switching is disabled or only one market is enabled, all enabled markets trade
         if (!switchOnLoss || !market1Enabled || !market2Enabled || scanAllMarkets) {
             return true;
         }
 
-        // If switching is enabled and we have two markets
         const activeSymbol = activeTradingMarketRef.current;
         
-        // If no active market is set, use the primary market
         if (!activeSymbol) {
             const primary = getPrimaryMarket();
             if (primary === symbol) {
@@ -1010,11 +946,10 @@ const AutoTrades = observer(() => {
             return false;
         }
 
-        // Only the active market should trade
         return activeSymbol === symbol;
     }, [switchOnLoss, market1Enabled, market2Enabled, scanAllMarkets, getPrimaryMarket]);
 
-    // ── FIXED: After Trade Handler ──────────────────────────────────────
+    // ── After Trade Handler ──────────────────────────────────────────────
 
     const handleAfterTrade = useCallback(
         (symbol: string, profit: number) => {
@@ -1023,7 +958,7 @@ const AutoTrades = observer(() => {
             if (!state) return;
 
             const baseStake = Number(stake) || 1;
-            const mult = Number(martingale) || 2;
+            const mult = martingaleMultiplier || 2;
             const tp = Number(takeProfit) || 100;
             const sl = Number(stopLoss) || 100;
 
@@ -1031,16 +966,13 @@ const AutoTrades = observer(() => {
                 profit,
                 base_stake: baseStake,
                 multiplier: mult,
-                martingale_mode: martingaleMode,
+                martingale_enabled: martingaleEnabled,
                 consecutive_losses: state.consecutiveLosses || 0,
-                consecutive_loss_trigger: consecutiveLossCount,
             });
 
-            // Update total P&L
             totalPnlRef.current = parseFloat((totalPnlRef.current + profit).toFixed(2));
             totalTradesRef.current++;
 
-            // Update state with martingale results
             state.consecutiveLosses = nextMartingaleState.consecutiveLosses;
             state.lastResultType = nextMartingaleState.lastResult;
             state.lastResult = nextMartingaleState.lastResult;
@@ -1051,14 +983,12 @@ const AutoTrades = observer(() => {
             state.trading = false;
             state.isExecuting = false;
             globalTradingRef.current = false;
-            currentTradingMarketRef.current = null; // FIXED: Clear current trading market
+            currentTradingMarketRef.current = null;
 
-            // Clear pending promise
             if (pendingTradePromisesRef.current[symbol]) {
                 pendingTradePromisesRef.current[symbol] = null;
             }
 
-            // Check if max losses reached
             if (nextMartingaleState.maxLossesReached) {
                 console.warn(`[AutoTrades] Maximum consecutive losses reached for ${symbol}. Stopping trading.`);
                 runningRef.current = false;
@@ -1070,14 +1000,11 @@ const AutoTrades = observer(() => {
 
             lastResultRef.current[symbol] = nextMartingaleState.lastResult;
 
-            // FIXED: Handle market switching on loss with proper strategy checking
             if (switchOnLoss && market1Enabled && market2Enabled && !scanAllMarkets) {
                 if (profit < 0) {
-                    // On loss: Switch to the other market
                     const nextSymbol = getNextMarketForSwitch(symbol);
                     if (nextSymbol && nextSymbol !== symbol) {
                         const nextConfig = marketConfigsRef.current[nextSymbol];
-                        // FIXED: Only switch if the other market has a valid strategy
                         if (nextConfig && nextConfig.enabled) {
                             marketSwitchActiveRef.current = true;
                             setActiveTradingMarket(nextSymbol);
@@ -1087,11 +1014,9 @@ const AutoTrades = observer(() => {
                         }
                     }
                 } else if (profit >= 0) {
-                    // On win: Switch back to primary market
                     const primarySymbol = getPrimaryMarket();
                     if (primarySymbol && primarySymbol !== symbol) {
                         const primaryConfig = marketConfigsRef.current[primarySymbol];
-                        // FIXED: Only switch back if primary market has a valid strategy
                         if (primaryConfig && primaryConfig.enabled) {
                             setActiveTradingMarket(primarySymbol);
                             activeTradingMarketRef.current = primarySymbol;
@@ -1105,14 +1030,12 @@ const AutoTrades = observer(() => {
 
             marketStatesRef.current[symbol] = { ...state };
 
-            // Update UI
             if (!unmountedRef.current) {
                 refreshDisplays();
                 setTotalPnl(totalPnlRef.current);
                 setTotalTrades(totalTradesRef.current);
             }
 
-            // Check take profit / stop loss
             if ((totalPnlRef.current >= tp || totalPnlRef.current <= -sl) && runningRef.current) {
                 runningRef.current = false;
                 if (!unmountedRef.current) {
@@ -1121,14 +1044,13 @@ const AutoTrades = observer(() => {
                 completeRunPanelStop();
             }
         },
-        [completeRunPanelStop, refreshDisplays, stake, martingale, takeProfit, stopLoss, martingaleMode, consecutiveLossCount, switchOnLoss, getNextMarketForSwitch, getPrimaryMarket, market1Enabled, market2Enabled, scanAllMarkets]
+        [completeRunPanelStop, refreshDisplays, stake, martingaleMultiplier, martingaleEnabled, takeProfit, stopLoss, switchOnLoss, getNextMarketForSwitch, getPrimaryMarket, market1Enabled, market2Enabled, scanAllMarkets]
     );
 
-    // ── FIXED: Try Execute Signal ───────────────────────────────────────
+    // ── Try Execute Signal ───────────────────────────────────────────────
 
     const tryExecuteSignal = useCallback(
         (symbol: string, state: MarketState, signalReady: boolean) => {
-            // Check if this market should trade based on switching logic
             if (!shouldMarketTrade(symbol)) {
                 return;
             }
@@ -1138,17 +1060,14 @@ const AutoTrades = observer(() => {
                 return;
             }
 
-            // FIXED: Check if there's already a pending trade for this symbol
             if (pendingTradePromisesRef.current[symbol]) {
                 return;
             }
 
-            // FIXED: Check if another market is currently trading
             if (currentTradingMarketRef.current && currentTradingMarketRef.current !== symbol) {
                 return;
             }
 
-            // FIXED: Ensure the signal matches the current market's strategy
             if (
                 runningRef.current &&
                 signalReady &&
@@ -1158,12 +1077,11 @@ const AutoTrades = observer(() => {
                 state.lossCooldownLeft === 0 &&
                 client.is_logged_in
             ) {
-                // Set execution flags immediately to prevent race conditions
                 state.trading = true;
                 state.isExecuting = true;
                 state.consecutive = 0;
                 globalTradingRef.current = true;
-                currentTradingMarketRef.current = symbol; // FIXED: Set current trading market
+                currentTradingMarketRef.current = symbol;
                 state.tradeStartTime = Math.floor(Date.now() / 1000);
                 state.verificationId = `${symbol}_${state.tradeStartTime}_${Math.random().toString(36).substring(2, 11)}`;
 
@@ -1190,7 +1108,6 @@ const AutoTrades = observer(() => {
                         if (runningRef.current && !unmountedRef.current) {
                             handleAfterTrade(symbol, profit);
                         } else {
-                            // Clean up if stopped
                             const currentState = marketStatesRef.current[symbol];
                             if (currentState) {
                                 currentState.trading = false;
@@ -1242,6 +1159,9 @@ const AutoTrades = observer(() => {
             const targetLen = Math.min(MAX_STREAK_LENGTH, Math.max(1, getDigitNumber(config.analysisTicks, 1)));
 
             state.lastQuote = quote;
+            state.lastPrice = quote;
+            state.priceHistory = [...state.priceHistory.slice(-50), quote];
+            
             state.isRecovering = false;
             lastTickAtRef.current = Date.now();
             if (isRecoveringDataRef.current) {
@@ -1341,8 +1261,9 @@ const AutoTrades = observer(() => {
                 timestamp: Date.now(),
             });
 
-            tryExecuteSignal(symbol, state, signalReady);
             refreshDisplays();
+            
+            tryExecuteSignal(symbol, state, signalReady);
         },
         [clearDataRecoveryLoading, getActiveDigitBarrier, refreshDisplays, tryExecuteSignal]
     );
@@ -1431,6 +1352,8 @@ const AutoTrades = observer(() => {
                     currentStake: Number(stake) || 1,
                     baseStake: Number(stake) || 1,
                     isExecuting: false,
+                    lastPrice: null,
+                    priceHistory: [],
                 });
             }
 
@@ -1573,6 +1496,8 @@ const AutoTrades = observer(() => {
                 lastResultType: null,
                 lastResult: null,
                 isExecuting: false,
+                lastPrice: null,
+                priceHistory: [],
             });
         });
         
@@ -1584,7 +1509,6 @@ const AutoTrades = observer(() => {
         setTotalTrades(0);
         setError(null);
         
-        // Initialize active trading market for switching
         if (switchOnLoss && market1Enabled && market2Enabled && !scanAllMarkets) {
             const primary = market1Enabled ? market1Symbol : market2Symbol;
             setActiveTradingMarket(primary);
@@ -1715,6 +1639,7 @@ const AutoTrades = observer(() => {
             Object.values(marketStatesRef.current).forEach(state => {
                 state.directionHistory = [];
                 state.lastDigits = [];
+                state.priceHistory = [];
             });
         };
     }, [clearDeferredWork, run_panel, stopTrading, stopSubscriptions]);
@@ -1803,6 +1728,9 @@ const AutoTrades = observer(() => {
             conditionText = `${TRADE_TYPE_LABELS[ct]}: ${bar}`;
         }
 
+        const priceHistory = state.priceHistory.slice(-10);
+        const currentPrice = state.lastPrice;
+
         return {
             allMatch,
             tickResults,
@@ -1810,10 +1738,12 @@ const AutoTrades = observer(() => {
             targetLen,
             conditionText,
             signalReady: state.consecutive >= targetLen,
+            currentPrice,
+            priceHistory,
         };
     }, []);
 
-    // ── Render Analysis Container ─────────────────────────────────────────
+    // ── Render Analysis Container with Price Updates ─────────────────────
 
     const renderAnalysisContainer = (symbol: string, config: MarketConfig | null) => {
         if (!config) return null;
@@ -1824,6 +1754,12 @@ const AutoTrades = observer(() => {
         const statusClass = analysis.signalReady ? '--found' : analysis.allMatch ? '--waiting' : '--none';
         const statusText = analysis.signalReady ? 'SIGNAL READY' : analysis.allMatch ? 'PATTERN MATCHED' : 'WAITING';
 
+        const formatPrice = (price: number | null) => {
+            if (price === null) return '—';
+            const pip = AUTO_MARKET_LOOKUP.get(symbol)?.pip || 2;
+            return price.toFixed(pip);
+        };
+
         return (
             <div className='auto-trades-analysis'>
                 <div className='auto-trades-analysis__header'>
@@ -1833,6 +1769,35 @@ const AutoTrades = observer(() => {
                     </span>
                 </div>
                 <div className='auto-trades-analysis__body'>
+                    <div className='auto-trades-analysis__price'>
+                        <span className='auto-trades-analysis__price-label'>💰 Current Price</span>
+                        <span className='auto-trades-analysis__price-value'>
+                            {formatPrice(analysis.currentPrice)}
+                        </span>
+                    </div>
+                    
+                    {analysis.priceHistory && analysis.priceHistory.length > 0 && (
+                        <div className='auto-trades-analysis__price-history'>
+                            <span className='auto-trades-analysis__price-history-label'>📈 Price History</span>
+                            <div className='auto-trades-analysis__price-bars'>
+                                {analysis.priceHistory.map((price, idx) => {
+                                    const minPrice = Math.min(...analysis.priceHistory);
+                                    const maxPrice = Math.max(...analysis.priceHistory);
+                                    const range = maxPrice - minPrice || 1;
+                                    const height = ((price - minPrice) / range) * 30 + 10;
+                                    return (
+                                        <div 
+                                            key={idx} 
+                                            className='auto-trades-analysis__price-bar'
+                                            style={{ height: `${height}px` }}
+                                            title={`${formatPrice(price)}`}
+                                        />
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
                     <div className='auto-trades-analysis__row'>
                         <span>Required Ticks:</span>
                         <strong>{analysis.targetLen}</strong>
@@ -1971,17 +1936,44 @@ const AutoTrades = observer(() => {
                                             disabled={isRunning}
                                         />
                                     </div>
+                                    
+                                    {/* Simplified Martingale Settings */}
                                     <div className='auto-trades-config__field auto-trades-config__field--compact'>
-                                        <label>Martingale ×</label>
-                                        <Input
-                                            type='number'
-                                            min='1.01'
-                                            step='0.5'
-                                            value={martingale}
-                                            onChange={e => setMartingale(e.target.value)}
-                                            disabled={isRunning}
-                                        />
+                                        <label>Martingale</label>
+                                        <div className='auto-trades-martingale-row'>
+                                            <button
+                                                type='button'
+                                                className={classNames(
+                                                    'auto-trades-feature-btn auto-trades-feature-btn--small',
+                                                    martingaleEnabled && 'auto-trades-feature-btn--active'
+                                                )}
+                                                onClick={() => setMartingaleEnabled(prev => !prev)}
+                                                disabled={isRunning}
+                                            >
+                                                <span className='auto-trades-feature-btn__label'>
+                                                    {martingaleEnabled ? 'ON' : 'OFF'}
+                                                </span>
+                                                <span className='auto-trades-feature-btn__switch'>
+                                                    <span className='auto-trades-feature-btn__knob' />
+                                                </span>
+                                            </button>
+                                        </div>
                                     </div>
+
+                                    <div className='auto-trades-config__field auto-trades-config__field--compact'>
+                                        <label>Multiplier ×</label>
+                                        <select
+                                            className='auto-trades-config__select auto-trades-config__select--compact'
+                                            value={martingaleMultiplier}
+                                            onChange={e => setMartingaleMultiplier(parseFloat(e.target.value))}
+                                            disabled={isRunning || !martingaleEnabled}
+                                        >
+                                            {Array.from({ length: 91 }, (_, i) => (10 + i) / 10).map(val => (
+                                                <option key={val} value={val}>{val.toFixed(1)}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
                                     <div className='auto-trades-config__field auto-trades-config__field--compact'>
                                         <label>Take Profit</label>
                                         <Input
@@ -2003,40 +1995,6 @@ const AutoTrades = observer(() => {
                                             onChange={e => setStopLoss(e.target.value)}
                                             disabled={isRunning}
                                         />
-                                    </div>
-                                    <div className='auto-trades-config__field auto-trades-config__field--compact auto-trades-config__field--full'>
-                                        <label>Martingale Mode</label>
-                                        <div className='auto-trades-martingale-row'>
-                                            <select
-                                                className='auto-trades-config__select auto-trades-config__select--compact'
-                                                value={martingaleMode}
-                                                onChange={e => setMartingaleMode(normalizeMartingaleMode(e.target.value))}
-                                                disabled={isRunning}
-                                            >
-                                                <option value='no_martingale'>No Martingale</option>
-                                                <option value='after_one_loss'>After 1 loss</option>
-                                                <option value='after_two_losses'>After 2 losses</option>
-                                                <option value='custom_consecutive_loss_trigger'>Custom loss count</option>
-                                            </select>
-                                            {martingaleMode === 'custom_consecutive_loss_trigger' && (
-                                                <Input
-                                                    type='number'
-                                                    min='1'
-                                                    max='10'
-                                                    step='1'
-                                                    value={consecutiveLossCountInput}
-                                                    onChange={e => {
-                                                        const val = e.target.value.replace(/[^\d]/g, '').slice(0, 2);
-                                                        setConsecutiveLossCountInput(val);
-                                                    }}
-                                                    onBlur={() => {
-                                                        setConsecutiveLossCount(clampConsecutiveLossThreshold(consecutiveLossCountInput || 2));
-                                                    }}
-                                                    disabled={isRunning}
-                                                    className='auto-trades-config__input--small'
-                                                />
-                                            )}
-                                        </div>
                                     </div>
                                     <div className='auto-trades-config__field auto-trades-config__field--compact auto-trades-config__field--half'>
                                         <label>Market Switching</label>
@@ -2086,6 +2044,12 @@ const AutoTrades = observer(() => {
                                 {scanAllMarkets && (
                                     <div className='auto-trades-active-market'>
                                         Scanning all {AUTO_MARKET_SYMBOLS.length} volatility markets
+                                    </div>
+                                )}
+                                {martingaleEnabled && (
+                                    <div className='auto-trades-martingale-info'>
+                                        <span className='auto-trades-martingale-info__icon'>📈</span>
+                                        <span>Martingale active: stake multiplies by ×{martingaleMultiplier.toFixed(1)} on each consecutive loss</span>
                                     </div>
                                 )}
                             </div>
@@ -2170,7 +2134,6 @@ const AutoTrades = observer(() => {
                                                 </select>
                                             </div>
                                             
-                                            {/* Over/Under: Tick-based comparison */}
                                             {(market1TradeType === 'DIGITOVER' || market1TradeType === 'DIGITUNDER') && (
                                                 <>
                                                     <div className='auto-trades-config__field'>
@@ -2232,7 +2195,6 @@ const AutoTrades = observer(() => {
                                                 </>
                                             )}
 
-                                            {/* Even/Odd: Pattern sequence */}
                                             {(market1TradeType === 'DIGITEVEN' || market1TradeType === 'DIGITODD') && (
                                                 <>
                                                     <div className='auto-trades-config__field'>
@@ -2257,7 +2219,6 @@ const AutoTrades = observer(() => {
                                                 </>
                                             )}
 
-                                            {/* Match/Diff: Single digit */}
                                             {(market1TradeType === 'DIGITMATCH' || market1TradeType === 'DIGITDIFF') && (
                                                 <>
                                                     <div className='auto-trades-config__field'>
@@ -2442,7 +2403,6 @@ const AutoTrades = observer(() => {
                                                 </select>
                                             </div>
                                             
-                                            {/* Over/Under: Tick-based comparison */}
                                             {(market2TradeType === 'DIGITOVER' || market2TradeType === 'DIGITUNDER') && (
                                                 <>
                                                     <div className='auto-trades-config__field'>
@@ -2504,7 +2464,6 @@ const AutoTrades = observer(() => {
                                                 </>
                                             )}
 
-                                            {/* Even/Odd: Pattern sequence */}
                                             {(market2TradeType === 'DIGITEVEN' || market2TradeType === 'DIGITODD') && (
                                                 <>
                                                     <div className='auto-trades-config__field'>
@@ -2529,7 +2488,6 @@ const AutoTrades = observer(() => {
                                                 </>
                                             )}
 
-                                            {/* Match/Diff: Single digit */}
                                             {(market2TradeType === 'DIGITMATCH' || market2TradeType === 'DIGITDIFF') && (
                                                 <>
                                                     <div className='auto-trades-config__field'>
@@ -2657,9 +2615,9 @@ const AutoTrades = observer(() => {
                                 <div className='auto-trades-stat'>
                                     <span className='auto-trades-stat__label'>Martingale</span>
                                     <span className={classNames('auto-trades-stat__value', {
-                                        'auto-trades-stat__value--active': martingaleActive,
+                                        'auto-trades-stat__value--active': martingaleActive && martingaleEnabled,
                                     })}>
-                                        {martingaleActive ? 'Active' : 'Off'}
+                                        {martingaleEnabled && martingaleActive ? 'Active' : martingaleEnabled ? 'Waiting' : 'Off'}
                                     </span>
                                 </div>
                                 <div className='auto-trades-stat'>
@@ -2673,7 +2631,7 @@ const AutoTrades = observer(() => {
                             </div>
                         </div>
 
-                        {/* Controls - ALWAYS VISIBLE */}
+                        {/* Controls */}
                         <div className='auto-trades-controls' style={{ paddingBottom: '20vh' }}>
                             {!isRunning ? (
                                 <button
