@@ -310,7 +310,7 @@ const isCandleMatch = (trade_type: TradeType, candle_direction: Direction) => {
     return true;
 };
 
-// ── Martingale Logic ──────────────────────────────────────────────────────
+// ── Martingale Logic (FIXED) ─────────────────────────────────────────────
 
 const getNextMartingaleState = ({
     profit,
@@ -329,6 +329,7 @@ const getNextMartingaleState = ({
     consecutive_losses: number;
     consecutive_loss_trigger: number;
 }) => {
+    // If profit is positive (win), reset everything to base stake
     if (profit >= 0) {
         return {
             consecutiveLosses: 0,
@@ -338,10 +339,12 @@ const getNextMartingaleState = ({
         };
     }
 
+    // We have a loss - increment consecutive losses
     const nextConsecutiveLosses = consecutive_losses + 1;
     const normalizedMode = normalizeMartingaleMode(martingale_mode);
     const normalizedTrigger = clampConsecutiveLossThreshold(consecutive_loss_trigger);
 
+    // No martingale - just keep base stake
     if (normalizedMode === 'no_martingale') {
         return {
             consecutiveLosses: nextConsecutiveLosses,
@@ -355,14 +358,24 @@ const getNextMartingaleState = ({
     let martingaleMultiplier = 1;
 
     if (normalizedMode === 'after_one_loss') {
+        // Apply martingale after EVERY loss (including the first)
+        // 1st loss: ×2, 2nd loss: ×4, 3rd: ×8, etc.
         shouldApplyMartingale = true;
-        martingaleMultiplier = multiplier;
+        martingaleMultiplier = Math.pow(multiplier, nextConsecutiveLosses);
     } else if (normalizedMode === 'after_two_losses') {
+        // Only apply after 2 or more consecutive losses
+        // 2nd loss: ×2, 3rd: ×4, 4th: ×8, etc.
         shouldApplyMartingale = nextConsecutiveLosses >= 2;
-        martingaleMultiplier = shouldApplyMartingale ? Math.pow(multiplier, nextConsecutiveLosses - 1) : 1;
+        if (shouldApplyMartingale) {
+            martingaleMultiplier = Math.pow(multiplier, nextConsecutiveLosses - 1);
+        }
     } else if (normalizedMode === 'custom_consecutive_loss_trigger') {
+        // Apply after custom number of consecutive losses
         shouldApplyMartingale = nextConsecutiveLosses >= normalizedTrigger;
-        martingaleMultiplier = shouldApplyMartingale ? Math.pow(multiplier, nextConsecutiveLosses - normalizedTrigger + 1) : 1;
+        if (shouldApplyMartingale) {
+            const lossesBeyondTrigger = nextConsecutiveLosses - normalizedTrigger + 1;
+            martingaleMultiplier = Math.pow(multiplier, lossesBeyondTrigger);
+        }
     }
 
     const nextStake = shouldApplyMartingale 
@@ -989,6 +1002,7 @@ const AutoTrades = observer(() => {
             totalPnlRef.current = parseFloat((totalPnlRef.current + profit).toFixed(2));
             totalTradesRef.current++;
 
+            // Use the fixed martingale logic
             const nextMartingaleState = getNextMartingaleState({
                 profit,
                 current_stake: state.currentStake || baseStake,
