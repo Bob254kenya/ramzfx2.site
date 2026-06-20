@@ -34,9 +34,10 @@ const FIVE_MINUTE_GRANULARITY = 300;
 const DATA_SILENCE_RESTART_MS = 15000;
 const DATA_RESTART_COOLDOWN_MS = 10000;
 const UI_REFRESH_THROTTLE_MS = 80;
-const MARKET_LOSS_COOLDOWN_TICKS = 60;
+const MARKET_LOSS_COOLDOWN_TICKS = 20; // REDUCED from 60 to 20
 const MAX_STREAK_LENGTH = 10;
 const MAX_ANALYSIS_TICKS = 10;
+const MAX_CONSECUTIVE_LOSSES = 10; // ADDED: protection against infinite martingale
 
 export type TradeType =
     | 'DIGITOVER'
@@ -310,7 +311,7 @@ const isCandleMatch = (trade_type: TradeType, candle_direction: Direction) => {
     return true;
 };
 
-// ── Martingale Logic (FIXED) ─────────────────────────────────────────────
+// ── Martingale Logic (FULLY FIXED) ─────────────────────────────────────────
 
 const getNextMartingaleState = ({
     profit,
@@ -343,6 +344,17 @@ const getNextMartingaleState = ({
     const nextConsecutiveLosses = consecutive_losses + 1;
     const normalizedMode = normalizeMartingaleMode(martingale_mode);
     const normalizedTrigger = clampConsecutiveLossThreshold(consecutive_loss_trigger);
+
+    // Check if we've reached maximum consecutive losses
+    if (nextConsecutiveLosses >= MAX_CONSECUTIVE_LOSSES) {
+        return {
+            consecutiveLosses: nextConsecutiveLosses,
+            lastResult: 'loss' as const,
+            nextStake: base_stake, // Reset to base stake to prevent infinite martingale
+            martingaleMultiplier: 1,
+            maxLossesReached: true,
+        };
+    }
 
     // No martingale - just keep base stake
     if (normalizedMode === 'no_martingale') {
@@ -378,15 +390,25 @@ const getNextMartingaleState = ({
         }
     }
 
-    const nextStake = shouldApplyMartingale 
-        ? parseFloat((base_stake * martingaleMultiplier).toFixed(2))
-        : base_stake;
+    // FIXED: Calculate next stake based on the CURRENT stake, not base stake
+    // This ensures proper compounding of martingale
+    let nextStake = base_stake;
+    if (shouldApplyMartingale) {
+        // Use current stake as the base for multiplication
+        // This compounds the stake properly: stake * multiplier^losses
+        nextStake = parseFloat((current_stake * Math.pow(multiplier, 
+            martingaleMode === 'after_one_loss' ? 1 :
+            martingaleMode === 'after_two_losses' && nextConsecutiveLosses >= 2 ? 1 :
+            martingaleMode === 'custom_consecutive_loss_trigger' && nextConsecutiveLosses >= normalizedTrigger ? 1 : 0
+        )).toFixed(2));
+    }
 
     return {
         consecutiveLosses: nextConsecutiveLosses,
         lastResult: 'loss' as const,
         nextStake: nextStake,
         martingaleMultiplier: martingaleMultiplier,
+        maxLossesReached: false,
     };
 };
 
@@ -1013,6 +1035,7 @@ const AutoTrades = observer(() => {
                 consecutive_loss_trigger: consecutiveLossCount,
             });
 
+            // Update state with martingale results
             state.consecutiveLosses = nextMartingaleState.consecutiveLosses;
             state.lastResultType = nextMartingaleState.lastResult;
             state.lastResult = nextMartingaleState.lastResult;
@@ -1022,6 +1045,16 @@ const AutoTrades = observer(() => {
             state.tradeCount++;
             state.trading = false;
             globalTradingRef.current = false;
+
+            // Check if max losses reached
+            if (nextMartingaleState.maxLossesReached) {
+                console.warn(`[AutoTrades] Maximum consecutive losses reached for ${symbol}. Stopping trading.`);
+                runningRef.current = false;
+                setIsRunning(false);
+                setError(`Maximum consecutive losses (${MAX_CONSECUTIVE_LOSSES}) reached. Trading stopped.`);
+                completeRunPanelStop();
+                return;
+            }
 
             // Store last result for market switching
             lastResultRef.current[symbol] = nextMartingaleState.lastResult;
@@ -1055,6 +1088,9 @@ const AutoTrades = observer(() => {
                     }
                 }
             }
+
+            // Force state update in ref
+            marketStatesRef.current[symbol] = { ...state };
 
             if (!unmountedRef.current) {
                 refreshDisplays();
@@ -1133,6 +1169,9 @@ const AutoTrades = observer(() => {
                     refreshDisplays();
                     return;
                 }
+
+                // Force state update
+                marketStatesRef.current[symbol] = { ...state };
 
                 executeTrade(symbol, stakeNow, state.lastResultType).then(profit =>
                     handleAfterTrade(symbol, profit)
@@ -1497,7 +1536,10 @@ const AutoTrades = observer(() => {
             marketStatesRef.current[symbol] = createMarketState({ 
                 currentStake: baseStake,
                 baseStake: baseStake,
-                martingaleMultiplier: 1
+                martingaleMultiplier: 1,
+                consecutiveLosses: 0,
+                lastResultType: null,
+                lastResult: null,
             });
         });
         
