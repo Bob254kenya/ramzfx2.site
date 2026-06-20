@@ -158,6 +158,21 @@ $at-text-faint: #2c4060;
     }
 }
 
+@keyframes neonSignalFound {
+    0% {
+        background: rgba(57, 255, 20, 0.1);
+        border-color: rgba(57, 255, 20, 0.3);
+    }
+    50% {
+        background: rgba(57, 255, 20, 0.3);
+        border-color: rgba(57, 255, 20, 0.8);
+    }
+    100% {
+        background: rgba(57, 255, 20, 0.1);
+        border-color: rgba(57, 255, 20, 0.3);
+    }
+}
+
 // ── Auto Trades Page ─────────────────────────────────────────────────────────
 
 .auto-trades-page {
@@ -170,7 +185,6 @@ $at-text-faint: #2c4060;
     overflow: hidden;
     position: relative;
 
-    // Animated background grid
     &::before {
         content: '';
         position: absolute;
@@ -210,6 +224,7 @@ $at-text-faint: #2c4060;
 
     &__inner {
         padding: 2.4rem;
+        padding-bottom: 2.4rem;
         max-width: 1400px;
         margin: 0 auto;
         width: 100%;
@@ -218,6 +233,7 @@ $at-text-faint: #2c4060;
 
         @include mobile-or-tablet-screen {
             padding: 1.2rem;
+            padding-bottom: 1.2rem;
         }
     }
 
@@ -298,17 +314,20 @@ $at-text-faint: #2c4060;
         display: flex;
         flex-direction: column;
         gap: 1.6rem;
+        margin-bottom: 12px;
     }
 
     &__global-settings {
         display: grid;
         grid-template-columns: 1fr;
+        margin-bottom: 12px;
     }
 
     &__markets {
         display: grid;
         grid-template-columns: 1fr 1fr;
         gap: 1.6rem;
+        margin-bottom: 12px;
 
         @include mobile-or-tablet-screen {
             grid-template-columns: 1fr;
@@ -318,6 +337,7 @@ $at-text-faint: #2c4060;
     &__stats {
         display: grid;
         grid-template-columns: 1fr;
+        margin-bottom: 12px;
     }
 }
 
@@ -333,6 +353,7 @@ $at-text-faint: #2c4060;
     overflow: hidden;
     transition: all 0.3s ease;
     animation: neonSlideIn 0.5s ease-out;
+    margin-bottom: 12px;
 
     &:hover {
         transform: translateY(-2px);
@@ -492,6 +513,7 @@ $at-text-faint: #2c4060;
     margin-top: 1rem;
     padding-top: 1rem;
     border-top: 1px solid $at-border-subtle;
+    margin-bottom: 12px;
 
     @include mobile-or-tablet-screen {
         grid-template-columns: 1fr;
@@ -647,6 +669,7 @@ $at-text-faint: #2c4060;
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 0.8rem 1.2rem;
+    margin-bottom: 12px;
 
     @include mobile-or-tablet-screen {
         grid-template-columns: 1fr;
@@ -655,6 +678,8 @@ $at-text-faint: #2c4060;
 
 .auto-trades-config {
     &__field {
+        margin-bottom: 12px;
+
         label {
             display: block;
             font-size: 0.9rem;
@@ -688,6 +713,7 @@ $at-text-faint: #2c4060;
         background-position: right 0.7rem center;
         padding-right: 2.2rem;
         transition: all 0.15s ease;
+        margin-bottom: 8px;
 
         &:focus {
             outline: none;
@@ -719,6 +745,7 @@ $at-text-faint: #2c4060;
         display: flex;
         gap: 0.3rem;
         margin-top: 0.4rem;
+        margin-bottom: 8px;
         flex-wrap: wrap;
     }
 
@@ -751,11 +778,131 @@ $at-text-faint: #2c4060;
     }
 }
 
+// ── Analysis Container ───────────────────────────────────────────────────────
+
+.auto-trades-analysis {
+    padding: 12px;
+    background: $at-bg-deep;
+    border: 1px solid $at-border-subtle;
+    border-radius: 0.8rem;
+    margin-top: 12px;
+    margin-bottom: 12px;
+    animation: neonSlideIn 0.4s ease-out;
+
+    &__header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        padding-bottom: 8px;
+        border-bottom: 1px solid $at-border-subtle;
+    }
+
+    &__title {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: $at-text;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+
+    &__status {
+        font-size: 0.75rem;
+        font-weight: 700;
+        padding: 0.15rem 0.6rem;
+        border-radius: 1rem;
+        text-transform: uppercase;
+
+        &--found {
+            background: $at-neon-green-glow;
+            color: $at-neon-green;
+            border: 1px solid rgba(57, 255, 20, 0.3);
+            animation: neonGlow 1.5s ease-in-out infinite;
+        }
+
+        &--waiting {
+            background: $at-neon-yellow-glow;
+            color: $at-neon-yellow;
+            border: 1px solid rgba(255, 230, 0, 0.3);
+        }
+
+        &--none {
+            background: rgba(74, 106, 144, 0.15);
+            color: $at-text-muted;
+            border: 1px solid rgba(74, 106, 144, 0.3);
+        }
+    }
+
+    &__body {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    &__row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.85rem;
+        color: $at-text-dim;
+
+        strong {
+            color: $at-text;
+        }
+    }
+
+    &__ticks {
+        display: flex;
+        gap: 4px;
+        flex-wrap: wrap;
+    }
+
+    &__tick {
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 0.3rem;
+        font-size: 0.8rem;
+        font-weight: 700;
+        background: $at-bg-card-2;
+        color: $at-text;
+        border: 1px solid $at-border-subtle;
+
+        &--match {
+            background: $at-neon-green-glow;
+            color: $at-neon-green;
+            border: 1px solid rgba(57, 255, 20, 0.3);
+            animation: neonGlow 1.5s ease-in-out infinite;
+        }
+
+        &--nomatch {
+            background: $at-neon-red-glow;
+            color: $at-neon-red;
+            border: 1px solid rgba(255, 0, 68, 0.3);
+        }
+    }
+
+    &__condition {
+        font-size: 0.8rem;
+        color: $at-neon-cyan;
+        padding: 6px 8px;
+        background: $at-neon-cyan-glow;
+        border-radius: 0.4rem;
+        border: 1px solid rgba(0, 240, 255, 0.2);
+        margin-top: 4px;
+        text-align: center;
+        font-weight: 600;
+    }
+}
+
 // ── Inverse Toggle ───────────────────────────────────────────────────────────
 
 .auto-trades-inverse-toggle {
     display: flex;
     align-items: center;
+    margin-bottom: 12px;
 }
 
 .auto-trades-inverse-btn {
@@ -834,8 +981,8 @@ $at-text-faint: #2c4060;
     border: 1px solid $at-border-subtle;
     position: relative;
     overflow: hidden;
+    margin-bottom: 12px;
 
-    // Scanning line effect
     &::after {
         content: '';
         position: absolute;
@@ -1165,6 +1312,7 @@ $at-text-faint: #2c4060;
     justify-content: center;
     gap: 1rem;
     padding: 0.8rem 0;
+    margin-bottom: 12px;
 
     &__run,
     &__stop {
@@ -1404,6 +1552,7 @@ $at-text-faint: #2c4060;
     .auto-trades-card {
         padding: 1.2rem;
         border-radius: 1rem;
+        margin-bottom: 12px;
     }
 
     .auto-trades-global-features {
