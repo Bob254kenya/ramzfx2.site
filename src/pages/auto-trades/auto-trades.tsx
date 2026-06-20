@@ -191,7 +191,7 @@ interface MarketConfig {
     marketSymbol: string;
     tradeType: TradeType;
     barrier: string;
-    predictionDigit: string; // Unified prediction digit
+    predictionDigit: string;
     streak: string;
     analysisTicks: string;
     inverseMode: boolean;
@@ -329,7 +329,6 @@ const getNextMartingaleState = ({
     consecutive_losses: number;
     consecutive_loss_trigger: number;
 }) => {
-    // If profit is positive (win), reset everything
     if (profit >= 0) {
         return {
             consecutiveLosses: 0,
@@ -339,12 +338,10 @@ const getNextMartingaleState = ({
         };
     }
 
-    // Loss occurred
     const nextConsecutiveLosses = consecutive_losses + 1;
     const normalizedMode = normalizeMartingaleMode(martingale_mode);
     const normalizedTrigger = clampConsecutiveLossThreshold(consecutive_loss_trigger);
 
-    // No martingale - keep base stake
     if (normalizedMode === 'no_martingale') {
         return {
             consecutiveLosses: nextConsecutiveLosses,
@@ -354,7 +351,6 @@ const getNextMartingaleState = ({
         };
     }
 
-    // Determine if martingale should be applied based on consecutive losses
     let shouldApplyMartingale = false;
     let martingaleMultiplier = 1;
 
@@ -518,7 +514,8 @@ const AutoTrades = observer(() => {
     const [dataStreamMessage, setDataStreamMessage] = useState('Loading market data...');
     const [showDisclaimer, setShowDisclaimer] = useState(false);
     const [isDataLoading, setIsDataLoading] = useState(true);
-    const [activeTradingMarket, setActiveTradingMarket] = useState<'market1' | 'market2' | null>('market1');
+    const [activeTradingMarket, setActiveTradingMarket] = useState<string | null>(null);
+    const [marketSwitchActive, setMarketSwitchActive] = useState(false);
 
     // ── Refs ──────────────────────────────────────────────────────────────
 
@@ -549,12 +546,19 @@ const AutoTrades = observer(() => {
     const selectedMarketsRef = useRef<string[]>([]);
     const lastResultRef = useRef<Record<string, 'win' | 'loss' | null>>({});
     const marketSwitchActiveRef = useRef<boolean>(false);
+    const activeTradingMarketRef = useRef<string | null>(null);
+    const originalActiveMarketRef = useRef<string | null>(null);
+    const isPrimaryMarketActiveRef = useRef<boolean>(true);
 
     // ── Update Refs ──────────────────────────────────────────────────────
 
     useEffect(() => {
         show_auto_ref.current = show_auto;
     }, [show_auto]);
+
+    useEffect(() => {
+        activeTradingMarketRef.current = activeTradingMarket;
+    }, [activeTradingMarket]);
 
     useEffect(() => {
         const markets: string[] = [];
@@ -566,68 +570,127 @@ const AutoTrades = observer(() => {
         } else {
             selectedMarketsRef.current = markets;
         }
-    }, [market1Symbol, market2Symbol, market1Enabled, market2Enabled, scanAllMarkets]);
 
-    // ── Market Configs ────────────────────────────────────────────────────
+        // If switch on loss is enabled and we're not scanning all markets, ensure active market is set
+        if (switchOnLoss && market1Enabled && market2Enabled && !scanAllMarkets) {
+            if (!activeTradingMarketRef.current) {
+                setActiveTradingMarket(market1Symbol);
+                activeTradingMarketRef.current = market1Symbol;
+                isPrimaryMarketActiveRef.current = true;
+            }
+        } else if (!switchOnLoss || !market1Enabled || !market2Enabled) {
+            setActiveTradingMarket(null);
+            activeTradingMarketRef.current = null;
+            marketSwitchActiveRef.current = false;
+            isPrimaryMarketActiveRef.current = true;
+        }
+    }, [market1Symbol, market2Symbol, market1Enabled, market2Enabled, scanAllMarkets, switchOnLoss]);
 
-    const market1Config: MarketConfig = {
-        marketSymbol: market1Symbol,
-        tradeType: market1TradeType,
-        barrier: market1Barrier,
-        predictionDigit: market1PredictionDigit,
-        streak: market1Streak,
-        analysisTicks: market1AnalysisTicks,
-        inverseMode: market1Inverse,
-        enabled: market1Enabled,
-    };
+    // ── Get Market Config ────────────────────────────────────────────────────
 
-    const market2Config: MarketConfig = {
-        marketSymbol: market2Symbol,
-        tradeType: market2TradeType,
-        barrier: market2Barrier,
-        predictionDigit: market2PredictionDigit,
-        streak: market2Streak,
-        analysisTicks: market2AnalysisTicks,
-        inverseMode: market2Inverse,
-        enabled: market2Enabled,
-    };
+    const getMarketConfig = useCallback((symbol: string): MarketConfig | null => {
+        // If scanning all markets, use market1 config as base but with symbol-specific overrides
+        if (scanAllMarkets) {
+            // Check if this is market1 or market2 with their specific configs
+            if (symbol === market1Symbol && market1Enabled) {
+                return {
+                    marketSymbol: symbol,
+                    tradeType: market1TradeType,
+                    barrier: market1Barrier,
+                    predictionDigit: market1PredictionDigit,
+                    streak: market1Streak,
+                    analysisTicks: market1AnalysisTicks,
+                    inverseMode: market1Inverse,
+                    enabled: true,
+                };
+            }
+            if (symbol === market2Symbol && market2Enabled) {
+                return {
+                    marketSymbol: symbol,
+                    tradeType: market2TradeType,
+                    barrier: market2Barrier,
+                    predictionDigit: market2PredictionDigit,
+                    streak: market2Streak,
+                    analysisTicks: market2AnalysisTicks,
+                    inverseMode: market2Inverse,
+                    enabled: true,
+                };
+            }
+            // For all other markets when scanning, use market1 config
+            return {
+                marketSymbol: symbol,
+                tradeType: market1TradeType,
+                barrier: market1Barrier,
+                predictionDigit: market1PredictionDigit,
+                streak: market1Streak,
+                analysisTicks: market1AnalysisTicks,
+                inverseMode: false, // No inverse for additional markets
+                enabled: true,
+            };
+        }
+
+        // Not scanning all markets - use individual configs
+        if (symbol === market1Symbol && market1Enabled) {
+            return {
+                marketSymbol: symbol,
+                tradeType: market1TradeType,
+                barrier: market1Barrier,
+                predictionDigit: market1PredictionDigit,
+                streak: market1Streak,
+                analysisTicks: market1AnalysisTicks,
+                inverseMode: market1Inverse,
+                enabled: true,
+            };
+        }
+        if (symbol === market2Symbol && market2Enabled) {
+            return {
+                marketSymbol: symbol,
+                tradeType: market2TradeType,
+                barrier: market2Barrier,
+                predictionDigit: market2PredictionDigit,
+                streak: market2Streak,
+                analysisTicks: market2AnalysisTicks,
+                inverseMode: market2Inverse,
+                enabled: true,
+            };
+        }
+        return null;
+    }, [
+        scanAllMarkets,
+        market1Symbol, market1TradeType, market1Barrier, market1PredictionDigit,
+        market1Streak, market1AnalysisTicks, market1Inverse, market1Enabled,
+        market2Symbol, market2TradeType, market2Barrier, market2PredictionDigit,
+        market2Streak, market2AnalysisTicks, market2Inverse, market2Enabled
+    ]);
 
     // Update market configs ref whenever settings change
     useEffect(() => {
         const configs: Record<string, MarketConfig> = {};
         
-        if (market1Enabled) {
-            configs[market1Symbol] = market1Config;
-        }
-        
-        if (market2Enabled) {
-            configs[market2Symbol] = market2Config;
-        }
-        
-        // If scan all markets, add config for all markets with default settings from market1
         if (scanAllMarkets) {
             AUTO_MARKET_SYMBOLS.forEach(symbol => {
-                if (!configs[symbol]) {
-                    configs[symbol] = {
-                        marketSymbol: symbol,
-                        tradeType: market1TradeType,
-                        barrier: market1Barrier,
-                        predictionDigit: market1PredictionDigit,
-                        streak: market1Streak,
-                        analysisTicks: market1AnalysisTicks,
-                        inverseMode: false,
-                        enabled: true,
-                    };
+                const config = getMarketConfig(symbol);
+                if (config) {
+                    configs[symbol] = config;
                 }
             });
+        } else {
+            if (market1Enabled) {
+                const config = getMarketConfig(market1Symbol);
+                if (config) configs[market1Symbol] = config;
+            }
+            if (market2Enabled) {
+                const config = getMarketConfig(market2Symbol);
+                if (config) configs[market2Symbol] = config;
+            }
         }
         
         marketConfigsRef.current = configs;
     }, [
-        market1Symbol, market2Symbol, market1Config, market2Config,
-        market1Enabled, market2Enabled, scanAllMarkets,
-        market1TradeType, market1Barrier, market1PredictionDigit,
-        market1Streak, market1AnalysisTicks
+        getMarketConfig,
+        market1Symbol, market2Symbol,
+        market1Enabled, market2Enabled,
+        scanAllMarkets
     ]);
 
     // ── Save to LocalStorage ─────────────────────────────────────────────
@@ -680,7 +743,6 @@ const AutoTrades = observer(() => {
         const ct = config.tradeType;
         if (!usesLossPrediction(ct)) return getDigitNumber(config.barrier, 4);
         
-        // Always use the prediction digit
         const barrier = getDigitNumber(config.predictionDigit, 4);
         return barrier;
     }, []);
@@ -688,7 +750,6 @@ const AutoTrades = observer(() => {
     const flushDisplays = useCallback(() => {
         if (unmountedRef.current || !show_auto_ref.current) return;
         lastUiRefreshAtRef.current = Date.now();
-        // Force re-render by updating state
         setTotalPnl(prev => prev);
     }, []);
 
@@ -881,6 +942,37 @@ const AutoTrades = observer(() => {
         [currency, getActiveDigitBarrier, pushContract, setError]
     );
 
+    // ── Get Next Market for Switching ────────────────────────────────────
+
+    const getNextMarketForSwitch = useCallback((currentSymbol: string): string | null => {
+        // If scanning all markets, get the next market in the list
+        if (scanAllMarkets) {
+            const markets = selectedMarketsRef.current;
+            const currentIndex = markets.indexOf(currentSymbol);
+            if (currentIndex === -1 || markets.length <= 1) return null;
+            const nextIndex = (currentIndex + 1) % markets.length;
+            return markets[nextIndex];
+        }
+
+        // Not scanning all markets - switch between market1 and market2
+        if (market1Enabled && market2Enabled) {
+            if (currentSymbol === market1Symbol) return market2Symbol;
+            if (currentSymbol === market2Symbol) return market1Symbol;
+        }
+        return null;
+    }, [scanAllMarkets, market1Symbol, market2Symbol, market1Enabled, market2Enabled]);
+
+    // ── Get Primary Market ───────────────────────────────────────────────
+
+    const getPrimaryMarket = useCallback((): string | null => {
+        if (scanAllMarkets) {
+            return selectedMarketsRef.current[0] || null;
+        }
+        if (market1Enabled) return market1Symbol;
+        if (market2Enabled) return market2Symbol;
+        return null;
+    }, [scanAllMarkets, market1Symbol, market2Symbol, market1Enabled, market2Enabled]);
+
     // ── After Trade Handler ──────────────────────────────────────────────
 
     const handleAfterTrade = useCallback(
@@ -921,24 +1013,32 @@ const AutoTrades = observer(() => {
             lastResultRef.current[symbol] = nextMartingaleState.lastResult;
 
             // ── Market Switching Logic ──────────────────────────────────
-            if (switchOnLoss && market1Enabled && market2Enabled) {
-                // Determine which market to switch to
-                const isMarket1 = symbol === market1Symbol;
-                const isMarket2 = symbol === market2Symbol;
-                
-                if (profit < 0) {
-                    // On loss, switch to the other market
-                    if (isMarket1) {
+            if (switchOnLoss && profit < 0 && market1Enabled && market2Enabled) {
+                // On loss, switch to the next market
+                const nextSymbol = getNextMarketForSwitch(symbol);
+                if (nextSymbol && nextSymbol !== symbol) {
+                    // Check if the next market is enabled
+                    const nextConfig = marketConfigsRef.current[nextSymbol];
+                    if (nextConfig && nextConfig.enabled) {
                         marketSwitchActiveRef.current = true;
-                        setActiveTradingMarket('market2');
-                    } else if (isMarket2) {
-                        marketSwitchActiveRef.current = true;
-                        setActiveTradingMarket('market1');
+                        setActiveTradingMarket(nextSymbol);
+                        activeTradingMarketRef.current = nextSymbol;
+                        isPrimaryMarketActiveRef.current = false;
+                        console.log(`[AutoTrades] Switching from ${symbol} to ${nextSymbol} after loss`);
                     }
-                } else if (profit >= 0 && marketSwitchActiveRef.current) {
-                    // On win after switching, reset to primary market (market1)
-                    setActiveTradingMarket('market1');
-                    marketSwitchActiveRef.current = false;
+                }
+            } else if (switchOnLoss && profit >= 0 && marketSwitchActiveRef.current) {
+                // On win after switching, try to go back to primary
+                const primarySymbol = getPrimaryMarket();
+                if (primarySymbol && primarySymbol !== symbol) {
+                    const primaryConfig = marketConfigsRef.current[primarySymbol];
+                    if (primaryConfig && primaryConfig.enabled) {
+                        setActiveTradingMarket(primarySymbol);
+                        activeTradingMarketRef.current = primarySymbol;
+                        isPrimaryMarketActiveRef.current = true;
+                        marketSwitchActiveRef.current = false;
+                        console.log(`[AutoTrades] Switching back to primary ${primarySymbol} after win`);
+                    }
                 }
             }
 
@@ -957,7 +1057,7 @@ const AutoTrades = observer(() => {
                 completeRunPanelStop();
             }
         },
-        [completeRunPanelStop, refreshDisplays, stake, martingale, takeProfit, stopLoss, martingaleMode, consecutiveLossCount, switchOnLoss, market1Enabled, market2Enabled, market1Symbol, market2Symbol]
+        [completeRunPanelStop, refreshDisplays, stake, martingale, takeProfit, stopLoss, martingaleMode, consecutiveLossCount, switchOnLoss, getNextMarketForSwitch, getPrimaryMarket, market1Enabled, market2Enabled]
     );
 
     // ── Try Execute Signal ───────────────────────────────────────────────
@@ -966,19 +1066,32 @@ const AutoTrades = observer(() => {
         (symbol: string, state: MarketState, signalReady: boolean) => {
             // Check if this market should be trading based on market switching
             let shouldTrade = false;
-            
+
             if (switchOnLoss && market1Enabled && market2Enabled) {
                 // If market switching is enabled, only trade the active market
-                if (activeTradingMarket === 'market1' && symbol === market1Symbol) {
+                if (activeTradingMarketRef.current === symbol) {
                     shouldTrade = true;
-                } else if (activeTradingMarket === 'market2' && symbol === market2Symbol) {
-                    shouldTrade = true;
+                }
+                // If no active market is set, use primary
+                if (!activeTradingMarketRef.current) {
+                    const primary = getPrimaryMarket();
+                    if (primary === symbol) {
+                        shouldTrade = true;
+                        setActiveTradingMarket(symbol);
+                        activeTradingMarketRef.current = symbol;
+                        isPrimaryMarketActiveRef.current = true;
+                    }
                 }
             } else {
                 // Otherwise trade all enabled markets
-                if (symbol === market1Symbol && market1Enabled) shouldTrade = true;
-                if (symbol === market2Symbol && market2Enabled) shouldTrade = true;
-                if (scanAllMarkets) shouldTrade = true;
+                const config = marketConfigsRef.current[symbol];
+                if (config && config.enabled) {
+                    shouldTrade = true;
+                }
+                // If scanning all markets, all are enabled
+                if (scanAllMarkets) {
+                    shouldTrade = true;
+                }
             }
 
             if (
@@ -996,7 +1109,6 @@ const AutoTrades = observer(() => {
                 state.tradeStartTime = Math.floor(Date.now() / 1000);
                 state.verificationId = `${symbol}_${state.tradeStartTime}_${Math.random().toString(36).substring(2, 11)}`;
 
-                // Use the current stake from state
                 const stakeNow = state.currentStake || Number(stake) || 1;
 
                 if (stakeNow <= 0 || isNaN(stakeNow)) {
@@ -1013,7 +1125,7 @@ const AutoTrades = observer(() => {
                 );
             }
         },
-        [client.is_logged_in, executeTrade, handleAfterTrade, refreshDisplays, stake, switchOnLoss, activeTradingMarket, market1Symbol, market2Symbol, market1Enabled, market2Enabled, scanAllMarkets]
+        [client.is_logged_in, executeTrade, handleAfterTrade, refreshDisplays, stake, switchOnLoss, market1Enabled, market2Enabled, scanAllMarkets, getPrimaryMarket]
     );
 
     // ── Tick Handler ─────────────────────────────────────────────────────
@@ -1230,6 +1342,14 @@ const AutoTrades = observer(() => {
             const market = AUTO_MARKET_LOOKUP.get(symbol);
             if (!market) continue;
 
+            // Ensure market state exists
+            if (!marketStatesRef.current[symbol]) {
+                marketStatesRef.current[symbol] = createMarketState({
+                    currentStake: Number(stake) || 1,
+                    baseStake: Number(stake) || 1,
+                });
+            }
+
             if (!subscriptionsRef.current[symbol]) {
                 try {
                     const obs = (api_base.api as any).subscribe({ ticks: symbol });
@@ -1319,6 +1439,7 @@ const AutoTrades = observer(() => {
         market1Enabled,
         market2Enabled,
         scanAllMarkets,
+        stake,
     ]);
 
     // ── Restart Subscriptions ────────────────────────────────────────────
@@ -1358,7 +1479,6 @@ const AutoTrades = observer(() => {
         const baseStake = Number(stake) || 1;
         globalTradingRef.current = false;
         
-        // Reset states for all markets
         AUTO_MARKET_SYMBOLS.forEach(symbol => {
             marketStatesRef.current[symbol] = createMarketState({ 
                 currentStake: baseStake,
@@ -1372,11 +1492,21 @@ const AutoTrades = observer(() => {
         setTotalPnl(0);
         setTotalTrades(0);
         setError(null);
-        setActiveTradingMarket('market1');
+        
+        // Reset active trading market to primary
+        const primary = getPrimaryMarket();
+        if (primary) {
+            setActiveTradingMarket(primary);
+            activeTradingMarketRef.current = primary;
+            isPrimaryMarketActiveRef.current = true;
+        } else {
+            setActiveTradingMarket(null);
+            activeTradingMarketRef.current = null;
+        }
         marketSwitchActiveRef.current = false;
         lastResultRef.current = {};
         refreshDisplays();
-    }, [refreshDisplays, stake]);
+    }, [refreshDisplays, stake, getPrimaryMarket]);
 
     // ── Run/Stop ─────────────────────────────────────────────────────────
 
@@ -1551,6 +1681,14 @@ const AutoTrades = observer(() => {
     const hasAnyLiveQuote = marketDisplays.some(m => m.lastQuote !== null);
     const isLoading = selectedMarketsRef.current.length > 0 && !hasAnyLiveQuote && (dataStreamLoading || !isConnected);
 
+    // Get active market display name
+    const getActiveMarketDisplay = () => {
+        const activeSymbol = activeTradingMarketRef.current;
+        if (!activeSymbol) return 'None';
+        const market = AUTO_MARKET_LOOKUP.get(activeSymbol);
+        return market?.label || activeSymbol;
+    };
+
     return (
         <div className='auto-trades-page'>
             <ThemedScrollbars className='auto-trades-page__scroll'>
@@ -1689,7 +1827,7 @@ const AutoTrades = observer(() => {
                                             <div className='auto-trades-feature-info'>
                                                 <small>Alternate markets on loss, reset to Primary on win</small>
                                                 <small className='auto-trades-feature-info__active'>
-                                                    Active: {activeTradingMarket === 'market1' ? '📈 Primary' : '📊 Market 2'}
+                                                    Active: {isRunning ? getActiveMarketDisplay() : 'Not running'}
                                                 </small>
                                             </div>
                                         )}
@@ -1769,7 +1907,7 @@ const AutoTrades = observer(() => {
                                 <div className='auto-trades-card__header'>
                                     <div className='auto-trades-card__title-wrapper'>
                                         <h2 className='auto-trades-card__title'>📈 Primary Market</h2>
-                                        {switchOnLoss && activeTradingMarket === 'market1' && isRunning && (
+                                        {switchOnLoss && activeTradingMarketRef.current === market1Symbol && isRunning && (
                                             <span className='auto-trades-card__active-badge'>Active</span>
                                         )}
                                     </div>
@@ -1988,7 +2126,7 @@ const AutoTrades = observer(() => {
                                 <div className='auto-trades-card__header'>
                                     <div className='auto-trades-card__title-wrapper'>
                                         <h2 className='auto-trades-card__title'>📊 Secondary Market</h2>
-                                        {switchOnLoss && activeTradingMarket === 'market2' && isRunning && (
+                                        {switchOnLoss && activeTradingMarketRef.current === market2Symbol && isRunning && (
                                             <span className='auto-trades-card__active-badge auto-trades-card__active-badge--market2'>Active</span>
                                         )}
                                     </div>
@@ -2236,10 +2374,12 @@ const AutoTrades = observer(() => {
                                     <div className='auto-trades-stat auto-trades-stat--full'>
                                         <span className='auto-trades-stat__label'>Active Market</span>
                                         <span className={classNames('auto-trades-stat__value', {
-                                            'auto-trades-stat__value--market1': activeTradingMarket === 'market1',
-                                            'auto-trades-stat__value--market2': activeTradingMarket === 'market2',
+                                            'auto-trades-stat__value--market1': activeTradingMarketRef.current === market1Symbol,
+                                            'auto-trades-stat__value--market2': activeTradingMarketRef.current === market2Symbol,
                                         })}>
-                                            {activeTradingMarket === 'market1' ? '📈 Primary' : '📊 Market 2'}
+                                            {activeTradingMarketRef.current === market1Symbol ? '📈 Primary' : 
+                                             activeTradingMarketRef.current === market2Symbol ? '📊 Market 2' : 
+                                             getActiveMarketDisplay()}
                                         </span>
                                     </div>
                                 )}
