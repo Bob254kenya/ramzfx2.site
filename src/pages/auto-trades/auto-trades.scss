@@ -1,3 +1,4 @@
+// auto-trades.scss
 @use 'components/shared/styles/mixins' as *;
 
 // ── Design tokens ────────────────────────────────────────────────────────────
@@ -197,6 +198,14 @@ $at-text-faint: #2c4060;
         background: linear-gradient(90deg, $at-coral, $at-coral-dark);
     }
 
+    &--disabled {
+        opacity: 0.5;
+        
+        &::before {
+            opacity: 0.2;
+        }
+    }
+
     &__title {
         font-size: 1.5rem;
         font-weight: 700;
@@ -205,11 +214,45 @@ $at-text-faint: #2c4060;
         letter-spacing: 0.01em;
     }
 
+    &__title-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
+        flex-wrap: wrap;
+    }
+
+    &__active-badge {
+        font-size: 0.7rem;
+        font-weight: 700;
+        padding: 0.15rem 0.6rem;
+        border-radius: 1rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        background: $at-teal-glow;
+        color: $at-teal;
+        border: 1px solid rgba(0, 212, 170, 0.3);
+        animation: at-pulse-badge 1.5s infinite;
+        
+        &--market2 {
+            background: $at-coral-glow;
+            color: $at-coral;
+            border: 1px solid rgba(255, 107, 107, 0.3);
+        }
+    }
+
     &__header {
         display: flex;
         justify-content: space-between;
         align-items: center;
         margin-bottom: 1.2rem;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    &__controls {
+        display: flex;
+        align-items: center;
+        gap: 0.8rem;
     }
 
     &__badge {
@@ -250,6 +293,174 @@ $at-text-faint: #2c4060;
     }
 }
 
+.auto-trades-global-features {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid $at-border-subtle;
+
+    @include mobile-or-tablet-screen {
+        grid-template-columns: 1fr;
+    }
+}
+
+// ── Feature Toggle ────────────────────────────────────────────────────────────
+
+.auto-trades-feature-toggle {
+    display: flex;
+    align-items: center;
+}
+
+.auto-trades-feature-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.4rem 0.8rem;
+    background: $at-bg-deep;
+    border: 1px solid $at-border;
+    border-radius: 2rem;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: $at-text-dim;
+
+    &:hover {
+        border-color: $at-border-glow;
+        background: $at-bg-card-2;
+    }
+
+    &:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    &--active {
+        border-color: $at-amber;
+        background: $at-amber-glow;
+        color: $at-amber;
+    }
+
+    &__label {
+        white-space: nowrap;
+    }
+
+    &__switch {
+        width: 2rem;
+        height: 1rem;
+        background: $at-border;
+        border-radius: 1rem;
+        display: flex;
+        align-items: center;
+        padding: 0 0.1rem;
+        transition: all 0.25s ease;
+        flex-shrink: 0;
+    }
+
+    &--active &__switch {
+        background: $at-amber;
+    }
+
+    &__knob {
+        width: 0.8rem;
+        height: 0.8rem;
+        border-radius: 50%;
+        background: $at-text;
+        transition: all 0.25s ease;
+    }
+
+    &--active &__knob {
+        transform: translateX(1rem);
+        background: #fff;
+    }
+}
+
+.auto-trades-feature-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    margin-top: 0.3rem;
+
+    small {
+        font-size: 0.75rem;
+        color: $at-text-muted;
+        display: block;
+    }
+
+    &__active {
+        color: $at-teal !important;
+        font-weight: 600;
+    }
+}
+
+// ── Market Toggle ────────────────────────────────────────────────────────────
+
+.auto-trades-market-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.2rem 0.5rem;
+    background: $at-bg-deep;
+    border: 1px solid $at-border;
+    border-radius: 1.5rem;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: $at-text-muted;
+
+    &:hover {
+        border-color: $at-border-glow;
+    }
+
+    &:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    &--active {
+        border-color: $at-teal;
+        background: $at-teal-glow;
+        color: $at-teal;
+    }
+
+    &__label {
+        font-size: 0.65rem;
+        letter-spacing: 0.04em;
+    }
+
+    &__switch {
+        width: 1.6rem;
+        height: 0.8rem;
+        background: $at-border;
+        border-radius: 0.8rem;
+        display: flex;
+        align-items: center;
+        padding: 0 0.1rem;
+        transition: all 0.25s ease;
+        flex-shrink: 0;
+    }
+
+    &--active &__switch {
+        background: $at-teal;
+    }
+
+    &__knob {
+        width: 0.6rem;
+        height: 0.6rem;
+        border-radius: 50%;
+        background: $at-text;
+        transition: all 0.25s ease;
+    }
+
+    &--active &__knob {
+        transform: translateX(0.8rem);
+        background: #fff;
+    }
+}
+
 // ── Market Config ────────────────────────────────────────────────────────────
 
 .auto-trades-market-config {
@@ -272,6 +483,12 @@ $at-text-faint: #2c4060;
             margin-bottom: 0.3rem;
             letter-spacing: 0.02em;
             text-transform: uppercase;
+        }
+
+        &--feature {
+            label {
+                font-size: 0.8rem;
+            }
         }
     }
 
@@ -685,6 +902,11 @@ $at-text-faint: #2c4060;
     flex-direction: column;
     gap: 0.2rem;
 
+    &--full {
+        grid-column: 1 / -1;
+        text-align: center;
+    }
+
     &__label {
         font-size: 0.8rem;
         font-weight: 600;
@@ -709,6 +931,12 @@ $at-text-faint: #2c4060;
         }
         &--running {
             color: $at-teal;
+        }
+        &--market1 {
+            color: $at-teal;
+        }
+        &--market2 {
+            color: $at-coral;
         }
     }
 }
@@ -922,6 +1150,16 @@ $at-text-faint: #2c4060;
     }
 }
 
+@keyframes at-pulse-badge {
+    0%,
+    100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
 @keyframes at-spin {
     to {
         transform: rotate(360deg);
@@ -946,6 +1184,10 @@ $at-text-faint: #2c4060;
     .auto-trades-card {
         padding: 1.2rem;
         border-radius: 1rem;
+    }
+
+    .auto-trades-global-features {
+        grid-template-columns: 1fr;
     }
 
     .auto-trades-market-config {
@@ -1002,6 +1244,16 @@ $at-text-faint: #2c4060;
         &__quote {
             font-size: 1.6rem;
         }
+    }
+
+    .auto-trades-card__title-wrapper {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.3rem;
+    }
+
+    .auto-trades-card__controls {
+        flex-wrap: wrap;
     }
 }
 
