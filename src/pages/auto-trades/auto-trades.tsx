@@ -66,14 +66,6 @@ const TRADE_TYPE_LABELS: Record<TradeType, string> = {
     RUNLOW: 'Only Downs',
 };
 
-const COMPARISON_OPERATOR_LABELS: Record<ComparisonOperator, string> = {
-    '>': 'Greater than (>)',
-    '<': 'Less than (<)',
-    '>=': 'Greater than or equal (>=)',
-    '<=': 'Less than or equal (<=)',
-    '==': 'Equal to (==)',
-};
-
 const BARRIER_NEEDED: Record<TradeType, boolean> = {
     DIGITOVER: true,
     DIGITUNDER: true,
@@ -159,6 +151,17 @@ const getCandleDirectionLabel = (direction: Direction) => {
     return 'Waiting';
 };
 
+const getComparisonOperatorLabel = (operator: ComparisonOperator): string => {
+    const labels: Record<ComparisonOperator, string> = {
+        '>': 'Greater than (>)',
+        '<': 'Less than (<)',
+        '>=': 'Greater than or equal (>=)',
+        '<=': 'Less than or equal (<=)',
+        '==': 'Equal to (==)',
+    };
+    return labels[operator] || operator;
+};
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 interface MarketConfig {
@@ -171,7 +174,6 @@ interface MarketConfig {
     analysisTicks: string;
     inverseMode: boolean;
     enabled: boolean;
-    useSequenceForOverUnder: boolean; // New: Enable sequence pattern for Over/Under
 }
 
 interface MarketState {
@@ -243,82 +245,33 @@ const checkComparison = (digit: number, operator: ComparisonOperator, value: num
     }
 };
 
-// Parse input sequence with operators (e.g., ">3, <5, ==7" or "E,O,E")
-const parseSequenceWithOperators = (sequence: string): Array<{operator?: ComparisonOperator, value: number | string}> => {
-    if (!sequence || sequence.length === 0) return [];
-    
-    // Check if it's a simple E/O sequence
-    if (/^[EO,;\s]+$/.test(sequence)) {
-        return sequence.replace(/[,;\s]/g, '').split('').map(ch => ({
-            value: ch.toUpperCase()
-        }));
-    }
-    
-    // Parse operator + value pairs (e.g., ">3,<5,==7")
-    const parts = sequence.split(/[,;]/).map(s => s.trim()).filter(s => s.length > 0);
-    return parts.map(part => {
-        // Match pattern: operator followed by optional space then digit
-        const match = part.match(/^(>=|<=|!=|==|>|<)\s*(\d+)$/);
-        if (match) {
-            return {
-                operator: match[1] as ComparisonOperator,
-                value: parseInt(match[2])
-            };
-        }
-        // Fallback: treat as digit
-        const num = parseInt(part);
-        if (!isNaN(num)) {
-            return {
-                operator: '==' as ComparisonOperator,
-                value: num
-            };
-        }
-        // Unknown format, treat as string
-        return { value: part };
-    });
-};
-
-// Enhanced check for digit sequence with operator support
-const checkDigitSequenceWithOperators = (digits: number[], sequence: string): boolean => {
-    if (!sequence || sequence.length === 0) return true;
-    
-    const parsedSequence = parseSequenceWithOperators(sequence);
-    if (parsedSequence.length === 0) return true;
-    if (digits.length < parsedSequence.length) return false;
-    
-    const recentDigits = digits.slice(-parsedSequence.length);
-    
-    for (let i = 0; i < parsedSequence.length; i++) {
-        const expected = parsedSequence[i];
-        const actual = recentDigits[i];
-        
-        if (expected.operator) {
-            // Operator-based comparison
-            if (!checkComparison(actual, expected.operator, expected.value as number)) {
-                return false;
-            }
-        } else {
-            // E/O based comparison
-            const expectedValue = (expected.value as string).toUpperCase();
-            if (expectedValue === 'E') {
-                if (actual % 2 !== 0) return false;
-            } else if (expectedValue === 'O') {
-                if (actual % 2 === 0) return false;
-            } else {
-                const expectedDigit = parseInt(expectedValue);
-                if (isNaN(expectedDigit) || actual !== expectedDigit) return false;
-            }
-        }
-    }
-    return true;
-};
-
-// Check if last N ticks match a repeated pattern (for Over/Under sequence mode)
-const checkRepeatedDigitPattern = (digits: number[], operator: ComparisonOperator, targetDigit: number, tickCount: number): boolean => {
+// Check if last N ticks all match the comparison against barrier
+const checkTickPattern = (digits: number[], tickCount: number, operator: ComparisonOperator, barrier: number): boolean => {
     if (digits.length < tickCount) return false;
     
     const recentDigits = digits.slice(-tickCount);
-    return recentDigits.every(digit => checkComparison(digit, operator, targetDigit));
+    return recentDigits.every(digit => checkComparison(digit, operator, barrier));
+};
+
+// Parse Even/Odd pattern sequence (e.g., "EEO", "OEE", "EOOE")
+const parseEOPattern = (sequence: string): string[] => {
+    return sequence.replace(/[,;\s]/g, '').split('').filter(ch => ch === 'E' || ch === 'O');
+};
+
+// Check if last digits match Even/Odd pattern
+const checkEOPattern = (digits: number[], pattern: string[]): boolean => {
+    if (digits.length < pattern.length) return false;
+    
+    const recentDigits = digits.slice(-pattern.length);
+    
+    for (let i = 0; i < pattern.length; i++) {
+        const expected = pattern[i];
+        const actual = recentDigits[i];
+        
+        if (expected === 'E' && actual % 2 !== 0) return false;
+        if (expected === 'O' && actual % 2 === 0) return false;
+    }
+    return true;
 };
 
 // Check if digit matches based on trade type
@@ -327,108 +280,35 @@ const isDigitSignalMatch = ({
     digit,
     barrier,
     inverse,
-    comparisonOperator,
-    inputSequence,
-    lastDigits,
 }: {
     trade_type: TradeType;
     digit: number;
     barrier: number;
     inverse: boolean;
-    comparisonOperator?: ComparisonOperator;
-    inputSequence?: string;
-    lastDigits?: number[];
 }) => {
-    // For OVER trade with sequence pattern
-    if (trade_type === 'DIGITOVER' && inputSequence && inputSequence.length > 0) {
-        // Use the sequence pattern
-        const match = checkDigitSequenceWithOperators(lastDigits || [], inputSequence);
-        return inverse ? !match : match;
-    }
-    
-    // For UNDER trade with sequence pattern
-    if (trade_type === 'DIGITUNDER' && inputSequence && inputSequence.length > 0) {
-        // Use the sequence pattern
-        const match = checkDigitSequenceWithOperators(lastDigits || [], inputSequence);
-        return inverse ? !match : match;
-    }
-    
-    // For OVER trade without sequence
     if (trade_type === 'DIGITOVER') {
-        const operator = inverse ? '<=' : '>=';
-        return checkComparison(digit, operator as ComparisonOperator, barrier);
+        const result = digit >= barrier;
+        return inverse ? !result : result;
     }
-    // For UNDER trade without sequence
     if (trade_type === 'DIGITUNDER') {
-        const operator = inverse ? '>=' : '<=';
-        return checkComparison(digit, operator as ComparisonOperator, barrier);
+        const result = digit <= barrier;
+        return inverse ? !result : result;
     }
-    // For EVEN trade
     if (trade_type === 'DIGITEVEN') {
         const isEven = digit % 2 === 0;
         return inverse ? !isEven : isEven;
     }
-    // For ODD trade
     if (trade_type === 'DIGITODD') {
         const isOdd = digit % 2 !== 0;
         return inverse ? !isOdd : isOdd;
     }
-    // For MATCH trade
     if (trade_type === 'DIGITMATCH') {
         return inverse ? digit !== barrier : digit === barrier;
     }
-    // For DIFF trade
     if (trade_type === 'DIGITDIFF') {
         return inverse ? digit === barrier : digit !== barrier;
     }
     return false;
-};
-
-// Check if required digit streak/sequence is matched
-const hasRequiredDigitStreak = ({
-    trade_type,
-    digits,
-    barrier,
-    inverse,
-    inputSequence,
-    comparisonOperator,
-    streak,
-}: {
-    trade_type: TradeType;
-    digits: number[];
-    barrier: number;
-    inverse: boolean;
-    inputSequence?: string;
-    comparisonOperator?: ComparisonOperator;
-    streak: number;
-}) => {
-    if (digits.length < streak) return false;
-    
-    const recentDigits = digits.slice(-streak);
-    
-    // For Over/Under with sequence pattern
-    if ((trade_type === 'DIGITOVER' || trade_type === 'DIGITUNDER') && inputSequence && inputSequence.length > 0) {
-        // Use the sequence pattern for all required ticks
-        return checkDigitSequenceWithOperators(digits, inputSequence);
-    }
-    
-    // If we have an input sequence for other types, use that for matching
-    if (inputSequence && inputSequence.length > 0) {
-        return checkDigitSequenceWithOperators(digits, inputSequence);
-    }
-    
-    // Otherwise check each digit against the trade type
-    return recentDigits.every(digit => 
-        isDigitSignalMatch({ 
-            trade_type, 
-            digit, 
-            barrier, 
-            inverse,
-            comparisonOperator,
-            inputSequence,
-            lastDigits: digits
-        })
-    );
 };
 
 const isDirectionMatch = (trade_type: TradeType, direction: Direction) => {
@@ -630,20 +510,17 @@ const AutoTrades = observer(() => {
         loadSavedNum('market1_predictionDigit', '4', 0, 9)
     );
     const [market1ComparisonOperator, setMarket1ComparisonOperator] = useState<ComparisonOperator>(() => {
-        const saved = loadSaved('market1_comparisonOperator', '>=');
-        return ['>', '<', '>=', '<=', '=='].includes(saved) ? saved as ComparisonOperator : '>=';
+        const saved = loadSaved('market1_comparisonOperator', '<=');
+        return ['>', '<', '>=', '<=', '=='].includes(saved) ? saved as ComparisonOperator : '<=';
     });
     const [market1InputSequence, setMarket1InputSequence] = useState(() => 
         loadSaved('market1_inputSequence', '')
     );
     const [market1AnalysisTicks, setMarket1AnalysisTicks] = useState(() => 
-        loadSavedNum('market1_analysisTicks', '1', 1, MAX_ANALYSIS_TICKS)
+        loadSavedNum('market1_analysisTicks', '4', 1, MAX_ANALYSIS_TICKS)
     );
     const [market1Inverse, setMarket1Inverse] = useState(() => loadSavedBoolean('market1_inverse', false));
     const [market1Enabled, setMarket1Enabled] = useState(() => loadSavedBoolean('market1_enabled', true));
-    const [market1UseSequenceForOverUnder, setMarket1UseSequenceForOverUnder] = useState(() => 
-        loadSavedBoolean('market1_useSequenceForOverUnder', false)
-    );
 
     // ── Market 2 Config State ─────────────────────────────────────────────
 
@@ -660,20 +537,17 @@ const AutoTrades = observer(() => {
         loadSavedNum('market2_predictionDigit', '5', 0, 9)
     );
     const [market2ComparisonOperator, setMarket2ComparisonOperator] = useState<ComparisonOperator>(() => {
-        const saved = loadSaved('market2_comparisonOperator', '>=');
-        return ['>', '<', '>=', '<=', '=='].includes(saved) ? saved as ComparisonOperator : '>=';
+        const saved = loadSaved('market2_comparisonOperator', '<=');
+        return ['>', '<', '>=', '<=', '=='].includes(saved) ? saved as ComparisonOperator : '<=';
     });
     const [market2InputSequence, setMarket2InputSequence] = useState(() => 
         loadSaved('market2_inputSequence', '')
     );
     const [market2AnalysisTicks, setMarket2AnalysisTicks] = useState(() => 
-        loadSavedNum('market2_analysisTicks', '1', 1, MAX_ANALYSIS_TICKS)
+        loadSavedNum('market2_analysisTicks', '4', 1, MAX_ANALYSIS_TICKS)
     );
     const [market2Inverse, setMarket2Inverse] = useState(() => loadSavedBoolean('market2_inverse', false));
     const [market2Enabled, setMarket2Enabled] = useState(() => loadSavedBoolean('market2_enabled', true));
-    const [market2UseSequenceForOverUnder, setMarket2UseSequenceForOverUnder] = useState(() => 
-        loadSavedBoolean('market2_useSequenceForOverUnder', false)
-    );
 
     // ── UI State ───────────────────────────────────────────────────────────
 
@@ -772,7 +646,6 @@ const AutoTrades = observer(() => {
                     analysisTicks: market1AnalysisTicks,
                     inverseMode: market1Inverse,
                     enabled: true,
-                    useSequenceForOverUnder: market1UseSequenceForOverUnder,
                 };
             }
             if (symbol === market2Symbol && market2Enabled) {
@@ -786,7 +659,6 @@ const AutoTrades = observer(() => {
                     analysisTicks: market2AnalysisTicks,
                     inverseMode: market2Inverse,
                     enabled: true,
-                    useSequenceForOverUnder: market2UseSequenceForOverUnder,
                 };
             }
             return {
@@ -799,7 +671,6 @@ const AutoTrades = observer(() => {
                 analysisTicks: market1AnalysisTicks,
                 inverseMode: false,
                 enabled: true,
-                useSequenceForOverUnder: false,
             };
         }
 
@@ -814,7 +685,6 @@ const AutoTrades = observer(() => {
                 analysisTicks: market1AnalysisTicks,
                 inverseMode: market1Inverse,
                 enabled: true,
-                useSequenceForOverUnder: market1UseSequenceForOverUnder,
             };
         }
         if (symbol === market2Symbol && market2Enabled) {
@@ -828,7 +698,6 @@ const AutoTrades = observer(() => {
                 analysisTicks: market2AnalysisTicks,
                 inverseMode: market2Inverse,
                 enabled: true,
-                useSequenceForOverUnder: market2UseSequenceForOverUnder,
             };
         }
         return null;
@@ -836,10 +705,8 @@ const AutoTrades = observer(() => {
         scanAllMarkets,
         market1Symbol, market1TradeType, market1Barrier, market1PredictionDigit,
         market1ComparisonOperator, market1InputSequence, market1AnalysisTicks, market1Inverse, market1Enabled,
-        market1UseSequenceForOverUnder,
         market2Symbol, market2TradeType, market2Barrier, market2PredictionDigit,
-        market2ComparisonOperator, market2InputSequence, market2AnalysisTicks, market2Inverse, market2Enabled,
-        market2UseSequenceForOverUnder
+        market2ComparisonOperator, market2InputSequence, market2AnalysisTicks, market2Inverse, market2Enabled
     ]);
 
     // Update market configs ref whenever settings change
@@ -884,7 +751,6 @@ const AutoTrades = observer(() => {
             localStorage.setItem('auto_trades_market1_analysisTicks', market1AnalysisTicks);
             localStorage.setItem('auto_trades_market1_inverse', String(market1Inverse));
             localStorage.setItem('auto_trades_market1_enabled', String(market1Enabled));
-            localStorage.setItem('auto_trades_market1_useSequenceForOverUnder', String(market1UseSequenceForOverUnder));
             
             localStorage.setItem('auto_trades_market2_tradeType', market2TradeType);
             localStorage.setItem('auto_trades_market2_barrier', market2Barrier);
@@ -894,7 +760,6 @@ const AutoTrades = observer(() => {
             localStorage.setItem('auto_trades_market2_analysisTicks', market2AnalysisTicks);
             localStorage.setItem('auto_trades_market2_inverse', String(market2Inverse));
             localStorage.setItem('auto_trades_market2_enabled', String(market2Enabled));
-            localStorage.setItem('auto_trades_market2_useSequenceForOverUnder', String(market2UseSequenceForOverUnder));
             
             localStorage.setItem('auto_trades_stake', stake);
             localStorage.setItem('auto_trades_martingale', martingale);
@@ -911,10 +776,8 @@ const AutoTrades = observer(() => {
     }, [
         market1TradeType, market1Barrier, market1PredictionDigit,
         market1ComparisonOperator, market1InputSequence, market1AnalysisTicks, market1Inverse, market1Enabled,
-        market1UseSequenceForOverUnder,
         market2TradeType, market2Barrier, market2PredictionDigit,
         market2ComparisonOperator, market2InputSequence, market2AnalysisTicks, market2Inverse, market2Enabled,
-        market2UseSequenceForOverUnder,
         stake, martingale, takeProfit, stopLoss, martingaleMode, consecutiveLossCount,
         market1Symbol, market2Symbol, switchOnLoss, scanAllMarkets
     ]);
@@ -1367,46 +1230,29 @@ const AutoTrades = observer(() => {
 
                 let match = false;
                 
-                // Check if trade type is OVER or UNDER
+                // Over/Under: Use tick-based comparison
                 if (ct === 'DIGITOVER' || ct === 'DIGITUNDER') {
-                    // Check if using sequence pattern mode
-                    if (config.useSequenceForOverUnder && config.inputSequence && config.inputSequence.length > 0) {
-                        // Use sequence pattern for Over/Under
-                        const parsedSequence = parseSequenceWithOperators(config.inputSequence);
-                        
-                        if (parsedSequence.length > 0 && parsedSequence[0].operator) {
-                            // If sequence has operators, check the last N ticks against the operator pattern
-                            const operator = parsedSequence[0].operator;
-                            const targetDigit = parsedSequence[0].value as number;
-                            
-                            // Check if the last N ticks match the repeated pattern
-                            const ticksToCheck = parsedSequence.length;
-                            match = checkRepeatedDigitPattern(state.lastDigits, operator, targetDigit, ticksToCheck);
+                    const operator = config.comparisonOperator;
+                    const tickCount = Math.max(1, getDigitNumber(config.analysisTicks, 1));
+                    match = checkTickPattern(state.lastDigits, tickCount, operator, bar);
+                }
+                // Even/Odd: Use pattern sequence
+                else if (ct === 'DIGITEVEN' || ct === 'DIGITODD') {
+                    if (config.inputSequence && config.inputSequence.length > 0) {
+                        const eoPattern = parseEOPattern(config.inputSequence);
+                        if (eoPattern.length > 0) {
+                            match = checkEOPattern(state.lastDigits, eoPattern);
                         } else {
-                            // E/O sequence
-                            match = checkDigitSequenceWithOperators(state.lastDigits, config.inputSequence);
+                            // Fallback: single digit check
+                            match = isDigitSignalMatch({ trade_type: ct, digit: lastDigit, barrier: bar, inverse: inv });
                         }
                     } else {
-                        // Use comparison operator for single digit check
-                        const operator = config.comparisonOperator;
-                        match = checkComparison(lastDigit, operator, bar);
+                        match = isDigitSignalMatch({ trade_type: ct, digit: lastDigit, barrier: bar, inverse: inv });
                     }
-                } else {
-                    // For EVEN, ODD, MATCH, DIFF - check if input sequence exists
-                    if (config.inputSequence && config.inputSequence.length > 0) {
-                        match = checkDigitSequenceWithOperators(state.lastDigits, config.inputSequence);
-                    } else {
-                        // Fall back to single digit check
-                        match = isDigitSignalMatch({
-                            trade_type: ct,
-                            digit: lastDigit,
-                            barrier: bar,
-                            inverse: inv,
-                            comparisonOperator: config.comparisonOperator,
-                            inputSequence: config.inputSequence,
-                            lastDigits: state.lastDigits
-                        });
-                    }
+                }
+                // Match/Diff
+                else {
+                    match = isDigitSignalMatch({ trade_type: ct, digit: lastDigit, barrier: bar, inverse: inv });
                 }
 
                 if (match) {
@@ -1436,16 +1282,13 @@ const AutoTrades = observer(() => {
             } else {
                 const recent = state.lastDigits.slice(-targetLen);
                 digitsStr = `[${recent.join(', ')}]`;
+                
                 if (ct === 'DIGITOVER' || ct === 'DIGITUNDER') {
-                    if (config.useSequenceForOverUnder && config.inputSequence) {
-                        condStr = `${invLabel}Sequence: ${config.inputSequence}`;
-                    } else {
-                        condStr = `${invLabel}${label} ${config.comparisonOperator} ${bar} streak ${targetLen}+`;
-                    }
-                } else if (config.inputSequence && config.inputSequence.length > 0) {
-                    condStr = `${invLabel}Sequence: ${config.inputSequence}`;
+                    condStr = `${invLabel}Last ${targetLen} ticks ${getComparisonOperatorLabel(config.comparisonOperator)} ${bar}`;
+                } else if ((ct === 'DIGITEVEN' || ct === 'DIGITODD') && config.inputSequence) {
+                    condStr = `${invLabel}Pattern: ${config.inputSequence}`;
                 } else {
-                    condStr = `${invLabel}${label} ${bar} streak ${targetLen}+`;
+                    condStr = `${invLabel}${label} ${bar}`;
                 }
             }
 
@@ -1881,6 +1724,114 @@ const AutoTrades = observer(() => {
         });
     }, [market1Symbol, market2Symbol, market1Enabled, market2Enabled, scanAllMarkets, stake]);
 
+    // ── Analysis Data Computation ─────────────────────────────────────────
+
+    const getMarketAnalysis = useCallback((symbol: string, config: MarketConfig | null) => {
+        const state = marketStatesRef.current[symbol];
+        if (!state || !config) return null;
+
+        const targetLen = Math.min(MAX_STREAK_LENGTH, Math.max(1, getDigitNumber(config.analysisTicks, 1)));
+        const recentDigits = state.lastDigits.slice(-targetLen);
+        const ct = config.tradeType;
+        const inv = config.inverseMode;
+        const bar = getDigitNumber(config.barrier, 4);
+
+        let allMatch = false;
+        let tickResults: boolean[] = [];
+        let conditionText = '';
+
+        if (ct === 'DIGITOVER' || ct === 'DIGITUNDER') {
+            const operator = config.comparisonOperator;
+            tickResults = recentDigits.map(d => checkComparison(d, operator, bar));
+            allMatch = recentDigits.length >= targetLen && tickResults.every(Boolean);
+            conditionText = `${inv ? 'Inverse ' : ''}${TRADE_TYPE_LABELS[ct]}: Last ${targetLen} ticks ${getComparisonOperatorLabel(operator)} ${bar}`;
+        } else if (ct === 'DIGITEVEN' || ct === 'DIGITODD') {
+            if (config.inputSequence && config.inputSequence.length > 0) {
+                const eoPattern = parseEOPattern(config.inputSequence);
+                tickResults = recentDigits.map((d, i) => {
+                    if (i >= eoPattern.length) return false;
+                    return eoPattern[i] === 'E' ? d % 2 === 0 : d % 2 !== 0;
+                });
+                allMatch = recentDigits.length >= eoPattern.length && checkEOPattern(state.lastDigits, eoPattern);
+                conditionText = `${inv ? 'Inverse ' : ''}Pattern: ${config.inputSequence}`;
+            } else {
+                tickResults = recentDigits.map(d => isDigitSignalMatch({ trade_type: ct, digit: d, barrier: bar, inverse: inv }));
+                allMatch = recentDigits.length >= targetLen && tickResults.every(Boolean);
+                conditionText = `${inv ? 'Inverse ' : ''}${TRADE_TYPE_LABELS[ct]}: ${bar}`;
+            }
+        } else {
+            tickResults = recentDigits.map(d => isDigitSignalMatch({ trade_type: ct, digit: d, barrier: bar, inverse: inv }));
+            allMatch = recentDigits.length >= targetLen && tickResults.every(Boolean);
+            conditionText = `${inv ? 'Inverse ' : ''}${TRADE_TYPE_LABELS[ct]}: ${bar}`;
+        }
+
+        return {
+            allMatch,
+            tickResults,
+            recentDigits,
+            targetLen,
+            conditionText,
+            signalReady: state.consecutive >= targetLen,
+        };
+    }, []);
+
+    // ── Render Analysis Container ─────────────────────────────────────────
+
+    const renderAnalysisContainer = (symbol: string, config: MarketConfig | null) => {
+        if (!config) return null;
+        
+        const analysis = getMarketAnalysis(symbol, config);
+        if (!analysis) return null;
+
+        const statusClass = analysis.signalReady ? '--found' : analysis.allMatch ? '--waiting' : '--none';
+        const statusText = analysis.signalReady ? 'SIGNAL READY' : analysis.allMatch ? 'PATTERN MATCHED' : 'WAITING';
+
+        return (
+            <div className='auto-trades-analysis'>
+                <div className='auto-trades-analysis__header'>
+                    <span className='auto-trades-analysis__title'>📊 Pattern Analysis</span>
+                    <span className={classNames('auto-trades-analysis__status', `auto-trades-analysis__status${statusClass}`)}>
+                        {statusText}
+                    </span>
+                </div>
+                <div className='auto-trades-analysis__body'>
+                    <div className='auto-trades-analysis__row'>
+                        <span>Required Ticks:</span>
+                        <strong>{analysis.targetLen}</strong>
+                    </div>
+                    <div className='auto-trades-analysis__row'>
+                        <span>Condition:</span>
+                        <strong>{analysis.conditionText}</strong>
+                    </div>
+                    <div className='auto-trades-analysis__row'>
+                        <span>Last {analysis.targetLen} Ticks:</span>
+                    </div>
+                    <div className='auto-trades-analysis__ticks'>
+                        {analysis.recentDigits.map((digit, idx) => (
+                            <span 
+                                key={idx} 
+                                className={classNames('auto-trades-analysis__tick', {
+                                    'auto-trades-analysis__tick--match': analysis.tickResults[idx],
+                                    'auto-trades-analysis__tick--nomatch': !analysis.tickResults[idx] && analysis.recentDigits.length >= analysis.targetLen,
+                                })}
+                            >
+                                {digit}
+                            </span>
+                        ))}
+                        {analysis.recentDigits.length < analysis.targetLen && (
+                            <span className='auto-trades-analysis__tick'>...</span>
+                        )}
+                    </div>
+                    {analysis.signalReady && (
+                        <div className='auto-trades-analysis__condition'>
+                            ✅ Signal Ready! Waiting for next tick to execute trade.
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    };
+
     // ── Render ────────────────────────────────────────────────────────────
 
     if (!show_auto) return null;
@@ -1899,6 +1850,9 @@ const AutoTrades = observer(() => {
         const market = AUTO_MARKET_LOOKUP.get(activeSymbol);
         return market?.label || activeSymbol;
     };
+
+    const market1Config = marketConfigsRef.current[market1Symbol] || null;
+    const market2Config = marketConfigsRef.current[market2Symbol] || null;
 
     return (
         <div className='auto-trades-page'>
@@ -2187,36 +2141,25 @@ const AutoTrades = observer(() => {
                                                 </select>
                                             </div>
                                             
-                                            {/* Show Sequence Toggle for Over/Under */}
+                                            {/* Over/Under: Tick-based comparison */}
                                             {(market1TradeType === 'DIGITOVER' || market1TradeType === 'DIGITUNDER') && (
-                                                <div className='auto-trades-config__field'>
-                                                    <label>Use Sequence Pattern</label>
-                                                    <div className='auto-trades-feature-toggle'>
-                                                        <button
-                                                            type='button'
-                                                            className={classNames(
-                                                                'auto-trades-feature-btn',
-                                                                market1UseSequenceForOverUnder && 'auto-trades-feature-btn--active'
-                                                            )}
-                                                            onClick={() => setMarket1UseSequenceForOverUnder(prev => !prev)}
-                                                            disabled={isRunning}
-                                                        >
-                                                            <span className='auto-trades-feature-btn__label'>
-                                                                {market1UseSequenceForOverUnder ? '📊 Sequence Mode' : '→ Single Digit'}
-                                                            </span>
-                                                            <span className='auto-trades-feature-btn__switch'>
-                                                                <span className='auto-trades-feature-btn__knob' />
-                                                            </span>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Show Comparison Operator when NOT using sequence */}
-                                            {(!market1UseSequenceForOverUnder || (market1TradeType !== 'DIGITOVER' && market1TradeType !== 'DIGITUNDER')) && BARRIER_NEEDED[market1TradeType] && (
                                                 <>
                                                     <div className='auto-trades-config__field'>
-                                                        <label>Comparison</label>
+                                                        <label>Number of Last Ticks</label>
+                                                        <select
+                                                            className='auto-trades-config__select'
+                                                            value={market1AnalysisTicks}
+                                                            onChange={e => setMarket1AnalysisTicks(e.target.value)}
+                                                            disabled={isRunning}
+                                                        >
+                                                            {Array.from({ length: MAX_ANALYSIS_TICKS }, (_, i) => i + 1).map(d => (
+                                                                <option key={d} value={String(d)}>{d}</option>
+                                                            ))}
+                                                        </select>
+                                                        <small className='auto-trades-config__hint'>Check last N ticks against comparison</small>
+                                                    </div>
+                                                    <div className='auto-trades-config__field'>
+                                                        <label>Comparison Operator</label>
                                                         <select
                                                             className='auto-trades-config__select'
                                                             value={market1ComparisonOperator}
@@ -2231,7 +2174,7 @@ const AutoTrades = observer(() => {
                                                         </select>
                                                     </div>
                                                     <div className='auto-trades-config__field'>
-                                                        <label>Digit to compare</label>
+                                                        <label>Digit to Compare</label>
                                                         <select
                                                             className='auto-trades-config__select'
                                                             value={market1Barrier}
@@ -2242,11 +2185,11 @@ const AutoTrades = observer(() => {
                                                                 <option key={d} value={String(d)}>{d}</option>
                                                             ))}
                                                         </select>
-                                                        <small className='auto-trades-config__hint'>Fixed digit for comparison</small>
+                                                        <small className='auto-trades-config__hint'>Compare last N ticks against this digit</small>
                                                     </div>
                                                     {usesLossPrediction(market1TradeType) && (
                                                         <div className='auto-trades-config__field'>
-                                                            <label>Digit to predict</label>
+                                                            <label>Digit to Predict</label>
                                                             <select
                                                                 className='auto-trades-config__select'
                                                                 value={market1PredictionDigit}
@@ -2257,65 +2200,70 @@ const AutoTrades = observer(() => {
                                                                     <option key={d} value={String(d)}>{d}</option>
                                                                 ))}
                                                             </select>
-                                                            <small className='auto-trades-config__hint'>Always uses this digit for predictions</small>
+                                                            <small className='auto-trades-config__hint'>Predict digit for the contract</small>
                                                         </div>
                                                     )}
                                                 </>
                                             )}
 
-                                            {/* Input Sequence for all trade types */}
-                                            <div className='auto-trades-config__field'>
-                                                <label>
-                                                    {market1UseSequenceForOverUnder && (market1TradeType === 'DIGITOVER' || market1TradeType === 'DIGITUNDER')
-                                                        ? 'Sequence Pattern (e.g., >3,<5,==7)'
-                                                        : 'Input Sequence (E=Even, O=Odd)'}
-                                                </label>
-                                                <Input
-                                                    type='text'
-                                                    placeholder={market1UseSequenceForOverUnder 
-                                                        ? 'e.g., <3,<5,<7' 
-                                                        : 'e.g., EEO, OEE'}
-                                                    value={market1InputSequence}
-                                                    onChange={e => setMarket1InputSequence(e.target.value.toUpperCase())}
-                                                    disabled={isRunning}
-                                                />
-                                                <small className='auto-trades-config__hint'>
-                                                    {market1UseSequenceForOverUnder && (market1TradeType === 'DIGITOVER' || market1TradeType === 'DIGITUNDER')
-                                                        ? 'Use >, <, >=, <=, == with comma separation (e.g., <3,<5)'
-                                                        : 'Enter pattern like "EEO" for Even-Even-Odd'}
-                                                </small>
-                                                {market1InputSequence && !market1UseSequenceForOverUnder && (
-                                                    <div className='auto-trades-config__sequence-preview'>
-                                                        Pattern: {market1InputSequence.split('').map((ch, i) => (
-                                                            <span key={i} className={`auto-trades-config__sequence-char ${ch === 'E' ? 'even' : ch === 'O' ? 'odd' : ''}`}>
-                                                                {ch === 'E' ? 'Even' : ch === 'O' ? 'Odd' : ch}
-                                                            </span>
-                                                        ))}
+                                            {/* Even/Odd: Pattern sequence */}
+                                            {(market1TradeType === 'DIGITEVEN' || market1TradeType === 'DIGITODD') && (
+                                                <>
+                                                    <div className='auto-trades-config__field'>
+                                                        <label>Pattern Sequence (E=Even, O=Odd)</label>
+                                                        <Input
+                                                            type='text'
+                                                            placeholder='e.g., EEO, OEE, EOOE'
+                                                            value={market1InputSequence}
+                                                            onChange={e => setMarket1InputSequence(e.target.value.toUpperCase().replace(/[^EO]/g, ''))}
+                                                            disabled={isRunning}
+                                                        />
+                                                        <small className='auto-trades-config__hint'>Enter pattern like "EEO" for Even-Even-Odd</small>
+                                                        {market1InputSequence && (
+                                                            <div className='auto-trades-config__sequence-preview'>
+                                                                Pattern: {market1InputSequence.split('').map((ch, i) => (
+                                                                    <span key={i} className={`auto-trades-config__sequence-char ${ch === 'E' ? 'even' : 'odd'}`}>
+                                                                        {ch === 'E' ? 'Even' : 'Odd'}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                )}
-                                                {market1InputSequence && market1UseSequenceForOverUnder && (
-                                                    <div className='auto-trades-config__sequence-preview'>
-                                                        {parseSequenceWithOperators(market1InputSequence).map((item, i) => (
-                                                            <span key={i} className='auto-trades-config__sequence-char even'>
-                                                                {item.operator} {item.value}
-                                                            </span>
-                                                        ))}
+                                                </>
+                                            )}
+
+                                            {/* Match/Diff: Single digit */}
+                                            {(market1TradeType === 'DIGITMATCH' || market1TradeType === 'DIGITDIFF') && (
+                                                <>
+                                                    <div className='auto-trades-config__field'>
+                                                        <label>Digit</label>
+                                                        <select
+                                                            className='auto-trades-config__select'
+                                                            value={market1Barrier}
+                                                            onChange={e => setMarket1Barrier(e.target.value)}
+                                                            disabled={isRunning}
+                                                        >
+                                                            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
+                                                                <option key={d} value={String(d)}>{d}</option>
+                                                            ))}
+                                                        </select>
                                                     </div>
-                                                )}
-                                            </div>
-                                            <div className='auto-trades-config__field'>
-                                                <label>Analysis ticks</label>
-                                                <select
-                                                    className='auto-trades-config__select'
-                                                    value={market1AnalysisTicks}
-                                                    onChange={e => setMarket1AnalysisTicks(e.target.value)}
-                                                    disabled={isRunning}
-                                                >
-                                                    {Array.from({ length: MAX_ANALYSIS_TICKS }, (_, i) => i + 1).map(d => (
-                                                        <option key={d} value={String(d)}>{d}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
+                                                    <div className='auto-trades-config__field'>
+                                                        <label>Analysis Ticks</label>
+                                                        <select
+                                                            className='auto-trades-config__select'
+                                                            value={market1AnalysisTicks}
+                                                            onChange={e => setMarket1AnalysisTicks(e.target.value)}
+                                                            disabled={isRunning}
+                                                        >
+                                                            {Array.from({ length: MAX_ANALYSIS_TICKS }, (_, i) => i + 1).map(d => (
+                                                                <option key={d} value={String(d)}>{d}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                </>
+                                            )}
+
                                             <div className='auto-trades-config__field'>
                                                 <label>Inverse Mode</label>
                                                 <div className='auto-trades-inverse-toggle'>
@@ -2375,20 +2323,6 @@ const AutoTrades = observer(() => {
                                                             ))}
                                                         </div>
                                                     )}
-                                                    {marketDisplays.find(m => m.symbol === market1Symbol)?.lastDigits.length > 0 && market1InputSequence && (
-                                                        <div className='auto-trades-market-display__sequence'>
-                                                            Pattern: {market1InputSequence}
-                                                        </div>
-                                                    )}
-                                                    {IS_DIRECTION_TYPE[market1TradeType] && marketDisplays.find(m => m.symbol === market1Symbol)?.directionHistory.length > 0 && (
-                                                        <div className='auto-trades-market-display__digits'>
-                                                            {marketDisplays.find(m => m.symbol === market1Symbol)?.directionHistory.slice(-5).map((dir, idx) => (
-                                                                <span key={idx} className='auto-trades-market-display__digit' style={{ '--i': idx } as React.CSSProperties}>
-                                                                    {dir === 1 ? '▲' : dir === -1 ? '▼' : '—'}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    )}
                                                     <div className='auto-trades-market-display__candle'>
                                                         5m: {getCandleDirectionLabel(marketDisplays.find(m => m.symbol === market1Symbol)?.candleDirection || 0)}
                                                     </div>
@@ -2400,6 +2334,8 @@ const AutoTrades = observer(() => {
                                                 </div>
                                             )}
                                         </div>
+                                        {/* Analysis Container for Market 1 */}
+                                        {market1Enabled && renderAnalysisContainer(market1Symbol, market1Config)}
                                     </>
                                 )}
                             </div>
@@ -2481,36 +2417,25 @@ const AutoTrades = observer(() => {
                                                 </select>
                                             </div>
                                             
-                                            {/* Show Sequence Toggle for Over/Under */}
+                                            {/* Over/Under: Tick-based comparison */}
                                             {(market2TradeType === 'DIGITOVER' || market2TradeType === 'DIGITUNDER') && (
-                                                <div className='auto-trades-config__field'>
-                                                    <label>Use Sequence Pattern</label>
-                                                    <div className='auto-trades-feature-toggle'>
-                                                        <button
-                                                            type='button'
-                                                            className={classNames(
-                                                                'auto-trades-feature-btn',
-                                                                market2UseSequenceForOverUnder && 'auto-trades-feature-btn--active'
-                                                            )}
-                                                            onClick={() => setMarket2UseSequenceForOverUnder(prev => !prev)}
-                                                            disabled={isRunning}
-                                                        >
-                                                            <span className='auto-trades-feature-btn__label'>
-                                                                {market2UseSequenceForOverUnder ? '📊 Sequence Mode' : '→ Single Digit'}
-                                                            </span>
-                                                            <span className='auto-trades-feature-btn__switch'>
-                                                                <span className='auto-trades-feature-btn__knob' />
-                                                            </span>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Show Comparison Operator when NOT using sequence */}
-                                            {(!market2UseSequenceForOverUnder || (market2TradeType !== 'DIGITOVER' && market2TradeType !== 'DIGITUNDER')) && BARRIER_NEEDED[market2TradeType] && (
                                                 <>
                                                     <div className='auto-trades-config__field'>
-                                                        <label>Comparison</label>
+                                                        <label>Number of Last Ticks</label>
+                                                        <select
+                                                            className='auto-trades-config__select'
+                                                            value={market2AnalysisTicks}
+                                                            onChange={e => setMarket2AnalysisTicks(e.target.value)}
+                                                            disabled={isRunning}
+                                                        >
+                                                            {Array.from({ length: MAX_ANALYSIS_TICKS }, (_, i) => i + 1).map(d => (
+                                                                <option key={d} value={String(d)}>{d}</option>
+                                                            ))}
+                                                        </select>
+                                                        <small className='auto-trades-config__hint'>Check last N ticks against comparison</small>
+                                                    </div>
+                                                    <div className='auto-trades-config__field'>
+                                                        <label>Comparison Operator</label>
                                                         <select
                                                             className='auto-trades-config__select'
                                                             value={market2ComparisonOperator}
@@ -2525,7 +2450,7 @@ const AutoTrades = observer(() => {
                                                         </select>
                                                     </div>
                                                     <div className='auto-trades-config__field'>
-                                                        <label>Digit to compare</label>
+                                                        <label>Digit to Compare</label>
                                                         <select
                                                             className='auto-trades-config__select'
                                                             value={market2Barrier}
@@ -2536,11 +2461,11 @@ const AutoTrades = observer(() => {
                                                                 <option key={d} value={String(d)}>{d}</option>
                                                             ))}
                                                         </select>
-                                                        <small className='auto-trades-config__hint'>Fixed digit for comparison</small>
+                                                        <small className='auto-trades-config__hint'>Compare last N ticks against this digit</small>
                                                     </div>
                                                     {usesLossPrediction(market2TradeType) && (
                                                         <div className='auto-trades-config__field'>
-                                                            <label>Digit to predict</label>
+                                                            <label>Digit to Predict</label>
                                                             <select
                                                                 className='auto-trades-config__select'
                                                                 value={market2PredictionDigit}
@@ -2551,65 +2476,70 @@ const AutoTrades = observer(() => {
                                                                     <option key={d} value={String(d)}>{d}</option>
                                                                 ))}
                                                             </select>
-                                                            <small className='auto-trades-config__hint'>Always uses this digit for predictions</small>
+                                                            <small className='auto-trades-config__hint'>Predict digit for the contract</small>
                                                         </div>
                                                     )}
                                                 </>
                                             )}
 
-                                            {/* Input Sequence for all trade types */}
-                                            <div className='auto-trades-config__field'>
-                                                <label>
-                                                    {market2UseSequenceForOverUnder && (market2TradeType === 'DIGITOVER' || market2TradeType === 'DIGITUNDER')
-                                                        ? 'Sequence Pattern (e.g., >3,<5,==7)'
-                                                        : 'Input Sequence (E=Even, O=Odd)'}
-                                                </label>
-                                                <Input
-                                                    type='text'
-                                                    placeholder={market2UseSequenceForOverUnder 
-                                                        ? 'e.g., <3,<5,<7' 
-                                                        : 'e.g., EEO, OEE'}
-                                                    value={market2InputSequence}
-                                                    onChange={e => setMarket2InputSequence(e.target.value.toUpperCase())}
-                                                    disabled={isRunning}
-                                                />
-                                                <small className='auto-trades-config__hint'>
-                                                    {market2UseSequenceForOverUnder && (market2TradeType === 'DIGITOVER' || market2TradeType === 'DIGITUNDER')
-                                                        ? 'Use >, <, >=, <=, == with comma separation (e.g., <3,<5)'
-                                                        : 'Enter pattern like "EEO" for Even-Even-Odd'}
-                                                </small>
-                                                {market2InputSequence && !market2UseSequenceForOverUnder && (
-                                                    <div className='auto-trades-config__sequence-preview'>
-                                                        Pattern: {market2InputSequence.split('').map((ch, i) => (
-                                                            <span key={i} className={`auto-trades-config__sequence-char ${ch === 'E' ? 'even' : ch === 'O' ? 'odd' : ''}`}>
-                                                                {ch === 'E' ? 'Even' : ch === 'O' ? 'Odd' : ch}
-                                                            </span>
-                                                        ))}
+                                            {/* Even/Odd: Pattern sequence */}
+                                            {(market2TradeType === 'DIGITEVEN' || market2TradeType === 'DIGITODD') && (
+                                                <>
+                                                    <div className='auto-trades-config__field'>
+                                                        <label>Pattern Sequence (E=Even, O=Odd)</label>
+                                                        <Input
+                                                            type='text'
+                                                            placeholder='e.g., EEO, OEE, EOOE'
+                                                            value={market2InputSequence}
+                                                            onChange={e => setMarket2InputSequence(e.target.value.toUpperCase().replace(/[^EO]/g, ''))}
+                                                            disabled={isRunning}
+                                                        />
+                                                        <small className='auto-trades-config__hint'>Enter pattern like "EEO" for Even-Even-Odd</small>
+                                                        {market2InputSequence && (
+                                                            <div className='auto-trades-config__sequence-preview'>
+                                                                Pattern: {market2InputSequence.split('').map((ch, i) => (
+                                                                    <span key={i} className={`auto-trades-config__sequence-char ${ch === 'E' ? 'even' : 'odd'}`}>
+                                                                        {ch === 'E' ? 'Even' : 'Odd'}
+                                                                    </span>
+                                                                ))}
+                                                            </div>
+                                                        )}
                                                     </div>
-                                                )}
-                                                {market2InputSequence && market2UseSequenceForOverUnder && (
-                                                    <div className='auto-trades-config__sequence-preview'>
-                                                        {parseSequenceWithOperators(market2InputSequence).map((item, i) => (
-                                                            <span key={i} className='auto-trades-config__sequence-char even'>
-                                                                {item.operator} {item.value}
-                                                            </span>
-                                                        ))}
+                                                </>
+                                            )}
+
+                                            {/* Match/Diff: Single digit */}
+                                            {(market2TradeType === 'DIGITMATCH' || market2TradeType === 'DIGITDIFF') && (
+                                                <>
+                                                    <div className='auto-trades-config__field'>
+                                                        <label>Digit</label>
+                                                        <select
+                                                            className='auto-trades-config__select'
+                                                            value={market2Barrier}
+                                                            onChange={e => setMarket2Barrier(e.target.value)}
+                                                            disabled={isRunning}
+                                                        >
+                                                            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
+                                                                <option key={d} value={String(d)}>{d}</option>
+                                                            ))}
+                                                        </select>
                                                     </div>
-                                                )}
-                                            </div>
-                                            <div className='auto-trades-config__field'>
-                                                <label>Analysis ticks</label>
-                                                <select
-                                                    className='auto-trades-config__select'
-                                                    value={market2AnalysisTicks}
-                                                    onChange={e => setMarket2AnalysisTicks(e.target.value)}
-                                                    disabled={isRunning}
-                                                >
-                                                    {Array.from({ length: MAX_ANALYSIS_TICKS }, (_, i) => i + 1).map(d => (
-                                                        <option key={d} value={String(d)}>{d}</option>
-                                                    ))}
-                                                </select>
-                                            </div>
+                                                    <div className='auto-trades-config__field'>
+                                                        <label>Analysis Ticks</label>
+                                                        <select
+                                                            className='auto-trades-config__select'
+                                                            value={market2AnalysisTicks}
+                                                            onChange={e => setMarket2AnalysisTicks(e.target.value)}
+                                                            disabled={isRunning}
+                                                        >
+                                                            {Array.from({ length: MAX_ANALYSIS_TICKS }, (_, i) => i + 1).map(d => (
+                                                                <option key={d} value={String(d)}>{d}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                </>
+                                            )}
+
                                             <div className='auto-trades-config__field'>
                                                 <label>Inverse Mode</label>
                                                 <div className='auto-trades-inverse-toggle'>
@@ -2669,20 +2599,6 @@ const AutoTrades = observer(() => {
                                                             ))}
                                                         </div>
                                                     )}
-                                                    {marketDisplays.find(m => m.symbol === market2Symbol)?.lastDigits.length > 0 && market2InputSequence && (
-                                                        <div className='auto-trades-market-display__sequence'>
-                                                            Pattern: {market2InputSequence}
-                                                        </div>
-                                                    )}
-                                                    {IS_DIRECTION_TYPE[market2TradeType] && marketDisplays.find(m => m.symbol === market2Symbol)?.directionHistory.length > 0 && (
-                                                        <div className='auto-trades-market-display__digits'>
-                                                            {marketDisplays.find(m => m.symbol === market2Symbol)?.directionHistory.slice(-5).map((dir, idx) => (
-                                                                <span key={idx} className='auto-trades-market-display__digit' style={{ '--i': idx } as React.CSSProperties}>
-                                                                    {dir === 1 ? '▲' : dir === -1 ? '▼' : '—'}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    )}
                                                     <div className='auto-trades-market-display__candle'>
                                                         5m: {getCandleDirectionLabel(marketDisplays.find(m => m.symbol === market2Symbol)?.candleDirection || 0)}
                                                     </div>
@@ -2694,6 +2610,8 @@ const AutoTrades = observer(() => {
                                                 </div>
                                             )}
                                         </div>
+                                        {/* Analysis Container for Market 2 */}
+                                        {market2Enabled && renderAnalysisContainer(market2Symbol, market2Config)}
                                     </>
                                 )}
                             </div>
