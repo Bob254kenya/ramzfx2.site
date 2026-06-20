@@ -319,6 +319,7 @@ const getNextMartingaleState = ({
     martingale_enabled: boolean;
     consecutive_losses: number;
 }) => {
+    // If profit is >= 0, reset everything
     if (profit >= 0) {
         return {
             consecutiveLosses: 0,
@@ -331,6 +332,7 @@ const getNextMartingaleState = ({
 
     const nextConsecutiveLosses = consecutive_losses + 1;
 
+    // Check max losses reached
     if (nextConsecutiveLosses >= MAX_CONSECUTIVE_LOSSES) {
         return {
             consecutiveLosses: nextConsecutiveLosses,
@@ -341,7 +343,7 @@ const getNextMartingaleState = ({
         };
     }
 
-    // If martingale is disabled, always use base stake
+    // If martingale is disabled, use base stake but track losses
     if (!martingale_enabled) {
         return {
             consecutiveLosses: nextConsecutiveLosses,
@@ -352,7 +354,7 @@ const getNextMartingaleState = ({
         };
     }
 
-    // Martingale enabled: increase stake by multiplier for each consecutive loss
+    // Martingale enabled: increase stake by multiplier^consecutiveLosses
     const martingaleMultiplier = Math.pow(multiplier, nextConsecutiveLosses);
     const nextStake = parseFloat((base_stake * martingaleMultiplier).toFixed(2));
 
@@ -962,6 +964,7 @@ const AutoTrades = observer(() => {
             const tp = Number(takeProfit) || 100;
             const sl = Number(stopLoss) || 100;
 
+            // Calculate next martingale state
             const nextMartingaleState = getNextMartingaleState({
                 profit,
                 base_stake: baseStake,
@@ -970,9 +973,11 @@ const AutoTrades = observer(() => {
                 consecutive_losses: state.consecutiveLosses || 0,
             });
 
+            // Update PnL and trade count
             totalPnlRef.current = parseFloat((totalPnlRef.current + profit).toFixed(2));
             totalTradesRef.current++;
 
+            // Update state with martingale results
             state.consecutiveLosses = nextMartingaleState.consecutiveLosses;
             state.lastResultType = nextMartingaleState.lastResult;
             state.lastResult = nextMartingaleState.lastResult;
@@ -989,6 +994,7 @@ const AutoTrades = observer(() => {
                 pendingTradePromisesRef.current[symbol] = null;
             }
 
+            // Check if max losses reached
             if (nextMartingaleState.maxLossesReached) {
                 console.warn(`[AutoTrades] Maximum consecutive losses reached for ${symbol}. Stopping trading.`);
                 runningRef.current = false;
@@ -1000,6 +1006,7 @@ const AutoTrades = observer(() => {
 
             lastResultRef.current[symbol] = nextMartingaleState.lastResult;
 
+            // Handle market switching on loss
             if (switchOnLoss && market1Enabled && market2Enabled && !scanAllMarkets) {
                 if (profit < 0) {
                     const nextSymbol = getNextMarketForSwitch(symbol);
@@ -1036,6 +1043,7 @@ const AutoTrades = observer(() => {
                 setTotalTrades(totalTradesRef.current);
             }
 
+            // Check take profit / stop loss
             if ((totalPnlRef.current >= tp || totalPnlRef.current <= -sl) && runningRef.current) {
                 runningRef.current = false;
                 if (!unmountedRef.current) {
@@ -1743,7 +1751,7 @@ const AutoTrades = observer(() => {
         };
     }, []);
 
-    // ── Render Analysis Container with Price Updates ─────────────────────
+    // ── Render Analysis Container ─────────────────────────────────────
 
     const renderAnalysisContainer = (symbol: string, config: MarketConfig | null) => {
         if (!config) return null;
@@ -1761,36 +1769,34 @@ const AutoTrades = observer(() => {
         };
 
         return (
-            <div className='auto-trades-analysis'>
-                <div className='auto-trades-analysis__header'>
-                    <span className='auto-trades-analysis__title'>📊 Pattern Analysis</span>
-                    <span className={classNames('auto-trades-analysis__status', `auto-trades-analysis__status${statusClass}`)}>
+            <div className="auto-trades-market__analysis">
+                <div className="analysis-header">
+                    <span className="title">📊 Pattern Analysis</span>
+                    <span className={classNames('status', `status${statusClass}`)}>
                         {statusText}
                     </span>
                 </div>
-                <div className='auto-trades-analysis__body'>
-                    <div className='auto-trades-analysis__price'>
-                        <span className='auto-trades-analysis__price-label'>💰 Current Price</span>
-                        <span className='auto-trades-analysis__price-value'>
-                            {formatPrice(analysis.currentPrice)}
-                        </span>
+                <div className="analysis-body">
+                    <div className="analysis-price">
+                        <span>💰 Price:</span>
+                        <span className="price-value">{formatPrice(analysis.currentPrice)}</span>
                     </div>
                     
                     {analysis.priceHistory && analysis.priceHistory.length > 0 && (
-                        <div className='auto-trades-analysis__price-history'>
-                            <span className='auto-trades-analysis__price-history-label'>📈 Price History</span>
-                            <div className='auto-trades-analysis__price-bars'>
+                        <div className="analysis-history">
+                            <span className="history-label">📈 Price History</span>
+                            <div className="price-bars">
                                 {analysis.priceHistory.map((price, idx) => {
                                     const minPrice = Math.min(...analysis.priceHistory);
                                     const maxPrice = Math.max(...analysis.priceHistory);
                                     const range = maxPrice - minPrice || 1;
-                                    const height = ((price - minPrice) / range) * 30 + 10;
+                                    const height = ((price - minPrice) / range) * 28 + 4;
                                     return (
                                         <div 
                                             key={idx} 
-                                            className='auto-trades-analysis__price-bar'
+                                            className="bar"
                                             style={{ height: `${height}px` }}
-                                            title={`${formatPrice(price)}`}
+                                            title={formatPrice(price)}
                                         />
                                     );
                                 })}
@@ -1798,38 +1804,40 @@ const AutoTrades = observer(() => {
                         </div>
                     )}
 
-                    <div className='auto-trades-analysis__row'>
+                    <div className="analysis-row">
                         <span>Required Ticks:</span>
                         <strong>{analysis.targetLen}</strong>
                     </div>
-                    <div className='auto-trades-analysis__row'>
+                    <div className="analysis-row">
                         <span>Condition:</span>
                         <strong>{analysis.conditionText}</strong>
                     </div>
-                    <div className='auto-trades-analysis__row'>
+                    <div className="analysis-row">
                         <span>Last {analysis.targetLen} Ticks:</span>
                     </div>
-                    <div className='auto-trades-analysis__ticks'>
+                    <div className="analysis-ticks">
                         {analysis.recentDigits.map((digit, idx) => (
                             <span 
                                 key={idx} 
-                                className={classNames('auto-trades-analysis__tick', {
-                                    'auto-trades-analysis__tick--match': analysis.tickResults[idx],
-                                    'auto-trades-analysis__tick--nomatch': !analysis.tickResults[idx] && analysis.recentDigits.length >= analysis.targetLen,
+                                className={classNames('tick', {
+                                    'tick--match': analysis.tickResults[idx],
+                                    'tick--nomatch': !analysis.tickResults[idx] && analysis.recentDigits.length >= analysis.targetLen,
+                                    'tick--empty': analysis.recentDigits.length < analysis.targetLen,
                                 })}
                             >
                                 {digit}
                             </span>
                         ))}
                         {analysis.recentDigits.length < analysis.targetLen && (
-                            <span className='auto-trades-analysis__tick'>...</span>
+                            <span className="tick tick--empty">...</span>
                         )}
                     </div>
-                    {analysis.signalReady && (
-                        <div className='auto-trades-analysis__condition'>
-                            ✅ Signal Ready! Waiting for next tick to execute trade.
-                        </div>
-                    )}
+                    <div className={classNames('analysis-signal', {
+                        'analysis-signal--ready': analysis.signalReady,
+                        'analysis-signal--waiting': !analysis.signalReady,
+                    })}>
+                        {analysis.signalReady ? '✅ Signal Ready! Waiting for next tick to execute trade.' : '⏳ Waiting for pattern to match...'}
+                    </div>
                 </div>
             </div>
         );
@@ -1860,25 +1868,25 @@ const AutoTrades = observer(() => {
     const hasEnabledMarkets = market1Enabled || market2Enabled || scanAllMarkets;
 
     return (
-        <div className='auto-trades-page'>
-            <ThemedScrollbars className='auto-trades-page__scroll'>
-                <div className='auto-trades-page__inner'>
+        <div className="auto-trades-page">
+            <ThemedScrollbars className="auto-trades-page__scroll">
+                <div className="auto-trades-page__inner">
                     {/* Header */}
-                    <div className='auto-trades-page__header'>
-                        <div>
-                            <h1 className='auto-trades-page__title'>⚡ Auto Trades</h1>
-                            <p className='auto-trades-page__subtitle'>Trade two markets independently with custom strategies</p>
-                        </div>
-                        <div className='auto-trades-page__status-dot'>
+                    <div className="auto-trades-page__header">
+                        <h1>
+                            <span className="icon">⚡</span>
+                            Auto Trades
+                        </h1>
+                        <div className="auto-trades-page__status">
                             <span
-                                className={classNames('auto-trades-status', {
-                                    'auto-trades-status--connected': isConnected && !inCooldown,
-                                    'auto-trades-status--running': isRunning && !inCooldown,
-                                    'auto-trades-status--cooldown': inCooldown,
-                                    'auto-trades-status--loading': isLoading && !inCooldown,
+                                className={classNames('dot', {
+                                    'dot--live': isConnected && !inCooldown && !isRunning,
+                                    'dot--trading': isRunning && !inCooldown,
+                                    'dot--cooldown': inCooldown,
+                                    'dot--loading': isLoading && !inCooldown,
                                 })}
                             />
-                            <span className='auto-trades-status__label'>
+                            <span>
                                 {inCooldown
                                     ? 'Cooldown'
                                     : isLoading
@@ -1893,209 +1901,207 @@ const AutoTrades = observer(() => {
                     </div>
 
                     {!client.is_logged_in && (
-                        <div className='auto-trades-page__notice'>
+                        <div className="auto-trades-page__notice">
                             Please log in to your Deriv account to execute real trades.
                         </div>
                     )}
 
-                    {error && <div className='auto-trades-page__error'>{error}</div>}
+                    {error && <div className="auto-trades-page__error">{error}</div>}
 
                     {inCooldown && isRunning && (
-                        <div className='auto-trades-cooldown'>
-                            <span className='auto-trades-cooldown__icon'>⏳</span>
-                            <span>Cooldown after consecutive loss — markets paused for <strong>{Math.max(...marketDisplays.map(m => m.lossCooldownLeft))}</strong> more ticks</span>
+                        <div className="auto-trades-page__cooldown">
+                            ⏳ Cooldown after consecutive loss — markets paused for <strong>{Math.max(...marketDisplays.map(m => m.lossCooldownLeft))}</strong> more ticks
                         </div>
                     )}
 
                     {isLoading && (
-                        <div className='auto-trades-page__loader'>
-                            <div className='auto-trades-data-loader auto-trades-data-loader--panel'>
-                                <span className='auto-trades-data-loader__spinner' />
-                                <div className='auto-trades-data-loader__copy'>
-                                    <strong>Waiting for live market data</strong>
-                                    <span>{dataStreamMessage}</span>
-                                </div>
+                        <div className="auto-trades-page__loader">
+                            <div className="loader-content">
+                                <span className="spinner" />
+                                <strong>Waiting for live market data</strong>
+                                <span>{dataStreamMessage}</span>
                             </div>
                         </div>
                     )}
 
-                    <div className='auto-trades-page__body'>
-                        {/* Global Settings - Compact */}
-                        <div className='auto-trades-page__global-settings'>
-                            <div className='auto-trades-card auto-trades-card--global auto-trades-card--compact'>
-                                <h2 className='auto-trades-card__title auto-trades-card__title--compact'>⚙️ Global Settings</h2>
-                                <div className='auto-trades-global-grid auto-trades-global-grid--compact'>
-                                    <div className='auto-trades-config__field auto-trades-config__field--compact'>
-                                        <label>Stake ({currency || 'USD'})</label>
-                                        <Input
-                                            type='number'
-                                            min='0.35'
-                                            step='0.01'
-                                            value={stake}
-                                            onChange={e => setStake(e.target.value)}
-                                            disabled={isRunning}
-                                        />
-                                    </div>
-                                    
-                                    {/* Simplified Martingale Settings */}
-                                    <div className='auto-trades-config__field auto-trades-config__field--compact'>
-                                        <label>Martingale</label>
-                                        <div className='auto-trades-martingale-row'>
-                                            <button
-                                                type='button'
-                                                className={classNames(
-                                                    'auto-trades-feature-btn auto-trades-feature-btn--small',
-                                                    martingaleEnabled && 'auto-trades-feature-btn--active'
-                                                )}
-                                                onClick={() => setMartingaleEnabled(prev => !prev)}
-                                                disabled={isRunning}
-                                            >
-                                                <span className='auto-trades-feature-btn__label'>
-                                                    {martingaleEnabled ? 'ON' : 'OFF'}
-                                                </span>
-                                                <span className='auto-trades-feature-btn__switch'>
-                                                    <span className='auto-trades-feature-btn__knob' />
-                                                </span>
-                                            </button>
-                                        </div>
-                                    </div>
-
-                                    <div className='auto-trades-config__field auto-trades-config__field--compact'>
-                                        <label>Multiplier ×</label>
-                                        <select
-                                            className='auto-trades-config__select auto-trades-config__select--compact'
-                                            value={martingaleMultiplier}
-                                            onChange={e => setMartingaleMultiplier(parseFloat(e.target.value))}
-                                            disabled={isRunning || !martingaleEnabled}
-                                        >
-                                            {Array.from({ length: 91 }, (_, i) => (10 + i) / 10).map(val => (
-                                                <option key={val} value={val}>{val.toFixed(1)}</option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    <div className='auto-trades-config__field auto-trades-config__field--compact'>
-                                        <label>Take Profit</label>
-                                        <Input
-                                            type='number'
-                                            min='0'
-                                            step='1'
-                                            value={takeProfit}
-                                            onChange={e => setTakeProfit(e.target.value)}
-                                            disabled={isRunning}
-                                        />
-                                    </div>
-                                    <div className='auto-trades-config__field auto-trades-config__field--compact'>
-                                        <label>Stop Loss</label>
-                                        <Input
-                                            type='number'
-                                            min='0'
-                                            step='1'
-                                            value={stopLoss}
-                                            onChange={e => setStopLoss(e.target.value)}
-                                            disabled={isRunning}
-                                        />
-                                    </div>
-                                    <div className='auto-trades-config__field auto-trades-config__field--compact auto-trades-config__field--half'>
-                                        <label>Market Switching</label>
-                                        <button
-                                            type='button'
-                                            className={classNames(
-                                                'auto-trades-feature-btn',
-                                                switchOnLoss && 'auto-trades-feature-btn--active'
-                                            )}
-                                            onClick={() => setSwitchOnLoss(prev => !prev)}
-                                            disabled={isRunning}
-                                        >
-                                            <span className='auto-trades-feature-btn__label'>
-                                                {switchOnLoss ? '🔄 On Loss' : '→ Off'}
-                                            </span>
-                                            <span className='auto-trades-feature-btn__switch'>
-                                                <span className='auto-trades-feature-btn__knob' />
-                                            </span>
-                                        </button>
-                                    </div>
-                                    <div className='auto-trades-config__field auto-trades-config__field--compact auto-trades-config__field--half'>
-                                        <label>Scan All Markets</label>
-                                        <button
-                                            type='button'
-                                            className={classNames(
-                                                'auto-trades-feature-btn',
-                                                scanAllMarkets && 'auto-trades-feature-btn--active'
-                                            )}
-                                            onClick={() => setScanAllMarkets(prev => !prev)}
-                                            disabled={isRunning}
-                                        >
-                                            <span className='auto-trades-feature-btn__label'>
-                                                {scanAllMarkets ? '🔍 On' : '→ Off'}
-                                            </span>
-                                            <span className='auto-trades-feature-btn__switch'>
-                                                <span className='auto-trades-feature-btn__knob' />
-                                            </span>
-                                        </button>
-                                    </div>
-                                </div>
-                                {switchOnLoss && isRunning && market1Enabled && market2Enabled && !scanAllMarkets && (
-                                    <div className='auto-trades-active-market'>
-                                        Active: <strong>{getActiveMarketDisplay()}</strong>
-                                        {marketSwitchActive && <span className='auto-trades-active-market__switch'> (Switched on loss)</span>}
-                                    </div>
-                                )}
-                                {scanAllMarkets && (
-                                    <div className='auto-trades-active-market'>
-                                        Scanning all {AUTO_MARKET_SYMBOLS.length} volatility markets
-                                    </div>
-                                )}
+                    <div className="auto-trades-page__body">
+                        {/* Global Settings */}
+                        <div className="auto-trades-global">
+                            <div className="auto-trades-global__header">
+                                <span className="auto-trades-global__title">⚙️ Global Settings</span>
                                 {martingaleEnabled && (
-                                    <div className='auto-trades-martingale-info'>
-                                        <span className='auto-trades-martingale-info__icon'>📈</span>
-                                        <span>Martingale active: stake multiplies by ×{martingaleMultiplier.toFixed(1)} on each consecutive loss</span>
-                                    </div>
+                                    <span className="auto-trades-global__info-martingale">
+                                        📈 Martingale: ×{martingaleMultiplier.toFixed(1)}
+                                    </span>
                                 )}
                             </div>
+                            <div className="auto-trades-global__grid">
+                                <div className="auto-trades-global__field">
+                                    <label>Stake ({currency || 'USD'})</label>
+                                    <Input
+                                        type="number"
+                                        min="0.35"
+                                        step="0.01"
+                                        value={stake}
+                                        onChange={e => setStake(e.target.value)}
+                                        disabled={isRunning}
+                                        className="input"
+                                    />
+                                </div>
+                                
+                                <div className="auto-trades-global__field">
+                                    <label>Martingale</label>
+                                    <button
+                                        type="button"
+                                        className={classNames(
+                                            'auto-trades-global__toggle',
+                                            martingaleEnabled && 'auto-trades-global__toggle--active'
+                                        )}
+                                        onClick={() => setMartingaleEnabled(prev => !prev)}
+                                        disabled={isRunning}
+                                    >
+                                        <span>{martingaleEnabled ? 'ON' : 'OFF'}</span>
+                                        <span className="switch">
+                                            <span className="knob" />
+                                        </span>
+                                    </button>
+                                </div>
+
+                                <div className="auto-trades-global__field">
+                                    <label>Multiplier ×</label>
+                                    <select
+                                        className="input input--select"
+                                        value={martingaleMultiplier}
+                                        onChange={e => setMartingaleMultiplier(parseFloat(e.target.value))}
+                                        disabled={isRunning || !martingaleEnabled}
+                                    >
+                                        {Array.from({ length: 91 }, (_, i) => (10 + i) / 10).map(val => (
+                                            <option key={val} value={val}>{val.toFixed(1)}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="auto-trades-global__field">
+                                    <label>Take Profit</label>
+                                    <Input
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        value={takeProfit}
+                                        onChange={e => setTakeProfit(e.target.value)}
+                                        disabled={isRunning}
+                                        className="input"
+                                    />
+                                </div>
+
+                                <div className="auto-trades-global__field">
+                                    <label>Stop Loss</label>
+                                    <Input
+                                        type="number"
+                                        min="0"
+                                        step="1"
+                                        value={stopLoss}
+                                        onChange={e => setStopLoss(e.target.value)}
+                                        disabled={isRunning}
+                                        className="input"
+                                    />
+                                </div>
+
+                                <div className="auto-trades-global__field">
+                                    <label>Market Switching</label>
+                                    <button
+                                        type="button"
+                                        className={classNames(
+                                            'auto-trades-global__toggle',
+                                            switchOnLoss && 'auto-trades-global__toggle--active'
+                                        )}
+                                        onClick={() => setSwitchOnLoss(prev => !prev)}
+                                        disabled={isRunning}
+                                    >
+                                        <span>{switchOnLoss ? '🔄 On Loss' : '→ Off'}</span>
+                                        <span className="switch">
+                                            <span className="knob" />
+                                        </span>
+                                    </button>
+                                </div>
+
+                                <div className="auto-trades-global__field">
+                                    <label>Scan All Markets</label>
+                                    <button
+                                        type="button"
+                                        className={classNames(
+                                            'auto-trades-global__toggle',
+                                            scanAllMarkets && 'auto-trades-global__toggle--active'
+                                        )}
+                                        onClick={() => setScanAllMarkets(prev => !prev)}
+                                        disabled={isRunning}
+                                    >
+                                        <span>{scanAllMarkets ? '🔍 On' : '→ Off'}</span>
+                                        <span className="switch">
+                                            <span className="knob" />
+                                        </span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            {(switchOnLoss || scanAllMarkets || martingaleEnabled) && (
+                                <div className="auto-trades-global__info">
+                                    {switchOnLoss && market1Enabled && market2Enabled && !scanAllMarkets && isRunning && (
+                                        <span>Active: <span className="highlight">{getActiveMarketDisplay()}</span></span>
+                                    )}
+                                    {scanAllMarkets && (
+                                        <span>Scanning all {AUTO_MARKET_SYMBOLS.length} volatility markets</span>
+                                    )}
+                                    {martingaleEnabled && (
+                                        <span className="martingale-badge">
+                                            Martingale: stake multiplies by ×{martingaleMultiplier.toFixed(1)} on each consecutive loss
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                         </div>
 
-                        {/* Two Market Cards */}
-                        <div className='auto-trades-page__markets'>
-                            {/* Market 1 - Primary */}
+                        {/* Markets Grid */}
+                        <div className="auto-trades-markets">
+                            {/* Market 1 */}
                             <div className={classNames(
-                                'auto-trades-card auto-trades-card--market auto-trades-card--market1',
-                                !market1Enabled && 'auto-trades-card--disabled'
+                                'auto-trades-market',
+                                'auto-trades-market--primary',
+                                !market1Enabled && 'auto-trades-market--disabled'
                             )}>
-                                <div className='auto-trades-card__header'>
-                                    <div className='auto-trades-card__title-wrapper'>
-                                        <h2 className='auto-trades-card__title'>📈 Primary Market</h2>
+                                <div className="auto-trades-market__header">
+                                    <div className="auto-trades-market__title">
+                                        <h2>📈 Primary</h2>
                                         {switchOnLoss && activeTradingMarketRef.current === market1Symbol && isRunning && (
-                                            <span className='auto-trades-card__active-badge'>Active</span>
+                                            <span className="badge badge--active">Active</span>
                                         )}
+                                        <span className="badge badge--primary">Primary</span>
                                     </div>
-                                    <div className='auto-trades-card__controls'>
+                                    <div className="auto-trades-market__controls">
                                         <button
-                                            type='button'
+                                            type="button"
                                             className={classNames(
-                                                'auto-trades-market-toggle',
-                                                market1Enabled && 'auto-trades-market-toggle--active'
+                                                'auto-trades-global__toggle',
+                                                market1Enabled && 'auto-trades-global__toggle--active'
                                             )}
                                             onClick={() => setMarket1Enabled(prev => !prev)}
                                             disabled={isRunning}
                                         >
-                                            <span className='auto-trades-market-toggle__label'>
-                                                {market1Enabled ? 'ON' : 'OFF'}
-                                            </span>
-                                            <span className='auto-trades-market-toggle__switch'>
-                                                <span className='auto-trades-market-toggle__knob' />
+                                            <span>{market1Enabled ? 'ON' : 'OFF'}</span>
+                                            <span className="switch">
+                                                <span className="knob" />
                                             </span>
                                         </button>
-                                        <div className='auto-trades-card__badge auto-trades-card__badge--market1'>Primary</div>
                                     </div>
                                 </div>
+
                                 {market1Enabled && (
                                     <>
-                                        <div className='auto-trades-market-config'>
-                                            <div className='auto-trades-config__field'>
+                                        <div className="auto-trades-market__config">
+                                            <div className="auto-trades-market__field">
                                                 <label>Market</label>
                                                 <select
-                                                    className='auto-trades-config__select'
+                                                    className="input input--select"
                                                     value={market1Symbol}
                                                     onChange={e => setMarket1Symbol(e.target.value)}
                                                     disabled={isRunning || scanAllMarkets}
@@ -2105,41 +2111,41 @@ const AutoTrades = observer(() => {
                                                     ))}
                                                 </select>
                                             </div>
-                                            <div className='auto-trades-config__field'>
+                                            <div className="auto-trades-market__field">
                                                 <label>Contract Type</label>
                                                 <select
-                                                    className='auto-trades-config__select'
+                                                    className="input input--select"
                                                     value={market1TradeType}
                                                     onChange={e => setMarket1TradeType(e.target.value as TradeType)}
                                                     disabled={isRunning}
                                                 >
-                                                    <optgroup label='Over/Under'>
-                                                        <option value='DIGITOVER'>Over</option>
-                                                        <option value='DIGITUNDER'>Under</option>
+                                                    <optgroup label="Over/Under">
+                                                        <option value="DIGITOVER">Over</option>
+                                                        <option value="DIGITUNDER">Under</option>
                                                     </optgroup>
-                                                    <optgroup label='Even/Odd'>
-                                                        <option value='DIGITEVEN'>Even</option>
-                                                        <option value='DIGITODD'>Odd</option>
+                                                    <optgroup label="Even/Odd">
+                                                        <option value="DIGITEVEN">Even</option>
+                                                        <option value="DIGITODD">Odd</option>
                                                     </optgroup>
-                                                    <optgroup label='Match/Diff'>
-                                                        <option value='DIGITMATCH'>Matches</option>
-                                                        <option value='DIGITDIFF'>Differs</option>
+                                                    <optgroup label="Match/Diff">
+                                                        <option value="DIGITMATCH">Matches</option>
+                                                        <option value="DIGITDIFF">Differs</option>
                                                     </optgroup>
-                                                    <optgroup label='Direction'>
-                                                        <option value='CALL'>Rise</option>
-                                                        <option value='PUT'>Fall</option>
-                                                        <option value='RUNHIGH'>Only Ups</option>
-                                                        <option value='RUNLOW'>Only Downs</option>
+                                                    <optgroup label="Direction">
+                                                        <option value="CALL">Rise</option>
+                                                        <option value="PUT">Fall</option>
+                                                        <option value="RUNHIGH">Only Ups</option>
+                                                        <option value="RUNLOW">Only Downs</option>
                                                     </optgroup>
                                                 </select>
                                             </div>
                                             
                                             {(market1TradeType === 'DIGITOVER' || market1TradeType === 'DIGITUNDER') && (
                                                 <>
-                                                    <div className='auto-trades-config__field'>
-                                                        <label>Number of Last Ticks</label>
+                                                    <div className="auto-trades-market__field">
+                                                        <label>Last Ticks</label>
                                                         <select
-                                                            className='auto-trades-config__select'
+                                                            className="input input--select"
                                                             value={market1AnalysisTicks}
                                                             onChange={e => setMarket1AnalysisTicks(e.target.value)}
                                                             disabled={isRunning}
@@ -2149,25 +2155,25 @@ const AutoTrades = observer(() => {
                                                             ))}
                                                         </select>
                                                     </div>
-                                                    <div className='auto-trades-config__field'>
-                                                        <label>Comparison Operator</label>
+                                                    <div className="auto-trades-market__field">
+                                                        <label>Operator</label>
                                                         <select
-                                                            className='auto-trades-config__select'
+                                                            className="input input--select"
                                                             value={market1ComparisonOperator}
                                                             onChange={e => setMarket1ComparisonOperator(e.target.value as ComparisonOperator)}
                                                             disabled={isRunning}
                                                         >
-                                                            <option value='>'>Greater than (&gt;)</option>
-                                                            <option value='<'>Less than (&lt;)</option>
-                                                            <option value='>='>Greater than or equal (&gt;=)</option>
-                                                            <option value='<='>Less than or equal (&lt;=)</option>
-                                                            <option value='=='>Equal to (==)</option>
+                                                            <option value=">">&gt;</option>
+                                                            <option value="<">&lt;</option>
+                                                            <option value=">=">&gt;=</option>
+                                                            <option value="<=">&lt;=</option>
+                                                            <option value="==">==</option>
                                                         </select>
                                                     </div>
-                                                    <div className='auto-trades-config__field'>
-                                                        <label>Digit to Compare</label>
+                                                    <div className="auto-trades-market__field">
+                                                        <label>Compare Digit</label>
                                                         <select
-                                                            className='auto-trades-config__select'
+                                                            className="input input--select"
                                                             value={market1Barrier}
                                                             onChange={e => setMarket1Barrier(e.target.value)}
                                                             disabled={isRunning}
@@ -2178,10 +2184,10 @@ const AutoTrades = observer(() => {
                                                         </select>
                                                     </div>
                                                     {usesLossPrediction(market1TradeType) && (
-                                                        <div className='auto-trades-config__field'>
-                                                            <label>Digit to Predict</label>
+                                                        <div className="auto-trades-market__field">
+                                                            <label>Predict Digit</label>
                                                             <select
-                                                                className='auto-trades-config__select'
+                                                                className="input input--select"
                                                                 value={market1PredictionDigit}
                                                                 onChange={e => setMarket1PredictionDigit(e.target.value)}
                                                                 disabled={isRunning}
@@ -2196,35 +2202,34 @@ const AutoTrades = observer(() => {
                                             )}
 
                                             {(market1TradeType === 'DIGITEVEN' || market1TradeType === 'DIGITODD') && (
-                                                <>
-                                                    <div className='auto-trades-config__field'>
-                                                        <label>Pattern (E=Even, O=Odd)</label>
-                                                        <Input
-                                                            type='text'
-                                                            placeholder='e.g., EEO, OEE'
-                                                            value={market1InputSequence}
-                                                            onChange={e => setMarket1InputSequence(e.target.value.toUpperCase().replace(/[^EO]/g, ''))}
-                                                            disabled={isRunning}
-                                                        />
-                                                        {market1InputSequence && (
-                                                            <div className='auto-trades-config__sequence-preview'>
-                                                                {market1InputSequence.split('').map((ch, i) => (
-                                                                    <span key={i} className={`auto-trades-config__sequence-char ${ch === 'E' ? 'even' : 'odd'}`}>
-                                                                        {ch === 'E' ? 'Even' : 'Odd'}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </>
+                                                <div className="auto-trades-market__field">
+                                                    <label>Pattern (E=Even, O=Odd)</label>
+                                                    <Input
+                                                        type="text"
+                                                        placeholder="e.g., EEO, OEE"
+                                                        value={market1InputSequence}
+                                                        onChange={e => setMarket1InputSequence(e.target.value.toUpperCase().replace(/[^EO]/g, ''))}
+                                                        disabled={isRunning}
+                                                        className="input"
+                                                    />
+                                                    {market1InputSequence && (
+                                                        <div className="sequence-preview">
+                                                            {market1InputSequence.split('').map((ch, i) => (
+                                                                <span key={i} className={`char ${ch === 'E' ? 'even' : 'odd'}`}>
+                                                                    {ch === 'E' ? 'Even' : 'Odd'}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             )}
 
                                             {(market1TradeType === 'DIGITMATCH' || market1TradeType === 'DIGITDIFF') && (
                                                 <>
-                                                    <div className='auto-trades-config__field'>
+                                                    <div className="auto-trades-market__field">
                                                         <label>Digit</label>
                                                         <select
-                                                            className='auto-trades-config__select'
+                                                            className="input input--select"
                                                             value={market1Barrier}
                                                             onChange={e => setMarket1Barrier(e.target.value)}
                                                             disabled={isRunning}
@@ -2234,10 +2239,10 @@ const AutoTrades = observer(() => {
                                                             ))}
                                                         </select>
                                                     </div>
-                                                    <div className='auto-trades-config__field'>
+                                                    <div className="auto-trades-market__field">
                                                         <label>Analysis Ticks</label>
                                                         <select
-                                                            className='auto-trades-config__select'
+                                                            className="input input--select"
                                                             value={market1AnalysisTicks}
                                                             onChange={e => setMarket1AnalysisTicks(e.target.value)}
                                                             disabled={isRunning}
@@ -2250,121 +2255,123 @@ const AutoTrades = observer(() => {
                                                 </>
                                             )}
 
-                                            <div className='auto-trades-config__field'>
-                                                <label>Inverse Mode</label>
-                                                <div className='auto-trades-inverse-toggle'>
-                                                    <button
-                                                        type='button'
-                                                        className={classNames(
-                                                            'auto-trades-inverse-btn',
-                                                            market1Inverse && 'auto-trades-inverse-btn--active'
-                                                        )}
-                                                        onClick={() => setMarket1Inverse(prev => !prev)}
-                                                        disabled={isRunning}
-                                                    >
-                                                        <span className='auto-trades-inverse-btn__label'>
-                                                            {market1Inverse ? '🔀 Inverse' : '→ Direct'}
-                                                        </span>
-                                                        <span className='auto-trades-inverse-btn__switch'>
-                                                            <span className='auto-trades-inverse-btn__knob' />
-                                                        </span>
-                                                    </button>
-                                                </div>
+                                            <div className="auto-trades-market__field">
+                                                <label>Inverse</label>
+                                                <button
+                                                    type="button"
+                                                    className={classNames(
+                                                        'auto-trades-global__toggle',
+                                                        market1Inverse && 'auto-trades-global__toggle--active'
+                                                    )}
+                                                    onClick={() => setMarket1Inverse(prev => !prev)}
+                                                    disabled={isRunning}
+                                                >
+                                                    <span>{market1Inverse ? '🔀 Inverse' : '→ Direct'}</span>
+                                                    <span className="switch">
+                                                        <span className="knob" />
+                                                    </span>
+                                                </button>
                                             </div>
                                         </div>
-                                        {/* Market 1 Live Display */}
-                                        <div className='auto-trades-market-display'>
-                                            {marketDisplays.find(m => m.symbol === market1Symbol) && (
-                                                <div className='auto-trades-market-display__content'>
-                                                    <div className='auto-trades-market-display__quote'>
-                                                        {marketDisplays.find(m => m.symbol === market1Symbol)?.lastQuote !== null 
-                                                            ? marketDisplays.find(m => m.symbol === market1Symbol)?.lastQuote?.toFixed(marketDisplays.find(m => m.symbol === market1Symbol)?.pip || 2) 
-                                                            : '—'}
+
+                                        {/* Live Display */}
+                                        {marketDisplays.find(m => m.symbol === market1Symbol) && (
+                                            <div className="auto-trades-market__live">
+                                                <div className="quote">
+                                                    {marketDisplays.find(m => m.symbol === market1Symbol)?.lastQuote !== null 
+                                                        ? marketDisplays.find(m => m.symbol === market1Symbol)?.lastQuote?.toFixed(marketDisplays.find(m => m.symbol === market1Symbol)?.pip || 2) 
+                                                        : '—'}
+                                                </div>
+                                                <div className="info">
+                                                    <span className="streak">
+                                                        Streak: {marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive || 0}
+                                                    </span>
+                                                    <span className="stake">
+                                                        Stake: {marketDisplays.find(m => m.symbol === market1Symbol)?.currentStake || baseStakeNum}
+                                                        {marketDisplays.find(m => m.symbol === market1Symbol)?.martingaleMultiplier && marketDisplays.find(m => m.symbol === market1Symbol)?.martingaleMultiplier !== 1 && 
+                                                            ` (×${marketDisplays.find(m => m.symbol === market1Symbol)?.martingaleMultiplier?.toFixed(2)})`
+                                                        }
+                                                    </span>
+                                                    <span className={classNames('result', {
+                                                        'result--win': marketDisplays.find(m => m.symbol === market1Symbol)?.lastResult === 'win',
+                                                        'result--loss': marketDisplays.find(m => m.symbol === market1Symbol)?.lastResult === 'loss',
+                                                    })}>
+                                                        {marketDisplays.find(m => m.symbol === market1Symbol)?.lastResult === 'win' ? '✓' : 
+                                                         marketDisplays.find(m => m.symbol === market1Symbol)?.lastResult === 'loss' ? '✗' : '—'}
+                                                    </span>
+                                                </div>
+                                                {marketDisplays.find(m => m.symbol === market1Symbol)?.lastDigits.length > 0 && (
+                                                    <div className="digits">
+                                                        {marketDisplays.find(m => m.symbol === market1Symbol)?.lastDigits.slice(-5).map((d, idx) => (
+                                                            <span key={idx} className="digit">{d}</span>
+                                                        ))}
                                                     </div>
-                                                    <div className='auto-trades-market-display__info'>
-                                                        <span className='auto-trades-market-display__streak'>
-                                                            Streak: {marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive || 0}
-                                                        </span>
-                                                        <span className='auto-trades-market-display__stake'>
-                                                            Stake: {marketDisplays.find(m => m.symbol === market1Symbol)?.currentStake || baseStakeNum}
-                                                            {marketDisplays.find(m => m.symbol === market1Symbol)?.martingaleMultiplier && marketDisplays.find(m => m.symbol === market1Symbol)?.martingaleMultiplier !== 1 && 
-                                                                ` (×${marketDisplays.find(m => m.symbol === market1Symbol)?.martingaleMultiplier?.toFixed(2)})`
-                                                            }
-                                                        </span>
-                                                        <span className={classNames(
-                                                            'auto-trades-market-display__result',
-                                                            marketDisplays.find(m => m.symbol === market1Symbol)?.lastResult === 'win' && 'auto-trades-market-display__result--win',
-                                                            marketDisplays.find(m => m.symbol === market1Symbol)?.lastResult === 'loss' && 'auto-trades-market-display__result--loss'
-                                                        )}>
-                                                            {marketDisplays.find(m => m.symbol === market1Symbol)?.lastResult === 'win' ? '✓' : 
-                                                             marketDisplays.find(m => m.symbol === market1Symbol)?.lastResult === 'loss' ? '✗' : '—'}
-                                                        </span>
-                                                    </div>
-                                                    {marketDisplays.find(m => m.symbol === market1Symbol)?.lastDigits.length > 0 && (
-                                                        <div className='auto-trades-market-display__digits'>
-                                                            {marketDisplays.find(m => m.symbol === market1Symbol)?.lastDigits.slice(-5).map((d, idx) => (
-                                                                <span key={idx} className='auto-trades-market-display__digit' style={{ '--i': idx } as React.CSSProperties}>
-                                                                    {d}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    <div className='auto-trades-market-display__candle'>
+                                                )}
+                                                <div className="meta">
+                                                    <span className="candle">
                                                         5m: {getCandleDirectionLabel(marketDisplays.find(m => m.symbol === market1Symbol)?.candleDirection || 0)}
-                                                    </div>
-                                                    <div className='auto-trades-market-display__status'>
+                                                    </span>
+                                                    <span className={classNames('status', {
+                                                        'status--buying': marketDisplays.find(m => m.symbol === market1Symbol)?.trading,
+                                                        'status--cooldown': marketDisplays.find(m => m.symbol === market1Symbol)?.lossCooldownLeft > 0,
+                                                        'status--ready': marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive && marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive >= Math.min(MAX_STREAK_LENGTH, Math.max(1, Number(market1AnalysisTicks) || 1)),
+                                                        'status--waiting': !marketDisplays.find(m => m.symbol === market1Symbol)?.trading && 
+                                                            !(marketDisplays.find(m => m.symbol === market1Symbol)?.lossCooldownLeft > 0) &&
+                                                            !(marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive && marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive >= Math.min(MAX_STREAK_LENGTH, Math.max(1, Number(market1AnalysisTicks) || 1))),
+                                                    })}>
                                                         {marketDisplays.find(m => m.symbol === market1Symbol)?.trading ? '🔄 Buying...' : 
                                                          marketDisplays.find(m => m.symbol === market1Symbol)?.lossCooldownLeft > 0 ? `⏳ Cooldown ${marketDisplays.find(m => m.symbol === market1Symbol)?.lossCooldownLeft}t` :
                                                          marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive && marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive >= Math.min(MAX_STREAK_LENGTH, Math.max(1, Number(market1AnalysisTicks) || 1)) ? '✅ Ready' : '⏳ Waiting'}
-                                                    </div>
+                                                    </span>
                                                 </div>
-                                            )}
-                                        </div>
-                                        {/* Analysis Container for Market 1 */}
-                                        {market1Enabled && renderAnalysisContainer(market1Symbol, market1Config)}
+                                            </div>
+                                        )}
+
+                                        {/* Analysis */}
+                                        {renderAnalysisContainer(market1Symbol, market1Config)}
                                     </>
                                 )}
                             </div>
 
-                            {/* Market 2 - Secondary */}
+                            {/* Market 2 */}
                             <div className={classNames(
-                                'auto-trades-card auto-trades-card--market auto-trades-card--market2',
-                                !market2Enabled && 'auto-trades-card--disabled'
+                                'auto-trades-market',
+                                'auto-trades-market--secondary',
+                                !market2Enabled && 'auto-trades-market--disabled'
                             )}>
-                                <div className='auto-trades-card__header'>
-                                    <div className='auto-trades-card__title-wrapper'>
-                                        <h2 className='auto-trades-card__title'>📊 Secondary Market</h2>
+                                <div className="auto-trades-market__header">
+                                    <div className="auto-trades-market__title">
+                                        <h2>📊 Secondary</h2>
                                         {switchOnLoss && activeTradingMarketRef.current === market2Symbol && isRunning && (
-                                            <span className='auto-trades-card__active-badge auto-trades-card__active-badge--market2'>Active</span>
+                                            <span className="badge badge--active">Active</span>
                                         )}
+                                        <span className="badge badge--secondary">Secondary</span>
                                     </div>
-                                    <div className='auto-trades-card__controls'>
+                                    <div className="auto-trades-market__controls">
                                         <button
-                                            type='button'
+                                            type="button"
                                             className={classNames(
-                                                'auto-trades-market-toggle',
-                                                market2Enabled && 'auto-trades-market-toggle--active'
+                                                'auto-trades-global__toggle',
+                                                market2Enabled && 'auto-trades-global__toggle--active'
                                             )}
                                             onClick={() => setMarket2Enabled(prev => !prev)}
                                             disabled={isRunning}
                                         >
-                                            <span className='auto-trades-market-toggle__label'>
-                                                {market2Enabled ? 'ON' : 'OFF'}
-                                            </span>
-                                            <span className='auto-trades-market-toggle__switch'>
-                                                <span className='auto-trades-market-toggle__knob' />
+                                            <span>{market2Enabled ? 'ON' : 'OFF'}</span>
+                                            <span className="switch">
+                                                <span className="knob" />
                                             </span>
                                         </button>
-                                        <div className='auto-trades-card__badge auto-trades-card__badge--market2'>Secondary</div>
                                     </div>
                                 </div>
+
                                 {market2Enabled && (
                                     <>
-                                        <div className='auto-trades-market-config'>
-                                            <div className='auto-trades-config__field'>
+                                        <div className="auto-trades-market__config">
+                                            <div className="auto-trades-market__field">
                                                 <label>Market</label>
                                                 <select
-                                                    className='auto-trades-config__select'
+                                                    className="input input--select"
                                                     value={market2Symbol}
                                                     onChange={e => setMarket2Symbol(e.target.value)}
                                                     disabled={isRunning || scanAllMarkets}
@@ -2374,41 +2381,41 @@ const AutoTrades = observer(() => {
                                                     ))}
                                                 </select>
                                             </div>
-                                            <div className='auto-trades-config__field'>
+                                            <div className="auto-trades-market__field">
                                                 <label>Contract Type</label>
                                                 <select
-                                                    className='auto-trades-config__select'
+                                                    className="input input--select"
                                                     value={market2TradeType}
                                                     onChange={e => setMarket2TradeType(e.target.value as TradeType)}
                                                     disabled={isRunning}
                                                 >
-                                                    <optgroup label='Over/Under'>
-                                                        <option value='DIGITOVER'>Over</option>
-                                                        <option value='DIGITUNDER'>Under</option>
+                                                    <optgroup label="Over/Under">
+                                                        <option value="DIGITOVER">Over</option>
+                                                        <option value="DIGITUNDER">Under</option>
                                                     </optgroup>
-                                                    <optgroup label='Even/Odd'>
-                                                        <option value='DIGITEVEN'>Even</option>
-                                                        <option value='DIGITODD'>Odd</option>
+                                                    <optgroup label="Even/Odd">
+                                                        <option value="DIGITEVEN">Even</option>
+                                                        <option value="DIGITODD">Odd</option>
                                                     </optgroup>
-                                                    <optgroup label='Match/Diff'>
-                                                        <option value='DIGITMATCH'>Matches</option>
-                                                        <option value='DIGITDIFF'>Differs</option>
+                                                    <optgroup label="Match/Diff">
+                                                        <option value="DIGITMATCH">Matches</option>
+                                                        <option value="DIGITDIFF">Differs</option>
                                                     </optgroup>
-                                                    <optgroup label='Direction'>
-                                                        <option value='CALL'>Rise</option>
-                                                        <option value='PUT'>Fall</option>
-                                                        <option value='RUNHIGH'>Only Ups</option>
-                                                        <option value='RUNLOW'>Only Downs</option>
+                                                    <optgroup label="Direction">
+                                                        <option value="CALL">Rise</option>
+                                                        <option value="PUT">Fall</option>
+                                                        <option value="RUNHIGH">Only Ups</option>
+                                                        <option value="RUNLOW">Only Downs</option>
                                                     </optgroup>
                                                 </select>
                                             </div>
                                             
                                             {(market2TradeType === 'DIGITOVER' || market2TradeType === 'DIGITUNDER') && (
                                                 <>
-                                                    <div className='auto-trades-config__field'>
-                                                        <label>Number of Last Ticks</label>
+                                                    <div className="auto-trades-market__field">
+                                                        <label>Last Ticks</label>
                                                         <select
-                                                            className='auto-trades-config__select'
+                                                            className="input input--select"
                                                             value={market2AnalysisTicks}
                                                             onChange={e => setMarket2AnalysisTicks(e.target.value)}
                                                             disabled={isRunning}
@@ -2418,25 +2425,25 @@ const AutoTrades = observer(() => {
                                                             ))}
                                                         </select>
                                                     </div>
-                                                    <div className='auto-trades-config__field'>
-                                                        <label>Comparison Operator</label>
+                                                    <div className="auto-trades-market__field">
+                                                        <label>Operator</label>
                                                         <select
-                                                            className='auto-trades-config__select'
+                                                            className="input input--select"
                                                             value={market2ComparisonOperator}
                                                             onChange={e => setMarket2ComparisonOperator(e.target.value as ComparisonOperator)}
                                                             disabled={isRunning}
                                                         >
-                                                            <option value='>'>Greater than (&gt;)</option>
-                                                            <option value='<'>Less than (&lt;)</option>
-                                                            <option value='>='>Greater than or equal (&gt;=)</option>
-                                                            <option value='<='>Less than or equal (&lt;=)</option>
-                                                            <option value='=='>Equal to (==)</option>
+                                                            <option value=">">&gt;</option>
+                                                            <option value="<">&lt;</option>
+                                                            <option value=">=">&gt;=</option>
+                                                            <option value="<=">&lt;=</option>
+                                                            <option value="==">==</option>
                                                         </select>
                                                     </div>
-                                                    <div className='auto-trades-config__field'>
-                                                        <label>Digit to Compare</label>
+                                                    <div className="auto-trades-market__field">
+                                                        <label>Compare Digit</label>
                                                         <select
-                                                            className='auto-trades-config__select'
+                                                            className="input input--select"
                                                             value={market2Barrier}
                                                             onChange={e => setMarket2Barrier(e.target.value)}
                                                             disabled={isRunning}
@@ -2447,10 +2454,10 @@ const AutoTrades = observer(() => {
                                                         </select>
                                                     </div>
                                                     {usesLossPrediction(market2TradeType) && (
-                                                        <div className='auto-trades-config__field'>
-                                                            <label>Digit to Predict</label>
+                                                        <div className="auto-trades-market__field">
+                                                            <label>Predict Digit</label>
                                                             <select
-                                                                className='auto-trades-config__select'
+                                                                className="input input--select"
                                                                 value={market2PredictionDigit}
                                                                 onChange={e => setMarket2PredictionDigit(e.target.value)}
                                                                 disabled={isRunning}
@@ -2465,35 +2472,34 @@ const AutoTrades = observer(() => {
                                             )}
 
                                             {(market2TradeType === 'DIGITEVEN' || market2TradeType === 'DIGITODD') && (
-                                                <>
-                                                    <div className='auto-trades-config__field'>
-                                                        <label>Pattern (E=Even, O=Odd)</label>
-                                                        <Input
-                                                            type='text'
-                                                            placeholder='e.g., EEO, OEE'
-                                                            value={market2InputSequence}
-                                                            onChange={e => setMarket2InputSequence(e.target.value.toUpperCase().replace(/[^EO]/g, ''))}
-                                                            disabled={isRunning}
-                                                        />
-                                                        {market2InputSequence && (
-                                                            <div className='auto-trades-config__sequence-preview'>
-                                                                {market2InputSequence.split('').map((ch, i) => (
-                                                                    <span key={i} className={`auto-trades-config__sequence-char ${ch === 'E' ? 'even' : 'odd'}`}>
-                                                                        {ch === 'E' ? 'Even' : 'Odd'}
-                                                                    </span>
-                                                                ))}
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </>
+                                                <div className="auto-trades-market__field">
+                                                    <label>Pattern (E=Even, O=Odd)</label>
+                                                    <Input
+                                                        type="text"
+                                                        placeholder="e.g., EEO, OEE"
+                                                        value={market2InputSequence}
+                                                        onChange={e => setMarket2InputSequence(e.target.value.toUpperCase().replace(/[^EO]/g, ''))}
+                                                        disabled={isRunning}
+                                                        className="input"
+                                                    />
+                                                    {market2InputSequence && (
+                                                        <div className="sequence-preview">
+                                                            {market2InputSequence.split('').map((ch, i) => (
+                                                                <span key={i} className={`char ${ch === 'E' ? 'even' : 'odd'}`}>
+                                                                    {ch === 'E' ? 'Even' : 'Odd'}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             )}
 
                                             {(market2TradeType === 'DIGITMATCH' || market2TradeType === 'DIGITDIFF') && (
                                                 <>
-                                                    <div className='auto-trades-config__field'>
+                                                    <div className="auto-trades-market__field">
                                                         <label>Digit</label>
                                                         <select
-                                                            className='auto-trades-config__select'
+                                                            className="input input--select"
                                                             value={market2Barrier}
                                                             onChange={e => setMarket2Barrier(e.target.value)}
                                                             disabled={isRunning}
@@ -2503,10 +2509,10 @@ const AutoTrades = observer(() => {
                                                             ))}
                                                         </select>
                                                     </div>
-                                                    <div className='auto-trades-config__field'>
+                                                    <div className="auto-trades-market__field">
                                                         <label>Analysis Ticks</label>
                                                         <select
-                                                            className='auto-trades-config__select'
+                                                            className="input input--select"
                                                             value={market2AnalysisTicks}
                                                             onChange={e => setMarket2AnalysisTicks(e.target.value)}
                                                             disabled={isRunning}
@@ -2519,130 +2525,130 @@ const AutoTrades = observer(() => {
                                                 </>
                                             )}
 
-                                            <div className='auto-trades-config__field'>
-                                                <label>Inverse Mode</label>
-                                                <div className='auto-trades-inverse-toggle'>
-                                                    <button
-                                                        type='button'
-                                                        className={classNames(
-                                                            'auto-trades-inverse-btn',
-                                                            market2Inverse && 'auto-trades-inverse-btn--active'
-                                                        )}
-                                                        onClick={() => setMarket2Inverse(prev => !prev)}
-                                                        disabled={isRunning}
-                                                    >
-                                                        <span className='auto-trades-inverse-btn__label'>
-                                                            {market2Inverse ? '🔀 Inverse' : '→ Direct'}
-                                                        </span>
-                                                        <span className='auto-trades-inverse-btn__switch'>
-                                                            <span className='auto-trades-inverse-btn__knob' />
-                                                        </span>
-                                                    </button>
-                                                </div>
+                                            <div className="auto-trades-market__field">
+                                                <label>Inverse</label>
+                                                <button
+                                                    type="button"
+                                                    className={classNames(
+                                                        'auto-trades-global__toggle',
+                                                        market2Inverse && 'auto-trades-global__toggle--active'
+                                                    )}
+                                                    onClick={() => setMarket2Inverse(prev => !prev)}
+                                                    disabled={isRunning}
+                                                >
+                                                    <span>{market2Inverse ? '🔀 Inverse' : '→ Direct'}</span>
+                                                    <span className="switch">
+                                                        <span className="knob" />
+                                                    </span>
+                                                </button>
                                             </div>
                                         </div>
-                                        {/* Market 2 Live Display */}
-                                        <div className='auto-trades-market-display'>
-                                            {marketDisplays.find(m => m.symbol === market2Symbol) && (
-                                                <div className='auto-trades-market-display__content'>
-                                                    <div className='auto-trades-market-display__quote'>
-                                                        {marketDisplays.find(m => m.symbol === market2Symbol)?.lastQuote !== null 
-                                                            ? marketDisplays.find(m => m.symbol === market2Symbol)?.lastQuote?.toFixed(marketDisplays.find(m => m.symbol === market2Symbol)?.pip || 2) 
-                                                            : '—'}
+
+                                        {/* Live Display */}
+                                        {marketDisplays.find(m => m.symbol === market2Symbol) && (
+                                            <div className="auto-trades-market__live">
+                                                <div className="quote">
+                                                    {marketDisplays.find(m => m.symbol === market2Symbol)?.lastQuote !== null 
+                                                        ? marketDisplays.find(m => m.symbol === market2Symbol)?.lastQuote?.toFixed(marketDisplays.find(m => m.symbol === market2Symbol)?.pip || 2) 
+                                                        : '—'}
+                                                </div>
+                                                <div className="info">
+                                                    <span className="streak">
+                                                        Streak: {marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive || 0}
+                                                    </span>
+                                                    <span className="stake">
+                                                        Stake: {marketDisplays.find(m => m.symbol === market2Symbol)?.currentStake || baseStakeNum}
+                                                        {marketDisplays.find(m => m.symbol === market2Symbol)?.martingaleMultiplier && marketDisplays.find(m => m.symbol === market2Symbol)?.martingaleMultiplier !== 1 && 
+                                                            ` (×${marketDisplays.find(m => m.symbol === market2Symbol)?.martingaleMultiplier?.toFixed(2)})`
+                                                        }
+                                                    </span>
+                                                    <span className={classNames('result', {
+                                                        'result--win': marketDisplays.find(m => m.symbol === market2Symbol)?.lastResult === 'win',
+                                                        'result--loss': marketDisplays.find(m => m.symbol === market2Symbol)?.lastResult === 'loss',
+                                                    })}>
+                                                        {marketDisplays.find(m => m.symbol === market2Symbol)?.lastResult === 'win' ? '✓' : 
+                                                         marketDisplays.find(m => m.symbol === market2Symbol)?.lastResult === 'loss' ? '✗' : '—'}
+                                                    </span>
+                                                </div>
+                                                {marketDisplays.find(m => m.symbol === market2Symbol)?.lastDigits.length > 0 && (
+                                                    <div className="digits">
+                                                        {marketDisplays.find(m => m.symbol === market2Symbol)?.lastDigits.slice(-5).map((d, idx) => (
+                                                            <span key={idx} className="digit">{d}</span>
+                                                        ))}
                                                     </div>
-                                                    <div className='auto-trades-market-display__info'>
-                                                        <span className='auto-trades-market-display__streak'>
-                                                            Streak: {marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive || 0}
-                                                        </span>
-                                                        <span className='auto-trades-market-display__stake'>
-                                                            Stake: {marketDisplays.find(m => m.symbol === market2Symbol)?.currentStake || baseStakeNum}
-                                                            {marketDisplays.find(m => m.symbol === market2Symbol)?.martingaleMultiplier && marketDisplays.find(m => m.symbol === market2Symbol)?.martingaleMultiplier !== 1 && 
-                                                                ` (×${marketDisplays.find(m => m.symbol === market2Symbol)?.martingaleMultiplier?.toFixed(2)})`
-                                                            }
-                                                        </span>
-                                                        <span className={classNames(
-                                                            'auto-trades-market-display__result',
-                                                            marketDisplays.find(m => m.symbol === market2Symbol)?.lastResult === 'win' && 'auto-trades-market-display__result--win',
-                                                            marketDisplays.find(m => m.symbol === market2Symbol)?.lastResult === 'loss' && 'auto-trades-market-display__result--loss'
-                                                        )}>
-                                                            {marketDisplays.find(m => m.symbol === market2Symbol)?.lastResult === 'win' ? '✓' : 
-                                                             marketDisplays.find(m => m.symbol === market2Symbol)?.lastResult === 'loss' ? '✗' : '—'}
-                                                        </span>
-                                                    </div>
-                                                    {marketDisplays.find(m => m.symbol === market2Symbol)?.lastDigits.length > 0 && (
-                                                        <div className='auto-trades-market-display__digits'>
-                                                            {marketDisplays.find(m => m.symbol === market2Symbol)?.lastDigits.slice(-5).map((d, idx) => (
-                                                                <span key={idx} className='auto-trades-market-display__digit' style={{ '--i': idx } as React.CSSProperties}>
-                                                                    {d}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    <div className='auto-trades-market-display__candle'>
+                                                )}
+                                                <div className="meta">
+                                                    <span className="candle">
                                                         5m: {getCandleDirectionLabel(marketDisplays.find(m => m.symbol === market2Symbol)?.candleDirection || 0)}
-                                                    </div>
-                                                    <div className='auto-trades-market-display__status'>
+                                                    </span>
+                                                    <span className={classNames('status', {
+                                                        'status--buying': marketDisplays.find(m => m.symbol === market2Symbol)?.trading,
+                                                        'status--cooldown': marketDisplays.find(m => m.symbol === market2Symbol)?.lossCooldownLeft > 0,
+                                                        'status--ready': marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive && marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive >= Math.min(MAX_STREAK_LENGTH, Math.max(1, Number(market2AnalysisTicks) || 1)),
+                                                        'status--waiting': !marketDisplays.find(m => m.symbol === market2Symbol)?.trading && 
+                                                            !(marketDisplays.find(m => m.symbol === market2Symbol)?.lossCooldownLeft > 0) &&
+                                                            !(marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive && marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive >= Math.min(MAX_STREAK_LENGTH, Math.max(1, Number(market2AnalysisTicks) || 1))),
+                                                    })}>
                                                         {marketDisplays.find(m => m.symbol === market2Symbol)?.trading ? '🔄 Buying...' : 
                                                          marketDisplays.find(m => m.symbol === market2Symbol)?.lossCooldownLeft > 0 ? `⏳ Cooldown ${marketDisplays.find(m => m.symbol === market2Symbol)?.lossCooldownLeft}t` :
                                                          marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive && marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive >= Math.min(MAX_STREAK_LENGTH, Math.max(1, Number(market2AnalysisTicks) || 1)) ? '✅ Ready' : '⏳ Waiting'}
-                                                    </div>
+                                                    </span>
                                                 </div>
-                                            )}
-                                        </div>
-                                        {/* Analysis Container for Market 2 */}
-                                        {market2Enabled && renderAnalysisContainer(market2Symbol, market2Config)}
+                                            </div>
+                                        )}
+
+                                        {/* Analysis */}
+                                        {renderAnalysisContainer(market2Symbol, market2Config)}
                                     </>
                                 )}
                             </div>
                         </div>
 
                         {/* Stats */}
-                        <div className='auto-trades-page__stats'>
-                            <div className='auto-trades-stats-grid'>
-                                <div className='auto-trades-stat'>
-                                    <span className='auto-trades-stat__label'>Total P&L</span>
-                                    <span className={classNames('auto-trades-stat__value', {
-                                        'auto-trades-stat__value--positive': pnlPositive,
-                                        'auto-trades-stat__value--negative': pnlNegative,
-                                    })}>
-                                        {pnlPositive ? '+' : ''}{totalPnl.toFixed(2)} {currency}
-                                    </span>
-                                </div>
-                                <div className='auto-trades-stat'>
-                                    <span className='auto-trades-stat__label'>Total Trades</span>
-                                    <span className='auto-trades-stat__value'>{totalTrades}</span>
-                                </div>
-                                <div className='auto-trades-stat'>
-                                    <span className='auto-trades-stat__label'>Martingale</span>
-                                    <span className={classNames('auto-trades-stat__value', {
-                                        'auto-trades-stat__value--active': martingaleActive && martingaleEnabled,
-                                    })}>
-                                        {martingaleEnabled && martingaleActive ? 'Active' : martingaleEnabled ? 'Waiting' : 'Off'}
-                                    </span>
-                                </div>
-                                <div className='auto-trades-stat'>
-                                    <span className='auto-trades-stat__label'>Status</span>
-                                    <span className={classNames('auto-trades-stat__value', {
-                                        'auto-trades-stat__value--running': isRunning,
-                                    })}>
-                                        {isRunning ? '▶ Running' : '⏸ Stopped'}
-                                    </span>
-                                </div>
+                        <div className="auto-trades-stats">
+                            <div className="stat">
+                                <span className="label">Total P&L</span>
+                                <span className={classNames('value', {
+                                    'value--positive': pnlPositive,
+                                    'value--negative': pnlNegative,
+                                })}>
+                                    {pnlPositive ? '+' : ''}{totalPnl.toFixed(2)} {currency}
+                                </span>
+                            </div>
+                            <div className="stat">
+                                <span className="label">Total Trades</span>
+                                <span className="value">{totalTrades}</span>
+                            </div>
+                            <div className="stat">
+                                <span className="label">Martingale</span>
+                                <span className={classNames('value', {
+                                    'value--active': martingaleActive && martingaleEnabled,
+                                })}>
+                                    {martingaleEnabled && martingaleActive ? 'Active' : martingaleEnabled ? 'Waiting' : 'Off'}
+                                </span>
+                            </div>
+                            <div className="stat">
+                                <span className="label">Status</span>
+                                <span className={classNames('value', {
+                                    'value--running': isRunning,
+                                })}>
+                                    {isRunning ? '▶ Running' : '⏸ Stopped'}
+                                </span>
                             </div>
                         </div>
 
                         {/* Controls */}
-                        <div className='auto-trades-controls' style={{ paddingBottom: '20vh' }}>
+                        <div className="auto-trades-controls">
                             {!isRunning ? (
                                 <button
-                                    className='auto-trades-controls__run'
+                                    className="btn btn--start"
                                     onClick={handleRun}
                                     disabled={!client.is_logged_in || !hasEnabledMarkets}
                                 >
                                     ▶ Start Trading
                                 </button>
                             ) : (
-                                <button className='auto-trades-controls__stop' onClick={handleStop}>
+                                <button className="btn btn--stop" onClick={handleStop}>
                                     ■ Stop Trading
                                 </button>
                             )}
@@ -2651,25 +2657,20 @@ const AutoTrades = observer(() => {
                 </div>
             </ThemedScrollbars>
 
-            {/* Risk Disclaimer */}
-            <button className='auto-trades-disclaimer-btn' onClick={() => setShowDisclaimer(true)}>
+            {/* Disclaimer */}
+            <button className="auto-trades-disclaimer" onClick={() => setShowDisclaimer(true)}>
                 ⚠ Risk Disclaimer
             </button>
 
             {showDisclaimer && (
-                <div className='auto-trades-disclaimer-overlay' onClick={() => setShowDisclaimer(false)}>
-                    <div className='auto-trades-disclaimer-modal' onClick={e => e.stopPropagation()}>
-                        <div className='auto-trades-disclaimer-modal__header'>
-                            <span className='auto-trades-disclaimer-modal__icon'>⚠</span>
-                            <h3 className='auto-trades-disclaimer-modal__title'>Risk Disclaimer</h3>
-                            <button
-                                className='auto-trades-disclaimer-modal__close'
-                                onClick={() => setShowDisclaimer(false)}
-                            >
-                                ✕
-                            </button>
+                <div className="auto-trades-disclaimer__overlay" onClick={() => setShowDisclaimer(false)}>
+                    <div className="auto-trades-disclaimer__modal" onClick={e => e.stopPropagation()}>
+                        <div className="auto-trades-disclaimer__modal-header">
+                            <span className="icon">⚠</span>
+                            <h3 className="title">Risk Disclaimer</h3>
+                            <button className="close" onClick={() => setShowDisclaimer(false)}>✕</button>
                         </div>
-                        <div className='auto-trades-disclaimer-modal__body'>
+                        <div className="auto-trades-disclaimer__modal-body">
                             <p>
                                 Deriv offers complex derivatives, such as options and contracts for difference
                                 (&ldquo;CFDs&rdquo;). These products may not be suitable for all clients, and trading
@@ -2687,11 +2688,8 @@ const AutoTrades = observer(() => {
                                 </li>
                             </ul>
                         </div>
-                        <div className='auto-trades-disclaimer-modal__footer'>
-                            <button
-                                className='auto-trades-disclaimer-modal__ok'
-                                onClick={() => setShowDisclaimer(false)}
-                            >
+                        <div className="auto-trades-disclaimer__modal-footer">
+                            <button className="ok" onClick={() => setShowDisclaimer(false)}>
                                 I Understand
                             </button>
                         </div>
