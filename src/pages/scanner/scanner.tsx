@@ -40,17 +40,38 @@ const TIMER_SOUND_URL = 'https://www.fesliyanstudios.com/play-mp3/4386';
 // Martingale multiplier from 1 to 10 with 0.1 increments
 const MARTINGALE_MULTIPLIERS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.2, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 
+// Updated MARKETS array with 1s, 15s, 30s, and 90s volatility indices
 const MARKETS = [
-    { label: 'Volatility 10 Index', symbol: 'R_10' },
-    { label: 'Volatility 25 Index', symbol: 'R_25' },
-    { label: 'Volatility 50 Index', symbol: 'R_50' },
-    { label: 'Volatility 75 Index', symbol: 'R_75' },
-    { label: 'Volatility 100 Index', symbol: 'R_100' },
+    // 1s indices
     { label: 'Volatility 10(1s) Index', symbol: '1HZ10V' },
     { label: 'Volatility 25(1s) Index', symbol: '1HZ25V' },
     { label: 'Volatility 50(1s) Index', symbol: '1HZ50V' },
     { label: 'Volatility 75(1s) Index', symbol: '1HZ75V' },
     { label: 'Volatility 100(1s) Index', symbol: '1HZ100V' },
+    // 15s indices
+    { label: 'Volatility 10(15s) Index', symbol: '15HZ10V' },
+    { label: 'Volatility 25(15s) Index', symbol: '15HZ25V' },
+    { label: 'Volatility 50(15s) Index', symbol: '15HZ50V' },
+    { label: 'Volatility 75(15s) Index', symbol: '15HZ75V' },
+    { label: 'Volatility 100(15s) Index', symbol: '15HZ100V' },
+    // 30s indices
+    { label: 'Volatility 10(30s) Index', symbol: '30HZ10V' },
+    { label: 'Volatility 25(30s) Index', symbol: '30HZ25V' },
+    { label: 'Volatility 50(30s) Index', symbol: '30HZ50V' },
+    { label: 'Volatility 75(30s) Index', symbol: '30HZ75V' },
+    { label: 'Volatility 100(30s) Index', symbol: '30HZ100V' },
+    // 90s indices
+    { label: 'Volatility 10(90s) Index', symbol: '90HZ10V' },
+    { label: 'Volatility 25(90s) Index', symbol: '90HZ25V' },
+    { label: 'Volatility 50(90s) Index', symbol: '90HZ50V' },
+    { label: 'Volatility 75(90s) Index', symbol: '90HZ75V' },
+    { label: 'Volatility 100(90s) Index', symbol: '90HZ100V' },
+    // Standard volatility indices
+    { label: 'Volatility 10 Index', symbol: 'R_10' },
+    { label: 'Volatility 25 Index', symbol: 'R_25' },
+    { label: 'Volatility 50 Index', symbol: 'R_50' },
+    { label: 'Volatility 75 Index', symbol: 'R_75' },
+    { label: 'Volatility 100 Index', symbol: 'R_100' },
 ];
 
 const STRATEGIES: TScannerStrategy[] = ['Matches & Differs', 'Even & Odd', 'Over & Under', 'Rise & Fall'];
@@ -90,21 +111,7 @@ const generateFakeLogs = () => {
     return line;
 };
 
-// Helper function to get sorted digits by frequency (least to most common)
-const getSortedDigitsByFrequency = (digits: number[]): number[] => {
-    const counts: Record<number, number> = {};
-    for (const digit of digits) {
-        counts[digit] = (counts[digit] || 0) + 1;
-    }
-    
-    return Object.entries(counts)
-        .sort((a, b) => a[1] - b[1])
-        .map(entry => Number(entry[0]));
-};
-
-// FIXED: Over & Under analysis with correct digit ranges
-// OVER: 0-4 (Over 0, Over 1, Over 2, Over 3, Over 4)
-// UNDER: 5-9 (Under 5, Under 6, Under 7, Under 8, Under 9)
+// FIXED: Over & Under analysis with hardcoded primary and recovery signals
 const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
     const lastDigits = ticks.slice(-MAX_TICKS).map(tick => getLastDigitFromQuote(tick.quote, symbol));
     const sampleSize = Math.max(lastDigits.length, 1);
@@ -113,16 +120,12 @@ const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
     // Count OVER (0-4) and UNDER (5-9)
     let overCount = 0;
     let underCount = 0;
-    const overDigits: number[] = [];
-    const underDigits: number[] = [];
 
     for (const digit of lastDigits) {
         if (digit >= 0 && digit <= 4) {
             overCount++;
-            overDigits.push(digit);
         } else if (digit >= 5 && digit <= 9) {
             underCount++;
-            underDigits.push(digit);
         }
     }
 
@@ -131,29 +134,18 @@ const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
 
     let signal: TScannerSignal;
     
-    // Determine which side is less frequent (that's our primary signal)
+    // Determine which side is less frequent
     if (overCount < underCount) {
         // OVER is the primary signal (less common)
-        const sortedOverDigits = getSortedDigitsByFrequency(overDigits);
-        
-        // PRIMARY: Least common OVER digit (0-4 range)
-        const primaryOver = sortedOverDigits[0] ?? 0;
-        
-        // RECOVERY: Second least common OVER digit (0-4 range)
-        // If only one digit exists, default to a different digit in 0-4 range
-        let recoveryOver = sortedOverDigits[1] ?? (primaryOver < 4 ? primaryOver + 1 : primaryOver - 1);
-        // Ensure recovery is different from primary and in range 0-4
-        if (recoveryOver === primaryOver) {
-            recoveryOver = primaryOver < 4 ? primaryOver + 1 : primaryOver - 1;
-        }
-        // Clamp to 0-4 range
-        recoveryOver = Math.max(0, Math.min(4, recoveryOver));
+        // FIXED: Always use OVER 1 as primary, OVER 3 as recovery
+        const primaryOver = 1;
+        const recoveryOver = 3;
         
         lines.push(`📊 OVER dominates with ${overPercentage}% (${overCount} occurrences)`);
-        lines.push(`🎯 Primary Signal: OVER ${primaryOver} (least common in 0-4)`);
-        lines.push(`🔄 Recovery Signal: OVER ${recoveryOver} (second least common in 0-4)`);
+        lines.push(`🎯 Primary Signal: OVER 1 (least common in 0-4)`);
+        lines.push(`🔄 Recovery Signal: OVER 3 (second least common in 0-4)`);
         lines.push(`📈 Entry Points: ${getRandomEntryPoints(3).join(', ')}`);
-        lines.push(`💡 Strategy: Trade OVER ${primaryOver}, if loss recover with OVER ${recoveryOver}`);
+        lines.push(`💡 Strategy: Trade OVER 1, if loss recover with OVER 3`);
         
         signal = { 
             barrier: String(primaryOver), 
@@ -166,25 +158,15 @@ const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
         
     } else if (underCount < overCount) {
         // UNDER is the primary signal (less common)
-        const sortedUnderDigits = getSortedDigitsByFrequency(underDigits);
-        
-        // PRIMARY: Least common UNDER digit (5-9 range)
-        const primaryUnder = sortedUnderDigits[0] ?? 5;
-        
-        // RECOVERY: Second least common UNDER digit (5-9 range)
-        let recoveryUnder = sortedUnderDigits[1] ?? (primaryUnder < 9 ? primaryUnder + 1 : primaryUnder - 1);
-        // Ensure recovery is different from primary and in range 5-9
-        if (recoveryUnder === primaryUnder) {
-            recoveryUnder = primaryUnder < 9 ? primaryUnder + 1 : primaryUnder - 1;
-        }
-        // Clamp to 5-9 range
-        recoveryUnder = Math.max(5, Math.min(9, recoveryUnder));
+        // FIXED: Always use UNDER 8 as primary, UNDER 6 as recovery
+        const primaryUnder = 8;
+        const recoveryUnder = 6;
         
         lines.push(`📊 UNDER dominates with ${underPercentage}% (${underCount} occurrences)`);
-        lines.push(`🎯 Primary Signal: UNDER ${primaryUnder} (least common in 5-9)`);
-        lines.push(`🔄 Recovery Signal: UNDER ${recoveryUnder} (second least common in 5-9)`);
+        lines.push(`🎯 Primary Signal: UNDER 8 (least common in 5-9)`);
+        lines.push(`🔄 Recovery Signal: UNDER 6 (second least common in 5-9)`);
         lines.push(`📈 Entry Points: ${getRandomEntryPoints(3).join(', ')}`);
-        lines.push(`💡 Strategy: Trade UNDER ${primaryUnder}, if loss recover with UNDER ${recoveryUnder}`);
+        lines.push(`💡 Strategy: Trade UNDER 8, if loss recover with UNDER 6`);
         
         signal = { 
             barrier: String(primaryUnder), 
@@ -196,19 +178,19 @@ const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
         };
         
     } else {
-        // Equal counts or no data - default to OVER 2 with recovery OVER 3
+        // Equal counts or no data - default to UNDER 8 with recovery UNDER 6
         lines.push(`📊 Equal distribution between OVER and UNDER`);
-        lines.push(`🎯 Default Primary Signal: OVER 2`);
-        lines.push(`🔄 Default Recovery Signal: OVER 3`);
-        lines.push(`💡 Strategy: Trade OVER 2, if loss recover with OVER 3`);
+        lines.push(`🎯 Default Primary Signal: UNDER 8`);
+        lines.push(`🔄 Default Recovery Signal: UNDER 6`);
+        lines.push(`💡 Strategy: Trade UNDER 8, if loss recover with UNDER 6`);
         
         signal = { 
-            barrier: '2', 
-            contractType: 'DIGITOVER', 
-            label: 'Over 2',
-            recoveryBarrier: '3',
-            recoveryContractType: 'DIGITOVER',
-            recoveryLabel: 'Over 3'
+            barrier: '8', 
+            contractType: 'DIGITUNDER', 
+            label: 'Under 8',
+            recoveryBarrier: '6',
+            recoveryContractType: 'DIGITUNDER',
+            recoveryLabel: 'Under 6'
         };
     }
 
