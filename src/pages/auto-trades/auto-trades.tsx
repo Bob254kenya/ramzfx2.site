@@ -194,7 +194,6 @@ interface MarketState {
     tradeCount: number;
     baseStake: number;
     martingaleMultiplier: number;
-    // Fixed: Track if we're in the middle of a trade execution
     isExecuting: boolean;
 }
 
@@ -320,14 +319,6 @@ const isCandleMatch = (trade_type: TradeType, candle_direction: Direction) => {
 
 // ── FIXED: Martingale Logic ─────────────────────────────────────────────
 
-/**
- * FIXED: Properly calculates the next martingale state
- * Key fixes:
- * 1. Uses base_stake for calculation, not current_stake (prevents compounding errors)
- * 2. Correctly handles after_two_losses (starts on 3rd loss)
- * 3. Properly tracks consecutive losses
- * 4. Prevents infinite martingale by checking max losses
- */
 const getNextMartingaleState = ({
     profit,
     base_stake,
@@ -364,7 +355,7 @@ const getNextMartingaleState = ({
         return {
             consecutiveLosses: nextConsecutiveLosses,
             lastResult: 'loss' as const,
-            nextStake: base_stake, // Reset to base stake
+            nextStake: base_stake,
             martingaleMultiplier: 1,
             maxLossesReached: true,
         };
@@ -384,25 +375,17 @@ const getNextMartingaleState = ({
     let shouldApplyMartingale = false;
     let martingaleMultiplier = 1;
 
-    // FIXED: Correct martingale logic for each mode
     if (normalizedMode === 'after_one_loss') {
-        // Start martingale after 1 loss (on the 2nd trade)
         shouldApplyMartingale = true;
-        // For 1 loss: multiplier^1, 2 losses: multiplier^2, etc.
         martingaleMultiplier = Math.pow(multiplier, nextConsecutiveLosses);
     } 
     else if (normalizedMode === 'after_two_losses') {
-        // FIXED: Start martingale after 2 losses (on the 3rd trade)
-        // After 2 losses means: lose trade 1, lose trade 2, then martingale on trade 3
         shouldApplyMartingale = nextConsecutiveLosses >= 3;
         if (shouldApplyMartingale) {
-            // For 3 losses: multiplier^1, 4 losses: multiplier^2, etc.
             martingaleMultiplier = Math.pow(multiplier, nextConsecutiveLosses - 2);
         }
     } 
     else if (normalizedMode === 'custom_consecutive_loss_trigger') {
-        // FIXED: Start martingale after custom number of losses + 1
-        // If trigger is 3, we lose 3 times, then martingale on 4th trade
         shouldApplyMartingale = nextConsecutiveLosses >= normalizedTrigger + 1;
         if (shouldApplyMartingale) {
             const lossesBeyondTrigger = nextConsecutiveLosses - normalizedTrigger;
@@ -410,7 +393,6 @@ const getNextMartingaleState = ({
         }
     }
 
-    // FIXED: Always use base_stake for calculation, not current_stake
     let nextStake = base_stake;
     if (shouldApplyMartingale) {
         nextStake = parseFloat((base_stake * martingaleMultiplier).toFixed(2));
@@ -608,8 +590,9 @@ const AutoTrades = observer(() => {
     const marketSwitchActiveRef = useRef<boolean>(false);
     const activeTradingMarketRef = useRef<string | null>(null);
     const isPrimaryMarketActiveRef = useRef<boolean>(true);
-    // FIXED: Track pending trade promises to prevent race conditions
     const pendingTradePromisesRef = useRef<Record<string, Promise<number> | null>>({});
+    // FIXED: Track which market is currently trading to prevent double execution
+    const currentTradingMarketRef = useRef<string | null>(null);
 
     // ── Update Refs ──────────────────────────────────────────────────────
 
@@ -632,10 +615,13 @@ const AutoTrades = observer(() => {
             selectedMarketsRef.current = markets;
         }
 
+        // FIXED: Initialize active trading market when switching is enabled
         if (switchOnLoss && market1Enabled && market2Enabled && !scanAllMarkets) {
             if (!activeTradingMarketRef.current) {
-                setActiveTradingMarket(market1Symbol);
-                activeTradingMarketRef.current = market1Symbol;
+                // Start with primary market
+                const primary = market1Enabled ? market1Symbol : market2Symbol;
+                setActiveTradingMarket(primary);
+                activeTradingMarketRef.current = primary;
                 isPrimaryMarketActiveRef.current = true;
                 marketSwitchActiveRef.current = false;
             }
@@ -1002,6 +988,32 @@ const AutoTrades = observer(() => {
         return null;
     }, [scanAllMarkets, market1Symbol, market2Symbol, market1Enabled, market2Enabled]);
 
+    // ── FIXED: Check if market should trade based on switching logic ────
+
+    const shouldMarketTrade = useCallback((symbol: string): boolean => {
+        // If switching is disabled or only one market is enabled, all enabled markets trade
+        if (!switchOnLoss || !market1Enabled || !market2Enabled || scanAllMarkets) {
+            return true;
+        }
+
+        // If switching is enabled and we have two markets
+        const activeSymbol = activeTradingMarketRef.current;
+        
+        // If no active market is set, use the primary market
+        if (!activeSymbol) {
+            const primary = getPrimaryMarket();
+            if (primary === symbol) {
+                setActiveTradingMarket(symbol);
+                activeTradingMarketRef.current = symbol;
+                return true;
+            }
+            return false;
+        }
+
+        // Only the active market should trade
+        return activeSymbol === symbol;
+    }, [switchOnLoss, market1Enabled, market2Enabled, scanAllMarkets, getPrimaryMarket]);
+
     // ── FIXED: After Trade Handler ──────────────────────────────────────
 
     const handleAfterTrade = useCallback(
@@ -1015,7 +1027,6 @@ const AutoTrades = observer(() => {
             const tp = Number(takeProfit) || 100;
             const sl = Number(stopLoss) || 100;
 
-            // FIXED: Pass base_stake instead of current_stake to prevent compounding errors
             const nextMartingaleState = getNextMartingaleState({
                 profit,
                 base_stake: baseStake,
@@ -1038,8 +1049,9 @@ const AutoTrades = observer(() => {
             state.lossCooldownLeft = profit < 0 ? MARKET_LOSS_COOLDOWN_TICKS : 0;
             state.tradeCount++;
             state.trading = false;
-            state.isExecuting = false; // FIXED: Reset execution flag
+            state.isExecuting = false;
             globalTradingRef.current = false;
+            currentTradingMarketRef.current = null; // FIXED: Clear current trading market
 
             // Clear pending promise
             if (pendingTradePromisesRef.current[symbol]) {
@@ -1058,28 +1070,34 @@ const AutoTrades = observer(() => {
 
             lastResultRef.current[symbol] = nextMartingaleState.lastResult;
 
-            // Handle market switching on loss
+            // FIXED: Handle market switching on loss with proper strategy checking
             if (switchOnLoss && market1Enabled && market2Enabled && !scanAllMarkets) {
                 if (profit < 0) {
+                    // On loss: Switch to the other market
                     const nextSymbol = getNextMarketForSwitch(symbol);
                     if (nextSymbol && nextSymbol !== symbol) {
                         const nextConfig = marketConfigsRef.current[nextSymbol];
+                        // FIXED: Only switch if the other market has a valid strategy
                         if (nextConfig && nextConfig.enabled) {
                             marketSwitchActiveRef.current = true;
                             setActiveTradingMarket(nextSymbol);
                             activeTradingMarketRef.current = nextSymbol;
                             isPrimaryMarketActiveRef.current = false;
+                            console.log(`[AutoTrades] Switching from ${symbol} to ${nextSymbol} after loss`);
                         }
                     }
-                } else if (profit >= 0 && marketSwitchActiveRef.current) {
+                } else if (profit >= 0) {
+                    // On win: Switch back to primary market
                     const primarySymbol = getPrimaryMarket();
                     if (primarySymbol && primarySymbol !== symbol) {
                         const primaryConfig = marketConfigsRef.current[primarySymbol];
+                        // FIXED: Only switch back if primary market has a valid strategy
                         if (primaryConfig && primaryConfig.enabled) {
                             setActiveTradingMarket(primarySymbol);
                             activeTradingMarketRef.current = primarySymbol;
                             isPrimaryMarketActiveRef.current = true;
                             marketSwitchActiveRef.current = false;
+                            console.log(`[AutoTrades] Switching back to primary market ${primarySymbol} after win`);
                         }
                     }
                 }
@@ -1110,9 +1128,11 @@ const AutoTrades = observer(() => {
 
     const tryExecuteSignal = useCallback(
         (symbol: string, state: MarketState, signalReady: boolean) => {
-            // Check if this market should trade
-            let shouldTrade = false;
-            
+            // Check if this market should trade based on switching logic
+            if (!shouldMarketTrade(symbol)) {
+                return;
+            }
+
             const config = marketConfigsRef.current[symbol];
             if (!config || !config.enabled) {
                 return;
@@ -1120,44 +1140,30 @@ const AutoTrades = observer(() => {
 
             // FIXED: Check if there's already a pending trade for this symbol
             if (pendingTradePromisesRef.current[symbol]) {
-                return; // Don't execute if a trade is already in progress
+                return;
             }
 
-            if (scanAllMarkets) {
-                shouldTrade = true;
-            } else if (switchOnLoss && market1Enabled && market2Enabled) {
-                if (activeTradingMarketRef.current === symbol) {
-                    shouldTrade = true;
-                }
-                if (!activeTradingMarketRef.current) {
-                    const primary = getPrimaryMarket();
-                    if (primary === symbol) {
-                        shouldTrade = true;
-                        setActiveTradingMarket(symbol);
-                        activeTradingMarketRef.current = symbol;
-                        isPrimaryMarketActiveRef.current = true;
-                    }
-                }
-            } else {
-                shouldTrade = true;
+            // FIXED: Check if another market is currently trading
+            if (currentTradingMarketRef.current && currentTradingMarketRef.current !== symbol) {
+                return;
             }
 
-            // FIXED: Added isExecuting check to prevent double execution
+            // FIXED: Ensure the signal matches the current market's strategy
             if (
                 runningRef.current &&
                 signalReady &&
                 !state.trading &&
-                !state.isExecuting && // FIXED: Check execution flag
+                !state.isExecuting &&
                 !globalTradingRef.current &&
                 state.lossCooldownLeft === 0 &&
-                client.is_logged_in &&
-                shouldTrade
+                client.is_logged_in
             ) {
-                // FIXED: Set execution flags immediately to prevent race conditions
+                // Set execution flags immediately to prevent race conditions
                 state.trading = true;
                 state.isExecuting = true;
                 state.consecutive = 0;
                 globalTradingRef.current = true;
+                currentTradingMarketRef.current = symbol; // FIXED: Set current trading market
                 state.tradeStartTime = Math.floor(Date.now() / 1000);
                 state.verificationId = `${symbol}_${state.tradeStartTime}_${Math.random().toString(36).substring(2, 11)}`;
 
@@ -1168,6 +1174,7 @@ const AutoTrades = observer(() => {
                     state.trading = false;
                     state.isExecuting = false;
                     globalTradingRef.current = false;
+                    currentTradingMarketRef.current = null;
                     setError('Auto Trades stopped because the stake amount is invalid.');
                     refreshDisplays();
                     return;
@@ -1175,25 +1182,36 @@ const AutoTrades = observer(() => {
 
                 marketStatesRef.current[symbol] = { ...state };
 
-                // FIXED: Store the promise reference
                 const tradePromise = executeTrade(symbol, stakeNow, state.lastResultType);
                 pendingTradePromisesRef.current[symbol] = tradePromise;
 
                 tradePromise
                     .then(profit => {
-                        // FIXED: Only process if still running and not unmounted
                         if (runningRef.current && !unmountedRef.current) {
                             handleAfterTrade(symbol, profit);
+                        } else {
+                            // Clean up if stopped
+                            const currentState = marketStatesRef.current[symbol];
+                            if (currentState) {
+                                currentState.trading = false;
+                                currentState.isExecuting = false;
+                                globalTradingRef.current = false;
+                                currentTradingMarketRef.current = null;
+                                if (pendingTradePromisesRef.current[symbol]) {
+                                    pendingTradePromisesRef.current[symbol] = null;
+                                }
+                                marketStatesRef.current[symbol] = { ...currentState };
+                            }
                         }
                     })
                     .catch(error => {
                         console.error(`[AutoTrades] Trade execution failed for ${symbol}:`, error);
-                        // FIXED: Reset state on error
                         const currentState = marketStatesRef.current[symbol];
                         if (currentState) {
                             currentState.trading = false;
                             currentState.isExecuting = false;
                             globalTradingRef.current = false;
+                            currentTradingMarketRef.current = null;
                             if (pendingTradePromisesRef.current[symbol]) {
                                 pendingTradePromisesRef.current[symbol] = null;
                             }
@@ -1203,7 +1221,7 @@ const AutoTrades = observer(() => {
                     });
             }
         },
-        [client.is_logged_in, executeTrade, handleAfterTrade, refreshDisplays, stake, switchOnLoss, market1Enabled, market2Enabled, scanAllMarkets, getPrimaryMarket]
+        [client.is_logged_in, executeTrade, handleAfterTrade, refreshDisplays, stake, shouldMarketTrade]
     );
 
     // ── Tick Handler ─────────────────────────────────────────────────────
@@ -1544,6 +1562,7 @@ const AutoTrades = observer(() => {
     const resetSession = useCallback(() => {
         const baseStake = Number(stake) || 1;
         globalTradingRef.current = false;
+        currentTradingMarketRef.current = null;
         
         AUTO_MARKET_SYMBOLS.forEach(symbol => {
             marketStatesRef.current[symbol] = createMarketState({ 
@@ -1557,7 +1576,6 @@ const AutoTrades = observer(() => {
             });
         });
         
-        // FIXED: Clear pending promises
         pendingTradePromisesRef.current = {};
         
         totalPnlRef.current = 0;
@@ -1566,8 +1584,9 @@ const AutoTrades = observer(() => {
         setTotalTrades(0);
         setError(null);
         
-        const primary = getPrimaryMarket();
-        if (primary) {
+        // Initialize active trading market for switching
+        if (switchOnLoss && market1Enabled && market2Enabled && !scanAllMarkets) {
+            const primary = market1Enabled ? market1Symbol : market2Symbol;
             setActiveTradingMarket(primary);
             activeTradingMarketRef.current = primary;
             isPrimaryMarketActiveRef.current = true;
@@ -1575,10 +1594,12 @@ const AutoTrades = observer(() => {
         } else {
             setActiveTradingMarket(null);
             activeTradingMarketRef.current = null;
+            marketSwitchActiveRef.current = false;
+            isPrimaryMarketActiveRef.current = true;
         }
         lastResultRef.current = {};
         refreshDisplays();
-    }, [refreshDisplays, stake, getPrimaryMarket]);
+    }, [refreshDisplays, stake, switchOnLoss, market1Enabled, market2Enabled, scanAllMarkets, market1Symbol, market2Symbol]);
 
     // ── Run/Stop ─────────────────────────────────────────────────────────
 
@@ -1605,9 +1626,9 @@ const AutoTrades = observer(() => {
     const stopTrading = useCallback(() => {
         runningRef.current = false;
         globalTradingRef.current = false;
+        currentTradingMarketRef.current = null;
         clearDeferredWork();
         
-        // FIXED: Clear pending promises
         Object.keys(pendingTradePromisesRef.current).forEach(key => {
             pendingTradePromisesRef.current[key] = null;
         });
@@ -2059,6 +2080,7 @@ const AutoTrades = observer(() => {
                                 {switchOnLoss && isRunning && market1Enabled && market2Enabled && !scanAllMarkets && (
                                     <div className='auto-trades-active-market'>
                                         Active: <strong>{getActiveMarketDisplay()}</strong>
+                                        {marketSwitchActive && <span className='auto-trades-active-market__switch'> (Switched on loss)</span>}
                                     </div>
                                 )}
                                 {scanAllMarkets && (
