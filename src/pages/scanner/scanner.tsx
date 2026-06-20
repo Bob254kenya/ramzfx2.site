@@ -90,44 +90,21 @@ const generateFakeLogs = () => {
     return line;
 };
 
-const findLeastCommonDigit = (digits: number[]) => {
+// Helper function to get sorted digits by frequency (least to most common)
+const getSortedDigitsByFrequency = (digits: number[]): number[] => {
     const counts: Record<number, number> = {};
     for (const digit of digits) {
         counts[digit] = (counts[digit] || 0) + 1;
     }
-
-    let leastCommon: number | null = null;
-    let minCount = Infinity;
-
-    for (const digit in counts) {
-        if (counts[digit] < minCount) {
-            minCount = counts[digit];
-            leastCommon = Number(digit);
-        }
-    }
-
-    return leastCommon ?? digits[0] ?? 0;
+    
+    return Object.entries(counts)
+        .sort((a, b) => a[1] - b[1])
+        .map(entry => Number(entry[0]));
 };
 
-const getRandomEntryPoints = (count: number) => {
-    const entryPoints: number[] = [];
-    for (let i = 0; i < count; i++) {
-        entryPoints.push(Math.floor(Math.random() * 10));
-    }
-    return entryPoints;
-};
-
-const getQuoteFromTick = (data: any): TTickPoint | null => {
-    const quote = Number(data?.tick?.quote);
-    if (!Number.isFinite(quote)) return null;
-
-    return {
-        epoch: Number(data?.tick?.epoch) || Math.floor(Date.now() / 1000),
-        quote,
-    };
-};
-
-// Enhanced Over & Under analysis with specific signal rules
+// FIXED: Over & Under analysis with correct digit ranges
+// OVER: 0-4 (Over 0, Over 1, Over 2, Over 3, Over 4)
+// UNDER: 5-9 (Under 5, Under 6, Under 7, Under 8, Under 9)
 const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
     const lastDigits = ticks.slice(-MAX_TICKS).map(tick => getLastDigitFromQuote(tick.quote, symbol));
     const sampleSize = Math.max(lastDigits.length, 1);
@@ -140,41 +117,41 @@ const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
     const underDigits: number[] = [];
 
     for (const digit of lastDigits) {
-        if (digit <= 4) {
+        if (digit >= 0 && digit <= 4) {
             overCount++;
             overDigits.push(digit);
-        } else {
+        } else if (digit >= 5 && digit <= 9) {
             underCount++;
             underDigits.push(digit);
         }
     }
 
-    const overPercentage = ((overCount / sampleSize) * 100).toFixed(2);
-    const underPercentage = ((underCount / sampleSize) * 100).toFixed(2);
+    const overPercentage = sampleSize > 0 ? ((overCount / sampleSize) * 100).toFixed(2) : '0.00';
+    const underPercentage = sampleSize > 0 ? ((underCount / sampleSize) * 100).toFixed(2) : '0.00';
 
     let signal: TScannerSignal;
     
-    // Determine primary signal based on what's less frequent
+    // Determine which side is less frequent (that's our primary signal)
     if (overCount < underCount) {
         // OVER is the primary signal (less common)
-        // Find the least common OVER digit (recovery: Over 1 or Over 4)
-        const leastCommonOver = findLeastCommonDigit(overDigits);
-        const overCounts: Record<number, number> = {};
-        for (const digit of overDigits) {
-            overCounts[digit] = (overCounts[digit] || 0) + 1;
+        const sortedOverDigits = getSortedDigitsByFrequency(overDigits);
+        
+        // PRIMARY: Least common OVER digit (0-4 range)
+        const primaryOver = sortedOverDigits[0] ?? 0;
+        
+        // RECOVERY: Second least common OVER digit (0-4 range)
+        // If only one digit exists, default to a different digit in 0-4 range
+        let recoveryOver = sortedOverDigits[1] ?? (primaryOver < 4 ? primaryOver + 1 : primaryOver - 1);
+        // Ensure recovery is different from primary and in range 0-4
+        if (recoveryOver === primaryOver) {
+            recoveryOver = primaryOver < 4 ? primaryOver + 1 : primaryOver - 1;
         }
-        
-        // Find second least common OVER digit for recovery
-        const sortedOverDigits = Object.entries(overCounts)
-            .sort((a, b) => a[1] - b[1])
-            .map(entry => Number(entry[0]));
-        
-        const primaryOver = sortedOverDigits[0] || 0;
-        const recoveryOver = sortedOverDigits[1] || 4; // Default to 4 if not available
+        // Clamp to 0-4 range
+        recoveryOver = Math.max(0, Math.min(4, recoveryOver));
         
         lines.push(`📊 OVER dominates with ${overPercentage}% (${overCount} occurrences)`);
-        lines.push(`🎯 Primary Signal: OVER ${primaryOver} (least common)`);
-        lines.push(`🔄 Recovery Signal: OVER ${recoveryOver} (second least common)`);
+        lines.push(`🎯 Primary Signal: OVER ${primaryOver} (least common in 0-4)`);
+        lines.push(`🔄 Recovery Signal: OVER ${recoveryOver} (second least common in 0-4)`);
         lines.push(`📈 Entry Points: ${getRandomEntryPoints(3).join(', ')}`);
         lines.push(`💡 Strategy: Trade OVER ${primaryOver}, if loss recover with OVER ${recoveryOver}`);
         
@@ -187,25 +164,25 @@ const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
             recoveryLabel: `Over ${recoveryOver}`
         };
         
-    } else {
+    } else if (underCount < overCount) {
         // UNDER is the primary signal (less common)
-        const leastCommonUnder = findLeastCommonDigit(underDigits);
-        const underCounts: Record<number, number> = {};
-        for (const digit of underDigits) {
-            underCounts[digit] = (underCounts[digit] || 0) + 1;
+        const sortedUnderDigits = getSortedDigitsByFrequency(underDigits);
+        
+        // PRIMARY: Least common UNDER digit (5-9 range)
+        const primaryUnder = sortedUnderDigits[0] ?? 5;
+        
+        // RECOVERY: Second least common UNDER digit (5-9 range)
+        let recoveryUnder = sortedUnderDigits[1] ?? (primaryUnder < 9 ? primaryUnder + 1 : primaryUnder - 1);
+        // Ensure recovery is different from primary and in range 5-9
+        if (recoveryUnder === primaryUnder) {
+            recoveryUnder = primaryUnder < 9 ? primaryUnder + 1 : primaryUnder - 1;
         }
-        
-        // Find second least common UNDER digit for recovery
-        const sortedUnderDigits = Object.entries(underCounts)
-            .sort((a, b) => a[1] - b[1])
-            .map(entry => Number(entry[0]));
-        
-        const primaryUnder = sortedUnderDigits[0] || 8;
-        const recoveryUnder = sortedUnderDigits[1] || 5;
+        // Clamp to 5-9 range
+        recoveryUnder = Math.max(5, Math.min(9, recoveryUnder));
         
         lines.push(`📊 UNDER dominates with ${underPercentage}% (${underCount} occurrences)`);
-        lines.push(`🎯 Primary Signal: UNDER ${primaryUnder} (least common)`);
-        lines.push(`🔄 Recovery Signal: UNDER ${recoveryUnder} (second least common)`);
+        lines.push(`🎯 Primary Signal: UNDER ${primaryUnder} (least common in 5-9)`);
+        lines.push(`🔄 Recovery Signal: UNDER ${recoveryUnder} (second least common in 5-9)`);
         lines.push(`📈 Entry Points: ${getRandomEntryPoints(3).join(', ')}`);
         lines.push(`💡 Strategy: Trade UNDER ${primaryUnder}, if loss recover with UNDER ${recoveryUnder}`);
         
@@ -216,6 +193,22 @@ const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
             recoveryBarrier: String(recoveryUnder),
             recoveryContractType: 'DIGITUNDER',
             recoveryLabel: `Under ${recoveryUnder}`
+        };
+        
+    } else {
+        // Equal counts or no data - default to OVER 2 with recovery OVER 3
+        lines.push(`📊 Equal distribution between OVER and UNDER`);
+        lines.push(`🎯 Default Primary Signal: OVER 2`);
+        lines.push(`🔄 Default Recovery Signal: OVER 3`);
+        lines.push(`💡 Strategy: Trade OVER 2, if loss recover with OVER 3`);
+        
+        signal = { 
+            barrier: '2', 
+            contractType: 'DIGITOVER', 
+            label: 'Over 2',
+            recoveryBarrier: '3',
+            recoveryContractType: 'DIGITOVER',
+            recoveryLabel: 'Over 3'
         };
     }
 
@@ -302,6 +295,24 @@ const buildAnalysis = (strategy: TScannerStrategy, ticks: TTickPoint[], symbol: 
     }
 
     return { lines, signal };
+};
+
+const getRandomEntryPoints = (count: number) => {
+    const entryPoints: number[] = [];
+    for (let i = 0; i < count; i++) {
+        entryPoints.push(Math.floor(Math.random() * 10));
+    }
+    return entryPoints;
+};
+
+const getQuoteFromTick = (data: any): TTickPoint | null => {
+    const quote = Number(data?.tick?.quote);
+    if (!Number.isFinite(quote)) return null;
+
+    return {
+        epoch: Number(data?.tick?.epoch) || Math.floor(Date.now() / 1000),
+        quote,
+    };
 };
 
 const Scanner = observer(() => {
@@ -771,7 +782,7 @@ const Scanner = observer(() => {
                 }
             }
         },
-        [currency, runSingleTrade, stopTrading, stopLossRef, takeProfitRef, runsToCheckRef]
+        [currency, runSingleTrade, stopTrading]
     );
 
     // Modified executeTradeFromTick to use recovery logic for Over & Under
