@@ -159,7 +159,7 @@ interface MarketConfig {
     barrier: string;
     predictionDigit: string;
     comparisonOperator: ComparisonOperator;
-    inputSequence: string; // For odd/even patterns like "EEO"
+    inputSequence: string;
     analysisTicks: string;
     inverseMode: boolean;
     enabled: boolean;
@@ -222,7 +222,7 @@ const createMarketState = (prev?: Partial<MarketState>): MarketState => ({
 
 // ── Signal Detection ──────────────────────────────────────────────────────
 
-// NEW: Check if digit matches comparison operator
+// Check if digit matches comparison operator
 const checkComparison = (digit: number, operator: ComparisonOperator, value: number): boolean => {
     switch(operator) {
         case '>': return digit > value;
@@ -234,7 +234,7 @@ const checkComparison = (digit: number, operator: ComparisonOperator, value: num
     }
 };
 
-// NEW: Check if last digits match the input sequence pattern
+// Check if last digits match the input sequence pattern
 const checkDigitSequence = (digits: number[], sequence: string): boolean => {
     if (!sequence || sequence.length === 0) return true;
     if (digits.length < sequence.length) return false;
@@ -246,13 +246,10 @@ const checkDigitSequence = (digits: number[], sequence: string): boolean => {
         const actual = recentDigits[i];
         
         if (expected === 'E') {
-            // Expect even
             if (actual % 2 !== 0) return false;
         } else if (expected === 'O') {
-            // Expect odd
             if (actual % 2 === 0) return false;
         } else {
-            // Expect specific digit
             const expectedDigit = parseInt(expected);
             if (isNaN(expectedDigit) || actual !== expectedDigit) return false;
         }
@@ -260,6 +257,7 @@ const checkDigitSequence = (digits: number[], sequence: string): boolean => {
     return true;
 };
 
+// Check if digit matches based on trade type
 const isDigitSignalMatch = ({
     trade_type,
     digit,
@@ -277,31 +275,38 @@ const isDigitSignalMatch = ({
     inputSequence?: string;
     lastDigits?: number[];
 }) => {
+    // For OVER trade
     if (trade_type === 'DIGITOVER') {
         const operator = inverse ? '<=' : '>=';
         return checkComparison(digit, operator as ComparisonOperator, barrier);
     }
+    // For UNDER trade
     if (trade_type === 'DIGITUNDER') {
         const operator = inverse ? '>=' : '<=';
         return checkComparison(digit, operator as ComparisonOperator, barrier);
     }
+    // For EVEN trade
     if (trade_type === 'DIGITEVEN') {
         const isEven = digit % 2 === 0;
         return inverse ? !isEven : isEven;
     }
+    // For ODD trade
     if (trade_type === 'DIGITODD') {
         const isOdd = digit % 2 !== 0;
         return inverse ? !isOdd : isOdd;
     }
+    // For MATCH trade
     if (trade_type === 'DIGITMATCH') {
         return inverse ? digit !== barrier : digit === barrier;
     }
+    // For DIFF trade
     if (trade_type === 'DIGITDIFF') {
         return inverse ? digit === barrier : digit !== barrier;
     }
     return false;
 };
 
+// Check if required digit streak/sequence is matched
 const hasRequiredDigitStreak = ({
     trade_type,
     digits,
@@ -323,11 +328,16 @@ const hasRequiredDigitStreak = ({
     
     const recentDigits = digits.slice(-streak);
     
-    // Check if last digit matches the pattern/sequence
+    // If we have an input sequence, use that for matching
     if (inputSequence && inputSequence.length > 0) {
+        // Check if the full sequence matches
+        if (digits.length < inputSequence.length) return false;
+        
+        // Check if the last N digits match the sequence
         return checkDigitSequence(digits, inputSequence);
     }
     
+    // Otherwise check each digit against the trade type
     return recentDigits.every(digit => 
         isDigitSignalMatch({ 
             trade_type, 
@@ -646,7 +656,6 @@ const AutoTrades = observer(() => {
             selectedMarketsRef.current = markets;
         }
 
-        // If switch on loss is enabled, always start with primary market
         if (switchOnLoss && market1Enabled && market2Enabled && !scanAllMarkets) {
             if (!activeTradingMarketRef.current) {
                 setActiveTradingMarket(market1Symbol);
@@ -1024,7 +1033,6 @@ const AutoTrades = observer(() => {
     // ── Get Next Market for Switching ────────────────────────────────────
 
     const getNextMarketForSwitch = useCallback((currentSymbol: string): string | null => {
-        // If scanning all markets, get the next market in the list
         if (scanAllMarkets) {
             const markets = selectedMarketsRef.current;
             const currentIndex = markets.indexOf(currentSymbol);
@@ -1033,7 +1041,6 @@ const AutoTrades = observer(() => {
             return markets[nextIndex];
         }
 
-        // Not scanning all markets - switch between market1 and market2
         if (market1Enabled && market2Enabled) {
             if (currentSymbol === market1Symbol) return market2Symbol;
             if (currentSymbol === market2Symbol) return market1Symbol;
@@ -1102,7 +1109,6 @@ const AutoTrades = observer(() => {
             // ── Market Switching Logic ──────────────────────────────────
             if (switchOnLoss && market1Enabled && market2Enabled && !scanAllMarkets) {
                 if (profit < 0) {
-                    // On loss, switch to the other market
                     const nextSymbol = getNextMarketForSwitch(symbol);
                     if (nextSymbol && nextSymbol !== symbol) {
                         const nextConfig = marketConfigsRef.current[nextSymbol];
@@ -1115,7 +1121,6 @@ const AutoTrades = observer(() => {
                         }
                     }
                 } else if (profit >= 0 && marketSwitchActiveRef.current) {
-                    // On win after switching, go back to primary
                     const primarySymbol = getPrimaryMarket();
                     if (primarySymbol && primarySymbol !== symbol) {
                         const primaryConfig = marketConfigsRef.current[primarySymbol];
@@ -1130,7 +1135,6 @@ const AutoTrades = observer(() => {
                 }
             }
 
-            // Force state update in ref
             marketStatesRef.current[symbol] = { ...state };
 
             if (!unmountedRef.current) {
@@ -1139,7 +1143,6 @@ const AutoTrades = observer(() => {
                 setTotalTrades(totalTradesRef.current);
             }
 
-            // Check profit/loss limits
             if ((totalPnlRef.current >= tp || totalPnlRef.current <= -sl) && runningRef.current) {
                 runningRef.current = false;
                 if (!unmountedRef.current) {
@@ -1158,11 +1161,9 @@ const AutoTrades = observer(() => {
             let shouldTrade = false;
 
             if (switchOnLoss && market1Enabled && market2Enabled && !scanAllMarkets) {
-                // Only trade the active market
                 if (activeTradingMarketRef.current === symbol) {
                     shouldTrade = true;
                 }
-                // If no active market is set, use primary
                 if (!activeTradingMarketRef.current) {
                     const primary = getPrimaryMarket();
                     if (primary === symbol) {
@@ -1269,27 +1270,33 @@ const AutoTrades = observer(() => {
                 state.lastDigits = [...state.lastDigits.slice(-MAX_STREAK_LENGTH), lastDigit];
                 state.prevQuote = quote;
 
-                // Check if digit matches the pattern/sequence
                 let match = false;
                 
-                // If we have an input sequence, check that first
-                if (config.inputSequence && config.inputSequence.length > 0) {
-                    // Check if the last digits match the sequence
-                    const sequenceDigits = state.lastDigits.slice(-config.inputSequence.length);
-                    if (sequenceDigits.length === config.inputSequence.length) {
-                        match = checkDigitSequence(state.lastDigits, config.inputSequence);
-                    }
+                // Check if trade type is OVER or UNDER
+                if (ct === 'DIGITOVER' || ct === 'DIGITUNDER') {
+                    // Use comparison operator
+                    const operator = ct === 'DIGITOVER' ? (inv ? '<=' : '>=') : (inv ? '>=' : '<=');
+                    match = checkComparison(lastDigit, operator as ComparisonOperator, bar);
                 } else {
-                    // Fall back to single digit check with comparison operator
-                    match = isDigitSignalMatch({
-                        trade_type: ct,
-                        digit: lastDigit,
-                        barrier: bar,
-                        inverse: inv,
-                        comparisonOperator: config.comparisonOperator,
-                        inputSequence: config.inputSequence,
-                        lastDigits: state.lastDigits
-                    });
+                    // For EVEN, ODD, MATCH, DIFF - check if input sequence exists
+                    if (config.inputSequence && config.inputSequence.length > 0) {
+                        // Check if the last digits match the sequence
+                        const sequenceDigits = state.lastDigits.slice(-config.inputSequence.length);
+                        if (sequenceDigits.length === config.inputSequence.length) {
+                            match = checkDigitSequence(state.lastDigits, config.inputSequence);
+                        }
+                    } else {
+                        // Fall back to single digit check
+                        match = isDigitSignalMatch({
+                            trade_type: ct,
+                            digit: lastDigit,
+                            barrier: bar,
+                            inverse: inv,
+                            comparisonOperator: config.comparisonOperator,
+                            inputSequence: config.inputSequence,
+                            lastDigits: state.lastDigits
+                        });
+                    }
                 }
 
                 if (match) {
@@ -1299,7 +1306,6 @@ const AutoTrades = observer(() => {
                 }
             }
 
-            // Candle condition
             const candleMatch = isCandleConfirmedTradeType(ct) 
                 ? (inv ? isCandleMatch(ct, state.candleDirection) : isCandleMatch(ct, state.candleDirection))
                 : true;
@@ -1320,7 +1326,10 @@ const AutoTrades = observer(() => {
             } else {
                 const recent = state.lastDigits.slice(-targetLen);
                 digitsStr = `[${recent.join(', ')}]`;
-                if (config.inputSequence && config.inputSequence.length > 0) {
+                if (ct === 'DIGITOVER' || ct === 'DIGITUNDER') {
+                    const operator = ct === 'DIGITOVER' ? (inv ? '<=' : '>=') : (inv ? '>=' : '<=');
+                    condStr = `${invLabel}${label} ${operator} ${bar}`;
+                } else if (config.inputSequence && config.inputSequence.length > 0) {
                     condStr = `${invLabel}Sequence: ${config.inputSequence}`;
                 } else {
                     condStr = `${invLabel}${label} ${bar} streak ${targetLen}+`;
@@ -1588,7 +1597,6 @@ const AutoTrades = observer(() => {
         setTotalTrades(0);
         setError(null);
         
-        // Reset active trading market to primary
         const primary = getPrimaryMarket();
         if (primary) {
             setActiveTradingMarket(primary);
@@ -2045,11 +2053,15 @@ const AutoTrades = observer(() => {
                                                     onChange={e => setMarket1TradeType(e.target.value as TradeType)}
                                                     disabled={isRunning}
                                                 >
-                                                    <optgroup label='Digits'>
+                                                    <optgroup label='Over/Under'>
                                                         <option value='DIGITOVER'>Over</option>
                                                         <option value='DIGITUNDER'>Under</option>
+                                                    </optgroup>
+                                                    <optgroup label='Even/Odd'>
                                                         <option value='DIGITEVEN'>Even</option>
                                                         <option value='DIGITODD'>Odd</option>
+                                                    </optgroup>
+                                                    <optgroup label='Match/Diff'>
                                                         <option value='DIGITMATCH'>Matches</option>
                                                         <option value='DIGITDIFF'>Differs</option>
                                                     </optgroup>
@@ -2062,47 +2074,61 @@ const AutoTrades = observer(() => {
                                                 </select>
                                             </div>
                                             {BARRIER_NEEDED[market1TradeType] && (
+                                                <>
+                                                    <div className='auto-trades-config__field'>
+                                                        <label>Digit to compare</label>
+                                                        <select
+                                                            className='auto-trades-config__select'
+                                                            value={market1Barrier}
+                                                            onChange={e => setMarket1Barrier(e.target.value)}
+                                                            disabled={isRunning}
+                                                        >
+                                                            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
+                                                                <option key={d} value={String(d)}>{d}</option>
+                                                            ))}
+                                                        </select>
+                                                        <small className='auto-trades-config__hint'>Fixed digit for comparison</small>
+                                                    </div>
+                                                    {usesLossPrediction(market1TradeType) && (
+                                                        <div className='auto-trades-config__field'>
+                                                            <label>Digit to predict</label>
+                                                            <select
+                                                                className='auto-trades-config__select'
+                                                                value={market1PredictionDigit}
+                                                                onChange={e => setMarket1PredictionDigit(e.target.value)}
+                                                                disabled={isRunning}
+                                                            >
+                                                                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
+                                                                    <option key={d} value={String(d)}>{d}</option>
+                                                                ))}
+                                                            </select>
+                                                            <small className='auto-trades-config__hint'>Always uses this digit for predictions</small>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            )}
+                                            {(market1TradeType === 'DIGITEVEN' || market1TradeType === 'DIGITODD') && (
                                                 <div className='auto-trades-config__field'>
-                                                    <label>{market1TradeType === 'DIGITMATCH' || market1TradeType === 'DIGITDIFF' ? 'Prediction' : 'Digit'}</label>
-                                                    <select
-                                                        className='auto-trades-config__select'
-                                                        value={market1Barrier}
-                                                        onChange={e => setMarket1Barrier(e.target.value)}
+                                                    <label>Input Sequence (E=Even, O=Odd)</label>
+                                                    <Input
+                                                        type='text'
+                                                        placeholder='e.g., EEO, OEE'
+                                                        value={market1InputSequence}
+                                                        onChange={e => setMarket1InputSequence(e.target.value.toUpperCase())}
                                                         disabled={isRunning}
-                                                    >
-                                                        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
-                                                            <option key={d} value={String(d)}>{d}</option>
-                                                        ))}
-                                                    </select>
+                                                    />
+                                                    <small className='auto-trades-config__hint'>Enter pattern like "EEO" for Even-Even-Odd</small>
+                                                    {market1InputSequence && (
+                                                        <div className='auto-trades-config__sequence-preview'>
+                                                            Pattern: {market1InputSequence.split('').map((ch, i) => (
+                                                                <span key={i} className={`auto-trades-config__sequence-char ${ch === 'E' ? 'even' : 'odd'}`}>
+                                                                    {ch === 'E' ? 'Even' : 'Odd'}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
-                                            {usesLossPrediction(market1TradeType) && (
-                                                <div className='auto-trades-config__field'>
-                                                    <label>Digit to predict</label>
-                                                    <select
-                                                        className='auto-trades-config__select'
-                                                        value={market1PredictionDigit}
-                                                        onChange={e => setMarket1PredictionDigit(e.target.value)}
-                                                        disabled={isRunning}
-                                                    >
-                                                        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
-                                                            <option key={d} value={String(d)}>{d}</option>
-                                                        ))}
-                                                    </select>
-                                                    <small className='auto-trades-config__hint'>Always uses this digit for predictions</small>
-                                                </div>
-                                            )}
-                                            <div className='auto-trades-config__field'>
-                                                <label>Input Sequence (E=Even, O=Odd, or digits)</label>
-                                                <Input
-                                                    type='text'
-                                                    placeholder='e.g., EEO, OEE, 123'
-                                                    value={market1InputSequence}
-                                                    onChange={e => setMarket1InputSequence(e.target.value.toUpperCase())}
-                                                    disabled={isRunning}
-                                                />
-                                                <small className='auto-trades-config__hint'>Enter pattern like "EEO" for Even-Even-Odd or digits like "123"</small>
-                                            </div>
                                             <div className='auto-trades-config__field'>
                                                 <label>Analysis ticks</label>
                                                 <select
@@ -2260,11 +2286,15 @@ const AutoTrades = observer(() => {
                                                     onChange={e => setMarket2TradeType(e.target.value as TradeType)}
                                                     disabled={isRunning}
                                                 >
-                                                    <optgroup label='Digits'>
+                                                    <optgroup label='Over/Under'>
                                                         <option value='DIGITOVER'>Over</option>
                                                         <option value='DIGITUNDER'>Under</option>
+                                                    </optgroup>
+                                                    <optgroup label='Even/Odd'>
                                                         <option value='DIGITEVEN'>Even</option>
                                                         <option value='DIGITODD'>Odd</option>
+                                                    </optgroup>
+                                                    <optgroup label='Match/Diff'>
                                                         <option value='DIGITMATCH'>Matches</option>
                                                         <option value='DIGITDIFF'>Differs</option>
                                                     </optgroup>
@@ -2277,47 +2307,61 @@ const AutoTrades = observer(() => {
                                                 </select>
                                             </div>
                                             {BARRIER_NEEDED[market2TradeType] && (
+                                                <>
+                                                    <div className='auto-trades-config__field'>
+                                                        <label>Digit to compare</label>
+                                                        <select
+                                                            className='auto-trades-config__select'
+                                                            value={market2Barrier}
+                                                            onChange={e => setMarket2Barrier(e.target.value)}
+                                                            disabled={isRunning}
+                                                        >
+                                                            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
+                                                                <option key={d} value={String(d)}>{d}</option>
+                                                            ))}
+                                                        </select>
+                                                        <small className='auto-trades-config__hint'>Fixed digit for comparison</small>
+                                                    </div>
+                                                    {usesLossPrediction(market2TradeType) && (
+                                                        <div className='auto-trades-config__field'>
+                                                            <label>Digit to predict</label>
+                                                            <select
+                                                                className='auto-trades-config__select'
+                                                                value={market2PredictionDigit}
+                                                                onChange={e => setMarket2PredictionDigit(e.target.value)}
+                                                                disabled={isRunning}
+                                                            >
+                                                                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
+                                                                    <option key={d} value={String(d)}>{d}</option>
+                                                                ))}
+                                                            </select>
+                                                            <small className='auto-trades-config__hint'>Always uses this digit for predictions</small>
+                                                        </div>
+                                                    )}
+                                                </>
+                                            )}
+                                            {(market2TradeType === 'DIGITEVEN' || market2TradeType === 'DIGITODD') && (
                                                 <div className='auto-trades-config__field'>
-                                                    <label>{market2TradeType === 'DIGITMATCH' || market2TradeType === 'DIGITDIFF' ? 'Prediction' : 'Digit'}</label>
-                                                    <select
-                                                        className='auto-trades-config__select'
-                                                        value={market2Barrier}
-                                                        onChange={e => setMarket2Barrier(e.target.value)}
+                                                    <label>Input Sequence (E=Even, O=Odd)</label>
+                                                    <Input
+                                                        type='text'
+                                                        placeholder='e.g., EEO, OEE'
+                                                        value={market2InputSequence}
+                                                        onChange={e => setMarket2InputSequence(e.target.value.toUpperCase())}
                                                         disabled={isRunning}
-                                                    >
-                                                        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
-                                                            <option key={d} value={String(d)}>{d}</option>
-                                                        ))}
-                                                    </select>
+                                                    />
+                                                    <small className='auto-trades-config__hint'>Enter pattern like "EEO" for Even-Even-Odd</small>
+                                                    {market2InputSequence && (
+                                                        <div className='auto-trades-config__sequence-preview'>
+                                                            Pattern: {market2InputSequence.split('').map((ch, i) => (
+                                                                <span key={i} className={`auto-trades-config__sequence-char ${ch === 'E' ? 'even' : 'odd'}`}>
+                                                                    {ch === 'E' ? 'Even' : 'Odd'}
+                                                                </span>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             )}
-                                            {usesLossPrediction(market2TradeType) && (
-                                                <div className='auto-trades-config__field'>
-                                                    <label>Digit to predict</label>
-                                                    <select
-                                                        className='auto-trades-config__select'
-                                                        value={market2PredictionDigit}
-                                                        onChange={e => setMarket2PredictionDigit(e.target.value)}
-                                                        disabled={isRunning}
-                                                    >
-                                                        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
-                                                            <option key={d} value={String(d)}>{d}</option>
-                                                        ))}
-                                                    </select>
-                                                    <small className='auto-trades-config__hint'>Always uses this digit for predictions</small>
-                                                </div>
-                                            )}
-                                            <div className='auto-trades-config__field'>
-                                                <label>Input Sequence (E=Even, O=Odd, or digits)</label>
-                                                <Input
-                                                    type='text'
-                                                    placeholder='e.g., EEO, OEE, 123'
-                                                    value={market2InputSequence}
-                                                    onChange={e => setMarket2InputSequence(e.target.value.toUpperCase())}
-                                                    disabled={isRunning}
-                                                />
-                                                <small className='auto-trades-config__hint'>Enter pattern like "EEO" for Even-Even-Odd or digits like "123"</small>
-                                            </div>
                                             <div className='auto-trades-config__field'>
                                                 <label>Analysis ticks</label>
                                                 <select
