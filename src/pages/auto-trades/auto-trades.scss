@@ -1,3 +1,4 @@
+// auto-trades.scss
 @use 'components/shared/styles/mixins' as *;
 
 // ── Design tokens - Cyberpunk/Neon Theme ──────────────────────────────────────
@@ -241,7 +242,7 @@ $at-text-faint: #2c4060;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 2rem;
+        margin-bottom: 1.6rem;
         flex-wrap: wrap;
         gap: 1rem;
         animation: neonSlideIn 0.6s ease-out;
@@ -265,6 +266,13 @@ $at-text-faint: #2c4060;
             color: $at-text-muted;
             margin: 0;
         }
+    }
+
+    &__subtitle {
+        font-size: 1.1rem;
+        color: $at-text-muted;
+        margin: 0;
+        font-weight: 400;
     }
 
     &__status-dot {
@@ -313,21 +321,21 @@ $at-text-faint: #2c4060;
     &__body {
         display: flex;
         flex-direction: column;
-        gap: 1.6rem;
+        gap: 1.2rem;
         margin-bottom: 12px;
     }
 
     &__global-settings {
         display: grid;
         grid-template-columns: 1fr;
-        margin-bottom: 12px;
+        margin-bottom: 8px;
     }
 
     &__markets {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 1.6rem;
-        margin-bottom: 12px;
+        gap: 1.2rem;
+        margin-bottom: 8px;
 
         @include mobile-or-tablet-screen {
             grid-template-columns: 1fr;
@@ -337,7 +345,7 @@ $at-text-faint: #2c4060;
     &__stats {
         display: grid;
         grid-template-columns: 1fr;
-        margin-bottom: 12px;
+        margin-bottom: 8px;
     }
 }
 
@@ -346,14 +354,14 @@ $at-text-faint: #2c4060;
 .auto-trades-card {
     background: $at-bg-card;
     border: 1px solid $at-border;
-    border-radius: 1.4rem;
-    padding: 1.8rem;
+    border-radius: 1.2rem;
+    padding: 1.6rem;
     box-shadow: 0 2px 16px rgba(0, 0, 0, 0.4);
     position: relative;
     overflow: hidden;
     transition: all 0.3s ease;
     animation: neonSlideIn 0.5s ease-out;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 
     &:hover {
         transform: translateY(-2px);
@@ -389,6 +397,19 @@ $at-text-faint: #2c4060;
         opacity: 0.5;
     }
 
+    &--compact {
+        padding: 1rem 1.2rem;
+        
+        .auto-trades-card__title {
+            font-size: 1.1rem;
+            margin-bottom: 0.6rem;
+        }
+        
+        &::before {
+            height: 2px;
+        }
+    }
+
     &--global::before {
         background: linear-gradient(90deg, $at-neon-cyan, $at-neon-purple, $at-neon-magenta);
         animation: neonShimmer 2s linear infinite;
@@ -420,10 +441,10 @@ $at-text-faint: #2c4060;
     }
 
     &__title {
-        font-size: 1.5rem;
+        font-size: 1.3rem;
         font-weight: 700;
         color: $at-text;
-        margin: 0;
+        margin: 0 0 0.8rem 0;
         letter-spacing: 0.01em;
     }
 
@@ -435,9 +456,9 @@ $at-text-faint: #2c4060;
     }
 
     &__active-badge {
-        font-size: 0.7rem;
+        font-size: 0.65rem;
         font-weight: 700;
-        padding: 0.15rem 0.6rem;
+        padding: 0.1rem 0.5rem;
         border-radius: 1rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
@@ -457,7 +478,7 @@ $at-text-faint: #2c4060;
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 1.2rem;
+        margin-bottom: 0.8rem;
         flex-wrap: wrap;
         gap: 0.5rem;
     }
@@ -465,13 +486,13 @@ $at-text-faint: #2c4060;
     &__controls {
         display: flex;
         align-items: center;
-        gap: 0.8rem;
+        gap: 0.6rem;
     }
 
     &__badge {
-        font-size: 0.85rem;
+        font-size: 0.7rem;
         font-weight: 700;
-        padding: 0.2rem 0.8rem;
+        padding: 0.15rem 0.6rem;
         border-radius: 1.2rem;
         text-transform: uppercase;
         letter-spacing: 0.05em;
@@ -495,7 +516,7 @@ $at-text-faint: #2c4060;
 .auto-trades-global-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 1rem;
+    gap: 0.8rem;
 
     @include mobile-or-tablet-screen {
         grid-template-columns: 1fr 1fr;
@@ -504,16 +525,24 @@ $at-text-faint: #2c4060;
     @media (max-width: 480px) {
         grid-template-columns: 1fr;
     }
+
+    &--compact {
+        gap: 0.4rem 0.6rem;
+        
+        @include mobile-or-tablet-screen {
+            gap: 0.4rem;
+        }
+    }
 }
 
 .auto-trades-global-features {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-    margin-top: 1rem;
-    padding-top: 1rem;
+    gap: 0.8rem;
+    margin-top: 0.8rem;
+    padding-top: 0.8rem;
     border-top: 1px solid $at-border-subtle;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 
     @include mobile-or-tablet-screen {
         grid-template-columns: 1fr;
@@ -530,16 +559,18 @@ $at-text-faint: #2c4060;
 .auto-trades-feature-btn {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.4rem 0.8rem;
+    gap: 0.4rem;
+    padding: 0.25rem 0.6rem;
     background: $at-bg-deep;
     border: 1px solid $at-border;
-    border-radius: 2rem;
+    border-radius: 1.5rem;
     cursor: pointer;
     transition: all 0.25s ease;
-    font-size: 0.85rem;
+    font-size: 0.7rem;
     font-weight: 600;
     color: $at-text-dim;
+    height: 2rem;
+    white-space: nowrap;
     position: relative;
     overflow: hidden;
 
@@ -562,74 +593,7 @@ $at-text-faint: #2c4060;
 
     &__label {
         white-space: nowrap;
-    }
-
-    &__switch {
-        width: 2rem;
-        height: 1rem;
-        background: $at-border;
-        border-radius: 1rem;
-        display: flex;
-        align-items: center;
-        padding: 0 0.1rem;
-        transition: all 0.25s ease;
-        flex-shrink: 0;
-    }
-
-    &--active &__switch {
-        background: linear-gradient(90deg, $at-neon-cyan, $at-neon-purple);
-    }
-
-    &__knob {
-        width: 0.8rem;
-        height: 0.8rem;
-        border-radius: 50%;
-        background: $at-text;
-        transition: all 0.25s ease;
-    }
-
-    &--active &__knob {
-        transform: translateX(1rem);
-        background: #fff;
-        box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
-    }
-}
-
-// ── Market Toggle ────────────────────────────────────────────────────────────
-
-.auto-trades-market-toggle {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.2rem 0.5rem;
-    background: $at-bg-deep;
-    border: 1px solid $at-border;
-    border-radius: 1.5rem;
-    cursor: pointer;
-    transition: all 0.25s ease;
-    font-size: 0.7rem;
-    font-weight: 700;
-    color: $at-text-muted;
-
-    &:hover {
-        border-color: $at-border-glow;
-    }
-
-    &:disabled {
-        opacity: 0.4;
-        cursor: not-allowed;
-    }
-
-    &--active {
-        border-color: $at-neon-cyan;
-        background: $at-neon-cyan-glow;
-        color: $at-neon-cyan;
-        animation: neonBorder 2s ease-in-out infinite;
-    }
-
-    &__label {
         font-size: 0.65rem;
-        letter-spacing: 0.04em;
     }
 
     &__switch {
@@ -663,13 +627,81 @@ $at-text-faint: #2c4060;
     }
 }
 
+// ── Market Toggle ────────────────────────────────────────────────────────────
+
+.auto-trades-market-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.15rem 0.4rem;
+    background: $at-bg-deep;
+    border: 1px solid $at-border;
+    border-radius: 1.5rem;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    font-size: 0.65rem;
+    font-weight: 700;
+    color: $at-text-muted;
+
+    &:hover {
+        border-color: $at-border-glow;
+    }
+
+    &:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    &--active {
+        border-color: $at-neon-cyan;
+        background: $at-neon-cyan-glow;
+        color: $at-neon-cyan;
+        animation: neonBorder 2s ease-in-out infinite;
+    }
+
+    &__label {
+        font-size: 0.6rem;
+        letter-spacing: 0.04em;
+    }
+
+    &__switch {
+        width: 1.4rem;
+        height: 0.7rem;
+        background: $at-border;
+        border-radius: 0.7rem;
+        display: flex;
+        align-items: center;
+        padding: 0 0.1rem;
+        transition: all 0.25s ease;
+        flex-shrink: 0;
+    }
+
+    &--active &__switch {
+        background: linear-gradient(90deg, $at-neon-cyan, $at-neon-purple);
+    }
+
+    &__knob {
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 50%;
+        background: $at-text;
+        transition: all 0.25s ease;
+    }
+
+    &--active &__knob {
+        transform: translateX(0.7rem);
+        background: #fff;
+        box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+    }
+}
+
 // ── Market Config ────────────────────────────────────────────────────────────
 
 .auto-trades-market-config {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0.8rem 1.2rem;
-    margin-bottom: 12px;
+    gap: 0.6rem 1rem;
+    margin-bottom: 8px;
 
     @include mobile-or-tablet-screen {
         grid-template-columns: 1fr;
@@ -678,42 +710,84 @@ $at-text-faint: #2c4060;
 
 .auto-trades-config {
     &__field {
-        margin-bottom: 12px;
+        margin-bottom: 8px;
 
         label {
             display: block;
-            font-size: 0.9rem;
+            font-size: 0.75rem;
             font-weight: 600;
             color: $at-text-dim;
-            margin-bottom: 0.3rem;
+            margin-bottom: 0.2rem;
             letter-spacing: 0.02em;
             text-transform: uppercase;
         }
 
         &--feature {
             label {
+                font-size: 0.7rem;
+            }
+        }
+        
+        &--compact {
+            margin-bottom: 0;
+            
+            label {
+                font-size: 0.6rem;
+                font-weight: 600;
+                color: $at-text-dim;
+                margin-bottom: 0.1rem;
+                text-transform: uppercase;
+                letter-spacing: 0.04em;
+            }
+            
+            .input {
+                height: 1.8rem;
                 font-size: 0.8rem;
+                padding: 0.15rem 0.4rem;
+                border-radius: 0.3rem;
+                background: $at-bg-deep;
+                border: 1px solid $at-border;
+                color: $at-text;
+                min-height: 0;
+                
+                &:focus {
+                    border-color: $at-neon-cyan;
+                    box-shadow: 0 0 0 2px $at-neon-cyan-glow;
+                }
+            }
+        }
+        
+        &--full {
+            grid-column: 1 / -1;
+        }
+        
+        &--half {
+            grid-column: span 2;
+            
+            @include mobile-or-tablet-screen {
+                grid-column: span 1;
             }
         }
     }
 
     &__select {
         width: 100%;
-        padding: 0.6rem 0.8rem;
+        padding: 0.4rem 0.6rem;
         border: 1px solid $at-border;
-        border-radius: 0.6rem;
+        border-radius: 0.4rem;
         background: $at-bg-deep;
         color: $at-text;
-        font-size: 1.1rem;
+        font-size: 0.9rem;
         font-weight: 500;
         cursor: pointer;
         appearance: none;
         background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath fill='%234a6a90' d='M0 0l5 6 5-6z'/%3E%3C/svg%3E");
         background-repeat: no-repeat;
-        background-position: right 0.7rem center;
-        padding-right: 2.2rem;
+        background-position: right 0.5rem center;
+        padding-right: 1.8rem;
         transition: all 0.15s ease;
-        margin-bottom: 8px;
+        margin-bottom: 4px;
+        min-height: 2.2rem;
 
         &:focus {
             outline: none;
@@ -731,28 +805,36 @@ $at-text-faint: #2c4060;
             background: $at-bg-card;
             color: $at-text;
         }
+        
+        &--compact {
+            height: 1.8rem;
+            font-size: 0.75rem;
+            padding: 0.15rem 0.4rem;
+            padding-right: 1.5rem;
+            min-height: 0;
+        }
     }
 
     &__hint {
-        font-size: 0.75rem;
+        font-size: 0.65rem;
         color: $at-text-muted;
-        margin-top: 0.2rem;
+        margin-top: 0.15rem;
         display: block;
     }
 
     // Sequence Pattern Styles
     &__sequence-preview {
         display: flex;
-        gap: 0.3rem;
-        margin-top: 0.4rem;
-        margin-bottom: 8px;
+        gap: 0.2rem;
+        margin-top: 0.3rem;
+        margin-bottom: 4px;
         flex-wrap: wrap;
     }
 
     &__sequence-char {
-        padding: 0.2rem 0.5rem;
+        padding: 0.15rem 0.4rem;
         border-radius: 0.3rem;
-        font-size: 0.75rem;
+        font-size: 0.65rem;
         font-weight: 700;
         
         &.even {
@@ -769,37 +851,90 @@ $at-text-faint: #2c4060;
     }
 
     &__field--martingale {
-        margin-top: 0.5rem;
+        margin-top: 0.3rem;
     }
 
     &__field--martingale-threshold {
-        margin-top: 0.3rem;
-        max-width: 18rem;
+        margin-top: 0.2rem;
+        max-width: 16rem;
+    }
+    
+    &__input--small {
+        width: 3.5rem;
+        height: 1.8rem;
+        font-size: 0.75rem;
+        padding: 0.15rem 0.2rem;
+        border-radius: 0.3rem;
+        background: $at-bg-deep;
+        border: 1px solid $at-border;
+        color: $at-text;
+        text-align: center;
+        min-height: 0;
+        
+        &:focus {
+            border-color: $at-neon-cyan;
+            box-shadow: 0 0 0 2px $at-neon-cyan-glow;
+        }
+    }
+}
+
+// ── Martingale Row ────────────────────────────────────────────────────────────
+
+.auto-trades-martingale-row {
+    display: flex;
+    gap: 0.3rem;
+    align-items: center;
+    
+    .auto-trades-config__select {
+        flex: 1;
+        min-height: 2rem;
+        font-size: 0.8rem;
+        padding: 0.15rem 0.4rem;
+        padding-right: 1.5rem;
+        margin-bottom: 0;
+    }
+}
+
+// ── Active Market Display ────────────────────────────────────────────────────
+
+.auto-trades-active-market {
+    font-size: 0.75rem;
+    color: $at-text-dim;
+    padding: 0.2rem 0.5rem;
+    background: $at-bg-deep;
+    border-radius: 0.4rem;
+    border: 1px solid $at-border-subtle;
+    margin-top: 0.3rem;
+    text-align: center;
+    
+    strong {
+        color: $at-neon-cyan;
+        font-weight: 700;
     }
 }
 
 // ── Analysis Container ───────────────────────────────────────────────────────
 
 .auto-trades-analysis {
-    padding: 12px;
+    padding: 10px;
     background: $at-bg-deep;
     border: 1px solid $at-border-subtle;
-    border-radius: 0.8rem;
-    margin-top: 12px;
-    margin-bottom: 12px;
+    border-radius: 0.6rem;
+    margin-top: 8px;
+    margin-bottom: 8px;
     animation: neonSlideIn 0.4s ease-out;
 
     &__header {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        margin-bottom: 8px;
-        padding-bottom: 8px;
+        margin-bottom: 6px;
+        padding-bottom: 6px;
         border-bottom: 1px solid $at-border-subtle;
     }
 
     &__title {
-        font-size: 0.9rem;
+        font-size: 0.8rem;
         font-weight: 700;
         color: $at-text;
         text-transform: uppercase;
@@ -807,9 +942,9 @@ $at-text-faint: #2c4060;
     }
 
     &__status {
-        font-size: 0.75rem;
+        font-size: 0.65rem;
         font-weight: 700;
-        padding: 0.15rem 0.6rem;
+        padding: 0.1rem 0.5rem;
         border-radius: 1rem;
         text-transform: uppercase;
 
@@ -836,14 +971,14 @@ $at-text-faint: #2c4060;
     &__body {
         display: flex;
         flex-direction: column;
-        gap: 8px;
+        gap: 6px;
     }
 
     &__row {
         display: flex;
         justify-content: space-between;
         align-items: center;
-        font-size: 0.85rem;
+        font-size: 0.75rem;
         color: $at-text-dim;
 
         strong {
@@ -853,18 +988,18 @@ $at-text-faint: #2c4060;
 
     &__ticks {
         display: flex;
-        gap: 4px;
+        gap: 3px;
         flex-wrap: wrap;
     }
 
     &__tick {
-        width: 28px;
-        height: 28px;
+        width: 24px;
+        height: 24px;
         display: flex;
         align-items: center;
         justify-content: center;
         border-radius: 0.3rem;
-        font-size: 0.8rem;
+        font-size: 0.7rem;
         font-weight: 700;
         background: $at-bg-card-2;
         color: $at-text;
@@ -885,13 +1020,13 @@ $at-text-faint: #2c4060;
     }
 
     &__condition {
-        font-size: 0.8rem;
+        font-size: 0.7rem;
         color: $at-neon-cyan;
-        padding: 6px 8px;
+        padding: 4px 6px;
         background: $at-neon-cyan-glow;
         border-radius: 0.4rem;
         border: 1px solid rgba(0, 240, 255, 0.2);
-        margin-top: 4px;
+        margin-top: 3px;
         text-align: center;
         font-weight: 600;
     }
@@ -902,22 +1037,23 @@ $at-text-faint: #2c4060;
 .auto-trades-inverse-toggle {
     display: flex;
     align-items: center;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 
 .auto-trades-inverse-btn {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.4rem 0.8rem;
+    gap: 0.4rem;
+    padding: 0.25rem 0.6rem;
     background: $at-bg-deep;
     border: 1px solid $at-border;
     border-radius: 2rem;
     cursor: pointer;
     transition: all 0.25s ease;
-    font-size: 0.85rem;
+    font-size: 0.75rem;
     font-weight: 600;
     color: $at-text-dim;
+    height: 2rem;
 
     &:hover {
         border-color: $at-border-glow;
@@ -938,13 +1074,14 @@ $at-text-faint: #2c4060;
 
     &__label {
         white-space: nowrap;
+        font-size: 0.65rem;
     }
 
     &__switch {
-        width: 2rem;
-        height: 1rem;
+        width: 1.6rem;
+        height: 0.8rem;
         background: $at-border;
-        border-radius: 1rem;
+        border-radius: 0.8rem;
         display: flex;
         align-items: center;
         padding: 0 0.1rem;
@@ -957,15 +1094,15 @@ $at-text-faint: #2c4060;
     }
 
     &__knob {
-        width: 0.8rem;
-        height: 0.8rem;
+        width: 0.6rem;
+        height: 0.6rem;
         border-radius: 50%;
         background: $at-text;
         transition: all 0.25s ease;
     }
 
     &--active &__knob {
-        transform: translateX(1rem);
+        transform: translateX(0.8rem);
         background: #fff;
         box-shadow: 0 0 10px rgba(180, 77, 255, 0.5);
     }
@@ -974,14 +1111,14 @@ $at-text-faint: #2c4060;
 // ── Market Display ───────────────────────────────────────────────────────────
 
 .auto-trades-market-display {
-    margin-top: 1.2rem;
-    padding: 1.2rem;
+    margin-top: 0.8rem;
+    padding: 0.8rem;
     background: $at-bg-deep;
-    border-radius: 0.8rem;
+    border-radius: 0.6rem;
     border: 1px solid $at-border-subtle;
     position: relative;
     overflow: hidden;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 
     &::after {
         content: '';
@@ -998,13 +1135,13 @@ $at-text-faint: #2c4060;
     &__content {
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0.3rem;
         position: relative;
         z-index: 1;
     }
 
     &__quote {
-        font-size: 2rem;
+        font-size: 1.6rem;
         font-weight: 800;
         color: $at-text;
         font-variant-numeric: tabular-nums;
@@ -1014,9 +1151,9 @@ $at-text-faint: #2c4060;
 
     &__info {
         display: flex;
-        gap: 1.2rem;
+        gap: 0.8rem;
         align-items: center;
-        font-size: 1rem;
+        font-size: 0.85rem;
         color: $at-text-dim;
         flex-wrap: wrap;
     }
@@ -1033,7 +1170,7 @@ $at-text-faint: #2c4060;
     }
 
     &__result {
-        font-size: 1.2rem;
+        font-size: 1rem;
         font-weight: 700;
 
         &--win {
@@ -1050,18 +1187,18 @@ $at-text-faint: #2c4060;
 
     &__digits {
         display: flex;
-        gap: 0.3rem;
+        gap: 0.2rem;
         flex-wrap: wrap;
     }
 
     &__digit {
-        width: 1.8rem;
-        height: 1.8rem;
+        width: 1.5rem;
+        height: 1.5rem;
         display: flex;
         align-items: center;
         justify-content: center;
-        border-radius: 0.4rem;
-        font-size: 0.9rem;
+        border-radius: 0.3rem;
+        font-size: 0.75rem;
         font-weight: 700;
         background: $at-bg-card-2;
         color: $at-text;
@@ -1071,30 +1208,30 @@ $at-text-faint: #2c4060;
     }
 
     &__sequence {
-        font-size: 0.85rem;
+        font-size: 0.75rem;
         font-weight: 600;
         color: $at-neon-purple;
-        padding: 0.3rem;
+        padding: 0.2rem;
         background: $at-neon-purple-glow;
         border-radius: 0.4rem;
         text-align: center;
     }
 
     &__candle {
-        font-size: 0.85rem;
+        font-size: 0.75rem;
         font-weight: 600;
         color: $at-text-muted;
-        padding: 0.2rem 0.6rem;
+        padding: 0.15rem 0.5rem;
         border-radius: 0.4rem;
         background: $at-bg-card-2;
         display: inline-block;
     }
 
     &__status {
-        font-size: 0.9rem;
+        font-size: 0.75rem;
         font-weight: 600;
         color: $at-text-muted;
-        padding: 0.2rem 0.6rem;
+        padding: 0.15rem 0.5rem;
         border-radius: 0.4rem;
         background: $at-bg-card-2;
         display: inline-block;
@@ -1105,8 +1242,8 @@ $at-text-faint: #2c4060;
 // ── Status indicator ──────────────────────────────────────────────────────────
 
 .auto-trades-status {
-    width: 0.7rem;
-    height: 0.7rem;
+    width: 0.6rem;
+    height: 0.6rem;
     border-radius: 50%;
     background: $at-text-faint;
     display: inline-block;
@@ -1137,7 +1274,7 @@ $at-text-faint: #2c4060;
     }
 
     &__label {
-        font-size: 1.1rem;
+        font-size: 1rem;
         color: $at-text-dim;
         font-weight: 500;
     }
@@ -1148,20 +1285,20 @@ $at-text-faint: #2c4060;
 .auto-trades-data-loader {
     display: flex;
     align-items: center;
-    gap: 0.9rem;
-    min-height: 4.2rem;
-    padding: 1rem 1.4rem;
-    margin-bottom: 1.6rem;
+    gap: 0.8rem;
+    min-height: 3.6rem;
+    padding: 0.8rem 1.2rem;
+    margin-bottom: 1.2rem;
     background: rgba(0, 240, 255, 0.06);
     border: 1px solid rgba(0, 240, 255, 0.2);
     border-radius: 0.8rem;
     color: $at-text-dim;
-    font-size: 1.25rem;
+    font-size: 1.1rem;
     font-weight: 700;
 
     &--panel {
-        min-height: 16rem;
-        width: min(100%, 48rem);
+        min-height: 14rem;
+        width: min(100%, 40rem);
         margin: 0;
         justify-content: center;
         border-radius: 1.2rem;
@@ -1171,8 +1308,8 @@ $at-text-faint: #2c4060;
     }
 
     &__spinner {
-        width: 1.6rem;
-        height: 1.6rem;
+        width: 1.4rem;
+        height: 1.4rem;
         border: 2px solid rgba(138, 168, 204, 0.3);
         border-top-color: $at-neon-cyan;
         border-radius: 50%;
@@ -1184,16 +1321,16 @@ $at-text-faint: #2c4060;
     &__copy {
         display: flex;
         flex-direction: column;
-        gap: 0.4rem;
+        gap: 0.3rem;
 
         strong {
             color: $at-text;
-            font-size: 1.4rem;
+            font-size: 1.2rem;
         }
 
         span {
             color: $at-text-dim;
-            font-size: 1.2rem;
+            font-size: 1rem;
             font-weight: 500;
         }
     }
@@ -1204,19 +1341,19 @@ $at-text-faint: #2c4060;
 .auto-trades-cooldown {
     display: flex;
     align-items: center;
-    gap: 0.8rem;
-    padding: 0.8rem 1.2rem;
+    gap: 0.6rem;
+    padding: 0.6rem 1rem;
     background: $at-neon-red-glow;
     border: 1px solid rgba(255, 0, 68, 0.2);
     border-radius: 0.8rem;
-    font-size: 1.2rem;
+    font-size: 1rem;
     color: $at-neon-red;
     font-weight: 600;
-    margin-bottom: 1.2rem;
+    margin-bottom: 1rem;
     animation: neonBorder 1s ease-in-out infinite;
 
     &__icon {
-        font-size: 1.3rem;
+        font-size: 1.1rem;
         flex-shrink: 0;
         animation: neonRotate 2s linear infinite;
     }
@@ -1227,11 +1364,11 @@ $at-text-faint: #2c4060;
 .auto-trades-stats-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 1rem;
-    padding: 1.2rem;
+    gap: 0.8rem;
+    padding: 1rem;
     background: $at-bg-card;
     border: 1px solid $at-border;
-    border-radius: 1.2rem;
+    border-radius: 1rem;
     position: relative;
     overflow: hidden;
 
@@ -1248,13 +1385,15 @@ $at-text-faint: #2c4060;
 
     @include mobile-or-tablet-screen {
         grid-template-columns: 1fr 1fr;
+        gap: 0.6rem;
+        padding: 0.8rem;
     }
 }
 
 .auto-trades-stat {
     display: flex;
     flex-direction: column;
-    gap: 0.2rem;
+    gap: 0.15rem;
     animation: neonCountUp 0.5s ease-out;
 
     &--full {
@@ -1263,7 +1402,7 @@ $at-text-faint: #2c4060;
     }
 
     &__label {
-        font-size: 0.8rem;
+        font-size: 0.7rem;
         font-weight: 600;
         color: $at-text-muted;
         text-transform: uppercase;
@@ -1271,7 +1410,7 @@ $at-text-faint: #2c4060;
     }
 
     &__value {
-        font-size: 1.3rem;
+        font-size: 1.1rem;
         font-weight: 700;
         color: $at-text;
 
@@ -1310,21 +1449,21 @@ $at-text-faint: #2c4060;
 .auto-trades-controls {
     display: flex;
     justify-content: center;
-    gap: 1rem;
-    padding: 0.8rem 0;
-    margin-bottom: 12px;
+    gap: 0.8rem;
+    padding: 0.6rem 0;
+    margin-bottom: 8px;
 
     &__run,
     &__stop {
-        padding: 1rem 3rem;
+        padding: 0.8rem 2.5rem;
         border: none;
         border-radius: 0.8rem;
-        font-size: 1.3rem;
+        font-size: 1.1rem;
         font-weight: 700;
         cursor: pointer;
         transition: all 0.15s ease;
         letter-spacing: 0.04em;
-        min-width: 12rem;
+        min-width: 10rem;
         position: relative;
         overflow: hidden;
 
@@ -1391,8 +1530,8 @@ $at-text-faint: #2c4060;
     color: $at-neon-yellow;
     border: 1px solid rgba(255, 230, 0, 0.3);
     border-radius: 2rem;
-    padding: 0.6rem 1.2rem;
-    font-size: 1.1rem;
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
     font-weight: 700;
     cursor: pointer;
     backdrop-filter: blur(10px);
@@ -1412,8 +1551,8 @@ $at-text-faint: #2c4060;
     @include mobile-or-tablet-screen {
         bottom: calc(1.2rem + env(safe-area-inset-bottom));
         right: 1rem;
-        padding: 0.5rem 1rem;
-        font-size: 0.95rem;
+        padding: 0.4rem 0.8rem;
+        font-size: 0.85rem;
     }
 }
 
@@ -1449,20 +1588,20 @@ $at-text-faint: #2c4060;
         display: flex;
         align-items: center;
         gap: 1rem;
-        padding: 1.6rem 2rem;
+        padding: 1.2rem 1.6rem;
         border-bottom: 1px solid $at-border-subtle;
         background: $at-neon-yellow-glow;
     }
 
     &__icon {
-        font-size: 2rem;
+        font-size: 1.6rem;
         flex-shrink: 0;
         animation: neonFloat 2s ease-in-out infinite;
     }
 
     &__title {
         flex: 1;
-        font-size: 1.6rem;
+        font-size: 1.4rem;
         font-weight: 700;
         color: $at-neon-yellow;
         margin: 0;
@@ -1472,9 +1611,9 @@ $at-text-faint: #2c4060;
         background: none;
         border: none;
         color: $at-text-muted;
-        font-size: 1.6rem;
+        font-size: 1.4rem;
         cursor: pointer;
-        padding: 0.4rem;
+        padding: 0.3rem;
         line-height: 1;
         border-radius: 50%;
         transition: all 0.15s;
@@ -1486,21 +1625,21 @@ $at-text-faint: #2c4060;
     }
 
     &__body {
-        padding: 2rem;
-        font-size: 1.35rem;
+        padding: 1.6rem;
+        font-size: 1.1rem;
         color: $at-text;
-        line-height: 1.7;
+        line-height: 1.6;
 
         p {
-            margin: 0 0 1.2rem;
+            margin: 0 0 1rem;
         }
 
         ul {
             margin: 0;
-            padding-left: 2rem;
+            padding-left: 1.6rem;
 
             li {
-                margin-bottom: 0.8rem;
+                margin-bottom: 0.6rem;
                 color: $at-text-dim;
                 &:last-child {
                     margin-bottom: 0;
@@ -1510,7 +1649,7 @@ $at-text-faint: #2c4060;
     }
 
     &__footer {
-        padding: 1.2rem 2rem 1.6rem;
+        padding: 1rem 1.6rem 1.2rem;
         display: flex;
         justify-content: flex-end;
         border-top: 1px solid $at-border-subtle;
@@ -1521,8 +1660,8 @@ $at-text-faint: #2c4060;
         color: #fff;
         border: none;
         border-radius: 0.8rem;
-        padding: 0.9rem 2.4rem;
-        font-size: 1.4rem;
+        padding: 0.7rem 2rem;
+        font-size: 1.2rem;
         font-weight: 700;
         cursor: pointer;
         transition: all 0.15s;
@@ -1539,102 +1678,156 @@ $at-text-faint: #2c4060;
 @include mobile-or-tablet-screen {
     .auto-trades-page {
         &__inner {
-            padding: 1rem 0.75rem 6rem;
+            padding: 0.8rem 0.5rem 4rem;
         }
 
         &__header {
             flex-direction: column;
             align-items: stretch;
-            margin-bottom: 1rem;
+            margin-bottom: 0.8rem;
+            
+            h1 {
+                font-size: 1.8rem;
+            }
         }
     }
 
     .auto-trades-card {
-        padding: 1.2rem;
-        border-radius: 1rem;
-        margin-bottom: 12px;
+        padding: 0.8rem;
+        border-radius: 0.8rem;
+        margin-bottom: 8px;
+        
+        &--compact {
+            padding: 0.6rem 0.8rem;
+        }
     }
 
     .auto-trades-global-features {
         grid-template-columns: 1fr;
+        gap: 0.4rem;
+        margin-top: 0.4rem;
+        padding-top: 0.4rem;
     }
 
     .auto-trades-market-config {
         grid-template-columns: 1fr;
-        gap: 0.6rem;
+        gap: 0.4rem;
     }
 
     .auto-trades-config {
         &__select {
-            font-size: 1rem;
-            padding: 0.5rem 0.7rem;
-            min-height: 40px;
+            font-size: 0.85rem;
+            padding: 0.3rem 0.5rem;
+            min-height: 2rem;
         }
     }
 
     .auto-trades-stats-grid {
         grid-template-columns: 1fr 1fr;
-        gap: 0.6rem;
-        padding: 0.8rem;
+        gap: 0.4rem;
+        padding: 0.6rem;
     }
 
     .auto-trades-stat {
         &__value {
-            font-size: 1.1rem;
+            font-size: 0.95rem;
+        }
+        &__label {
+            font-size: 0.6rem;
         }
     }
 
     .auto-trades-controls {
-        padding: 0.6rem 0;
+        padding: 0.4rem 0;
 
         &__run,
         &__stop {
-            padding: 0.8rem 1.5rem;
-            font-size: 1.1rem;
-            min-width: 8rem;
+            padding: 0.6rem 1.2rem;
+            font-size: 0.95rem;
+            min-width: 7rem;
         }
     }
 
     .auto-trades-global-grid {
         grid-template-columns: 1fr 1fr;
-        gap: 0.6rem;
+        gap: 0.4rem;
+        
+        &--compact {
+            gap: 0.3rem;
+        }
     }
 
     .auto-trades-market-display {
-        padding: 0.8rem;
+        padding: 0.6rem;
+        margin-top: 0.4rem;
 
         &__quote {
-            font-size: 1.6rem;
+            font-size: 1.3rem;
+        }
+        
+        &__info {
+            font-size: 0.75rem;
+            gap: 0.5rem;
         }
     }
 
     .auto-trades-card__title-wrapper {
         flex-direction: column;
         align-items: flex-start;
-        gap: 0.3rem;
+        gap: 0.2rem;
     }
 
     .auto-trades-card__controls {
         flex-wrap: wrap;
+    }
+    
+    .auto-trades-analysis {
+        padding: 6px;
+        
+        &__tick {
+            width: 20px;
+            height: 20px;
+            font-size: 0.6rem;
+        }
     }
 }
 
 @media (max-width: 480px) {
     .auto-trades-global-grid {
         grid-template-columns: 1fr;
+        
+        &--compact {
+            grid-template-columns: 1fr;
+        }
     }
 
     .auto-trades-stats-grid {
         grid-template-columns: 1fr 1fr;
+        gap: 0.3rem;
+        padding: 0.4rem;
     }
 
     .auto-trades-controls {
         flex-direction: column;
         align-items: stretch;
-        gap: 0.6rem;
+        gap: 0.4rem;
 
         &__run,
         &__stop {
+            width: 100%;
+            min-width: 0;
+        }
+    }
+    
+    .auto-trades-config__field--half {
+        grid-column: span 1;
+    }
+    
+    .auto-trades-martingale-row {
+        flex-direction: column;
+        gap: 0.3rem;
+        
+        .auto-trades-config__select {
             width: 100%;
         }
     }
