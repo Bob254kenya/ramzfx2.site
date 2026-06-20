@@ -51,24 +51,6 @@ const MARKETS = [
     { label: 'Volatility 75 (1s) Index', symbol: '1HZ75V' },
     { label: 'Volatility 90 (1s) Index', symbol: '1HZ90V' },
     { label: 'Volatility 100 (1s) Index', symbol: '1HZ100V' },
-    // 15s indices
-    { label: 'Volatility 10 (15s) Index', symbol: '15HZ10V' },
-    { label: 'Volatility 25 (15s) Index', symbol: '15HZ25V' },
-    { label: 'Volatility 50 (15s) Index', symbol: '15HZ50V' },
-    { label: 'Volatility 75 (15s) Index', symbol: '15HZ75V' },
-    { label: 'Volatility 100 (15s) Index', symbol: '15HZ100V' },
-    // 30s indices
-    { label: 'Volatility 10 (30s) Index', symbol: '30HZ10V' },
-    { label: 'Volatility 25 (30s) Index', symbol: '30HZ25V' },
-    { label: 'Volatility 50 (30s) Index', symbol: '30HZ50V' },
-    { label: 'Volatility 75 (30s) Index', symbol: '30HZ75V' },
-    { label: 'Volatility 100 (30s) Index', symbol: '30HZ100V' },
-    // 90s indices
-    { label: 'Volatility 10 (90s) Index', symbol: '90HZ10V' },
-    { label: 'Volatility 25 (90s) Index', symbol: '90HZ25V' },
-    { label: 'Volatility 50 (90s) Index', symbol: '90HZ50V' },
-    { label: 'Volatility 75 (90s) Index', symbol: '90HZ75V' },
-    { label: 'Volatility 100 (90s) Index', symbol: '90HZ100V' },
     // Standard volatility indices
     { label: 'Volatility 10 Index', symbol: 'R_10' },
     { label: 'Volatility 25 Index', symbol: 'R_25' },
