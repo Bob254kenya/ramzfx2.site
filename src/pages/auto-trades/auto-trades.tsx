@@ -1,3 +1,4 @@
+// auto-trades.tsx
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
@@ -18,6 +19,8 @@ import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purc
 import { safeSubscribe } from '@/utils/websocket-handler';
 import './auto-trades.scss';
 
+// ── Constants ────────────────────────────────────────────────────────────────
+
 type MartingaleModeType =
     | 'no_martingale'
     | 'after_one_loss'
@@ -26,13 +29,14 @@ type MartingaleModeType =
 
 type AutoMarket = { symbol: string; label: string; pip: number };
 type Direction = 1 | -1 | 0;
-type StrategyTemplate = 'STANDARD' | 'OVER_2_MARKET' | 'UNDER_7_MARKET';
 
 const FIVE_MINUTE_GRANULARITY = 300;
 const DATA_SILENCE_RESTART_MS = 15000;
 const DATA_RESTART_COOLDOWN_MS = 10000;
 const UI_REFRESH_THROTTLE_MS = 80;
 const MARKET_LOSS_COOLDOWN_TICKS = 60;
+const MAX_STREAK_LENGTH = 10;
+const MAX_ANALYSIS_TICKS = 10;
 
 export type TradeType =
     | 'DIGITOVER'
@@ -133,8 +137,14 @@ const AUTO_MARKETS: AutoMarket[] = SUPPORTED_VOLATILITY_MARKETS.map(market => ({
 const AUTO_MARKET_SYMBOLS = AUTO_MARKETS.map(({ symbol }) => symbol);
 const AUTO_MARKET_LOOKUP = new Map(AUTO_MARKETS.map(market => [market.symbol, market]));
 
-const usesLossPrediction = (trade_type: TradeType) => trade_type === 'DIGITOVER' || trade_type === 'DIGITUNDER';
-const isRunTradeType = (trade_type: TradeType) => trade_type === 'RUNHIGH' || trade_type === 'RUNLOW';
+// ── Utility Functions ──────────────────────────────────────────────────────
+
+const usesLossPrediction = (trade_type: TradeType) => 
+    trade_type === 'DIGITOVER' || trade_type === 'DIGITUNDER';
+
+const isRunTradeType = (trade_type: TradeType) => 
+    trade_type === 'RUNHIGH' || trade_type === 'RUNLOW';
+
 const isCandleConfirmedTradeType = (trade_type: TradeType) =>
     trade_type === 'CALL' || trade_type === 'PUT' || trade_type === 'RUNHIGH' || trade_type === 'RUNLOW';
 
@@ -157,6 +167,25 @@ const clampConsecutiveLossThreshold = (value: unknown) => {
     if (!Number.isFinite(numeric)) return 2;
     return Math.min(10, Math.max(1, Math.trunc(numeric)));
 };
+
+const getEffectiveSignalStreak = ({
+    trade_type,
+    configured_streak,
+}: {
+    trade_type: TradeType;
+    configured_streak: number;
+}) => {
+    const normalizedStreak = Math.min(MAX_STREAK_LENGTH, Math.max(1, Math.trunc(configured_streak) || 4));
+    return usesLossPrediction(trade_type) ? Math.max(3, normalizedStreak) : normalizedStreak;
+};
+
+const getCandleDirectionLabel = (direction: Direction) => {
+    if (direction === 1) return 'Bullish';
+    if (direction === -1) return 'Bearish';
+    return 'Waiting';
+};
+
+// ── Types ──────────────────────────────────────────────────────────────────
 
 interface MarketConfig {
     marketSymbol: string;
@@ -196,6 +225,8 @@ interface MarketDisplay extends MarketState {
     pip: number;
 }
 
+// ── State Helpers ──────────────────────────────────────────────────────────
+
 const createMarketState = (prev?: Partial<MarketState>): MarketState => ({
     consecutive: 0,
     trading: false,
@@ -215,7 +246,10 @@ const createMarketState = (prev?: Partial<MarketState>): MarketState => ({
     consecutiveLosses: 0,
     lastResultType: null,
     tradeCount: 0,
+    ...prev,
 });
+
+// ── Signal Detection ──────────────────────────────────────────────────────
 
 const isDigitSignalMatch = ({
     trade_type,
@@ -272,22 +306,7 @@ const isCandleMatch = (trade_type: TradeType, candle_direction: Direction) => {
     return true;
 };
 
-const getEffectiveSignalStreak = ({
-    trade_type,
-    configured_streak,
-}: {
-    trade_type: TradeType;
-    configured_streak: number;
-}) => {
-    const normalizedStreak = Math.min(10, Math.max(1, Math.trunc(configured_streak) || 4));
-    return usesLossPrediction(trade_type) ? Math.max(3, normalizedStreak) : normalizedStreak;
-};
-
-const getCandleDirectionLabel = (direction: Direction) => {
-    if (direction === 1) return 'Bullish';
-    if (direction === -1) return 'Bearish';
-    return 'Waiting';
-};
+// ── Martingale Logic ──────────────────────────────────────────────────────
 
 const getNextMartingaleState = ({
     profit,
@@ -338,12 +357,16 @@ const getNextMartingaleState = ({
     };
 };
 
+// ── Component ─────────────────────────────────────────────────────────────
+
 const AutoTrades = observer(() => {
     const { dashboard, client, run_panel, summary_card, transactions } = useStore();
     const { currency } = client;
     const { active_tab } = dashboard;
 
     const show_auto = active_tab === DBOT_TABS.AUTO_TRADES;
+
+    // ── Local Storage Helpers ─────────────────────────────────────────────
 
     const loadSaved = (key: string, fallback: string) => {
         try {
@@ -379,7 +402,8 @@ const AutoTrades = observer(() => {
         return AUTO_MARKET_SYMBOLS.slice(0, 2);
     };
 
-    // Global settings
+    // ── Global Settings State ─────────────────────────────────────────────
+
     const [stake, setStake] = useState(() => loadSavedNum('stake', '1', 0.01, 100000));
     const [martingale, setMartingale] = useState(() => loadSavedNum('martingale', '2', 1.01, 100));
     const [takeProfit, setTakeProfit] = useState(() => loadSavedNum('takeProfit', '100', 1, 1000000));
@@ -403,7 +427,8 @@ const AutoTrades = observer(() => {
         String(clampConsecutiveLossThreshold(localStorage.getItem('auto_trades_consecutiveLossCount') || 2))
     );
 
-    // Market 1 config
+    // ── Market 1 Config State ─────────────────────────────────────────────
+
     const [market1Symbol, setMarket1Symbol] = useState(() => {
         const markets = loadSavedMarkets();
         return markets[0] || AUTO_MARKET_SYMBOLS[0];
@@ -419,8 +444,10 @@ const AutoTrades = observer(() => {
     const [market1PredictionAfterLoss, setMarket1PredictionAfterLoss] = useState(() =>
         loadSavedNum('market1_predictionAfterLoss', '5', 0, 9)
     );
-    const [market1Streak, setMarket1Streak] = useState(() => loadSavedNum('market1_streak', '4', 1, 10));
-    const [market1AnalysisTicks, setMarket1AnalysisTicks] = useState(() => loadSavedNum('market1_analysisTicks', '1', 1, 10));
+    const [market1Streak, setMarket1Streak] = useState(() => loadSavedNum('market1_streak', '4', 1, MAX_STREAK_LENGTH));
+    const [market1AnalysisTicks, setMarket1AnalysisTicks] = useState(() => 
+        loadSavedNum('market1_analysisTicks', '1', 1, MAX_ANALYSIS_TICKS)
+    );
     const [market1Inverse, setMarket1Inverse] = useState(() => {
         try {
             return localStorage.getItem('auto_trades_market1_inverse') === 'true';
@@ -429,7 +456,8 @@ const AutoTrades = observer(() => {
         }
     });
 
-    // Market 2 config
+    // ── Market 2 Config State ─────────────────────────────────────────────
+
     const [market2Symbol, setMarket2Symbol] = useState(() => {
         const markets = loadSavedMarkets();
         return markets[1] || AUTO_MARKET_SYMBOLS[1] || AUTO_MARKET_SYMBOLS[0];
@@ -445,8 +473,10 @@ const AutoTrades = observer(() => {
     const [market2PredictionAfterLoss, setMarket2PredictionAfterLoss] = useState(() =>
         loadSavedNum('market2_predictionAfterLoss', '4', 0, 9)
     );
-    const [market2Streak, setMarket2Streak] = useState(() => loadSavedNum('market2_streak', '4', 1, 10));
-    const [market2AnalysisTicks, setMarket2AnalysisTicks] = useState(() => loadSavedNum('market2_analysisTicks', '1', 1, 10));
+    const [market2Streak, setMarket2Streak] = useState(() => loadSavedNum('market2_streak', '4', 1, MAX_STREAK_LENGTH));
+    const [market2AnalysisTicks, setMarket2AnalysisTicks] = useState(() => 
+        loadSavedNum('market2_analysisTicks', '1', 1, MAX_ANALYSIS_TICKS)
+    );
     const [market2Inverse, setMarket2Inverse] = useState(() => {
         try {
             return localStorage.getItem('auto_trades_market2_inverse') === 'true';
@@ -455,9 +485,8 @@ const AutoTrades = observer(() => {
         }
     });
 
-    const [selectedMarkets, setSelectedMarkets] = useState<string[]>([market1Symbol, market2Symbol]);
+    // ── UI State ───────────────────────────────────────────────────────────
 
-    // UI state
     const [totalPnl, setTotalPnl] = useState(0);
     const [totalTrades, setTotalTrades] = useState(0);
     const [error, setError] = useState<string | null>(null);
@@ -468,7 +497,8 @@ const AutoTrades = observer(() => {
     const [showDisclaimer, setShowDisclaimer] = useState(false);
     const [isDataLoading, setIsDataLoading] = useState(true);
 
-    // Refs
+    // ── Refs ──────────────────────────────────────────────────────────────
+
     const subscriptionsRef = useRef<Record<string, any>>({});
     const candleSubscriptionsRef = useRef<Record<string, any>>({});
     const marketStatesRef = useRef<Record<string, MarketState>>(
@@ -495,9 +525,18 @@ const AutoTrades = observer(() => {
     const stopTradingRef = useRef<() => void>(() => {});
     const selectedMarketsRef = useRef<string[]>([market1Symbol, market2Symbol]);
 
-    show_auto_ref.current = show_auto;
+    // ── Update Refs ──────────────────────────────────────────────────────
 
-    // Market configs
+    useEffect(() => {
+        show_auto_ref.current = show_auto;
+    }, [show_auto]);
+
+    useEffect(() => {
+        selectedMarketsRef.current = [market1Symbol, market2Symbol];
+    }, [market1Symbol, market2Symbol]);
+
+    // ── Market Configs ────────────────────────────────────────────────────
+
     const market1Config: MarketConfig = {
         marketSymbol: market1Symbol,
         tradeType: market1TradeType,
@@ -520,7 +559,15 @@ const AutoTrades = observer(() => {
         inverseMode: market2Inverse,
     };
 
-    // Save market configs to localStorage
+    useEffect(() => {
+        marketConfigsRef.current = {
+            [market1Symbol]: market1Config,
+            [market2Symbol]: market2Config,
+        };
+    }, [market1Symbol, market2Symbol, market1Config, market2Config]);
+
+    // ── Save to LocalStorage ─────────────────────────────────────────────
+
     useEffect(() => {
         try {
             localStorage.setItem('auto_trades_market1_tradeType', market1TradeType);
@@ -558,13 +605,7 @@ const AutoTrades = observer(() => {
         market1Symbol, market2Symbol
     ]);
 
-    useEffect(() => {
-        marketConfigsRef.current = {
-            [market1Symbol]: market1Config,
-            [market2Symbol]: market2Config,
-        };
-        selectedMarketsRef.current = [market1Symbol, market2Symbol];
-    }, [market1Symbol, market2Symbol, market1Config, market2Config]);
+    // ── Core Logic Functions ─────────────────────────────────────────────
 
     const getActiveDigitBarrier = useCallback((symbol: string, lastResult: 'win' | 'loss' | null, consecutiveLosses = 0) => {
         const config = marketConfigsRef.current[symbol];
@@ -579,18 +620,12 @@ const AutoTrades = observer(() => {
         return consecutiveLosses > 0 || lastResult === 'loss' ? afterLoss : beforeLoss;
     }, []);
 
-    const getTradeConfig = useCallback((symbol: string) => {
-        return marketConfigsRef.current[symbol];
-    }, []);
-
     const flushDisplays = useCallback(() => {
         if (unmountedRef.current || !show_auto_ref.current) return;
         lastUiRefreshAtRef.current = Date.now();
         // Force re-render by updating state
-        const market1State = marketStatesRef.current[market1Symbol];
-        const market2State = marketStatesRef.current[market2Symbol];
-        // This is handled by the marketDisplays computation below
-    }, [market1Symbol, market2Symbol]);
+        // The marketDisplays computation will handle the refresh
+    }, []);
 
     const refreshDisplays = useCallback(() => {
         if (unmountedRef.current || !show_auto_ref.current) return;
@@ -706,6 +741,8 @@ const AutoTrades = observer(() => {
         updateSubscriptionDiagnostics();
     }, [clearDataRecoveryLoading, updateSubscriptionDiagnostics]);
 
+    // ── Execute Trade ─────────────────────────────────────────────────────
+
     const executeTrade = useCallback(
         async (symbol: string, stakeAmount: number, lastResult: 'win' | 'loss' | null): Promise<number> => {
             const config = marketConfigsRef.current[symbol];
@@ -779,6 +816,8 @@ const AutoTrades = observer(() => {
         [currency, getActiveDigitBarrier, pushContract, setError]
     );
 
+    // ── After Trade Handler ──────────────────────────────────────────────
+
     const handleAfterTrade = useCallback(
         (symbol: string, profit: number) => {
             if (!runningRef.current) return;
@@ -829,6 +868,8 @@ const AutoTrades = observer(() => {
         [completeRunPanelStop, refreshDisplays, stake, martingale, takeProfit, stopLoss, martingaleMode, consecutiveLossCount]
     );
 
+    // ── Try Execute Signal ───────────────────────────────────────────────
+
     const tryExecuteSignal = useCallback(
         (symbol: string, state: MarketState, signalReady: boolean) => {
             if (
@@ -836,7 +877,8 @@ const AutoTrades = observer(() => {
                 signalReady &&
                 !state.trading &&
                 !globalTradingRef.current &&
-                state.lossCooldownLeft === 0
+                state.lossCooldownLeft === 0 &&
+                client.is_logged_in
             ) {
                 state.trading = true;
                 state.consecutive = 0;
@@ -860,8 +902,10 @@ const AutoTrades = observer(() => {
                 );
             }
         },
-        [executeTrade, handleAfterTrade, refreshDisplays, stake]
+        [client.is_logged_in, executeTrade, handleAfterTrade, refreshDisplays, stake]
     );
+
+    // ── Tick Handler ─────────────────────────────────────────────────────
 
     const handleTick = useCallback(
         (symbol: string, tick: any) => {
@@ -903,7 +947,7 @@ const AutoTrades = observer(() => {
                 if (dir !== 0) {
                     const match = inv ? isDirectionMatch(ct, dir) : isDirectionMatch(ct, dir);
                     if (match) {
-                        state.consecutive = Math.min(state.consecutive + 1, 10);
+                        state.consecutive = Math.min(state.consecutive + 1, MAX_STREAK_LENGTH);
                     } else {
                         state.consecutive = 0;
                     }
@@ -921,7 +965,7 @@ const AutoTrades = observer(() => {
                 });
 
                 if (match) {
-                    state.consecutive = Math.min(state.consecutive + 1, 10);
+                    state.consecutive = Math.min(state.consecutive + 1, MAX_STREAK_LENGTH);
                 } else {
                     state.consecutive = 0;
                 }
@@ -981,6 +1025,8 @@ const AutoTrades = observer(() => {
 
     handleTickRef.current = handleTick;
 
+    // ── Candle Handler ────────────────────────────────────────────────────
+
     const handleCandle = useCallback(
         (symbol: string, candle: any) => {
             if (!selectedMarketsRef.current.includes(symbol)) return;
@@ -1016,11 +1062,14 @@ const AutoTrades = observer(() => {
 
     handleCandleRef.current = handleCandle;
 
+    // ── Start Subscriptions ──────────────────────────────────────────────
+
     const startSubscriptions = useCallback(async () => {
         const subscriptionVersion = subscriptionVersionRef.current;
         const marketsToMonitor = [market1Symbol, market2Symbol];
         const monitoredSymbolSet = new Set(marketsToMonitor);
 
+        // Clean up subscriptions for markets no longer monitored
         Object.entries(subscriptionsRef.current).forEach(([symbol, sub]) => {
             if (!monitoredSymbolSet.has(symbol)) {
                 try {
@@ -1146,6 +1195,8 @@ const AutoTrades = observer(() => {
         market2Symbol,
     ]);
 
+    // ── Restart Subscriptions ────────────────────────────────────────────
+
     const restartSubscriptions = useCallback(() => {
         const now = Date.now();
         if (restartInFlightRef.current) return;
@@ -1175,6 +1226,8 @@ const AutoTrades = observer(() => {
         }, 800);
     }, [setDataRecoveryLoading, startSubscriptions, stopSubscriptions]);
 
+    // ── Session Management ───────────────────────────────────────────────
+
     const resetSession = useCallback(() => {
         const baseStake = Number(stake) || 1;
         globalTradingRef.current = false;
@@ -1187,6 +1240,8 @@ const AutoTrades = observer(() => {
         setError(null);
         refreshDisplays();
     }, [refreshDisplays, market1Symbol, market2Symbol, stake]);
+
+    // ── Run/Stop ─────────────────────────────────────────────────────────
 
     const handleRun = useCallback(() => {
         if (!api_base.is_authorized) {
@@ -1245,6 +1300,8 @@ const AutoTrades = observer(() => {
         stopTrading();
     }, [stopTrading]);
 
+    // ── Effects ──────────────────────────────────────────────────────────
+
     // Subscribe to data when component mounts or markets change
     useEffect(() => {
         if (show_auto && api_base.api) {
@@ -1295,7 +1352,6 @@ const AutoTrades = observer(() => {
             }
             stopSubscriptions();
             Object.values(marketStatesRef.current).forEach(state => {
-                state.digitHistory = [];
                 state.directionHistory = [];
                 state.lastDigits = [];
             });
@@ -1323,7 +1379,8 @@ const AutoTrades = observer(() => {
         };
     }, [dashboard, run_panel, show_auto, stopTrading]);
 
-    // Compute market displays
+    // ── Compute Market Displays ──────────────────────────────────────────
+
     const marketDisplays = useMemo((): MarketDisplay[] => {
         const displaySymbols = [market1Symbol, market2Symbol];
         return displaySymbols.map(symbol => {
@@ -1339,8 +1396,7 @@ const AutoTrades = observer(() => {
         });
     }, [market1Symbol, market2Symbol, stake]);
 
-    // Check if data is loading
-    const hasAnyLiveQuote = marketDisplays.some(m => m.lastQuote !== null);
+    // ── Render ────────────────────────────────────────────────────────────
 
     if (!show_auto) return null;
 
@@ -1349,7 +1405,8 @@ const AutoTrades = observer(() => {
     const baseStakeNum = Number(stake) || 1;
     const martingaleActive = marketDisplays.some(m => m.currentStake > baseStakeNum);
     const inCooldown = marketDisplays.some(m => m.lossCooldownLeft > 0);
-    const isDataLoading = selectedMarkets.length > 0 && !hasAnyLiveQuote && (dataStreamLoading || !isConnected || show_auto);
+    const hasAnyLiveQuote = marketDisplays.some(m => m.lastQuote !== null);
+    const isLoading = selectedMarketsRef.current.length > 0 && !hasAnyLiveQuote && (dataStreamLoading || !isConnected);
 
     return (
         <div className='auto-trades-page'>
@@ -1367,13 +1424,13 @@ const AutoTrades = observer(() => {
                                     'auto-trades-status--connected': isConnected && !inCooldown,
                                     'auto-trades-status--running': isRunning && !inCooldown,
                                     'auto-trades-status--cooldown': inCooldown,
-                                    'auto-trades-status--loading': isDataLoading && !inCooldown,
+                                    'auto-trades-status--loading': isLoading && !inCooldown,
                                 })}
                             />
                             <span className='auto-trades-status__label'>
                                 {inCooldown
                                     ? 'Cooldown'
-                                    : isDataLoading
+                                    : isLoading
                                       ? 'Loading data'
                                     : isRunning
                                       ? 'Trading'
@@ -1399,7 +1456,7 @@ const AutoTrades = observer(() => {
                         </div>
                     )}
 
-                    {isDataLoading && (
+                    {isLoading && (
                         <div className='auto-trades-page__loader'>
                             <div className='auto-trades-data-loader auto-trades-data-loader--panel'>
                                 <span className='auto-trades-data-loader__spinner' />
@@ -1598,12 +1655,12 @@ const AutoTrades = observer(() => {
                                                 className='auto-trades-config__streak-slider'
                                                 type='range'
                                                 min='1'
-                                                max='10'
+                                                max={MAX_STREAK_LENGTH}
                                                 step='1'
                                                 value={market1Streak}
                                                 onChange={e => setMarket1Streak(e.target.value)}
                                                 disabled={isRunning}
-                                                style={{ '--pct': `${(Number(market1Streak) / 10) * 100}%` } as any}
+                                                style={{ '--pct': `${(Number(market1Streak) / MAX_STREAK_LENGTH) * 100}%` } as any}
                                             />
                                             <span className='auto-trades-config__streak-value'>{market1Streak}</span>
                                         </div>
@@ -1616,7 +1673,7 @@ const AutoTrades = observer(() => {
                                             onChange={e => setMarket1AnalysisTicks(e.target.value)}
                                             disabled={isRunning}
                                         >
-                                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(d => (
+                                            {Array.from({ length: MAX_ANALYSIS_TICKS }, (_, i) => i + 1).map(d => (
                                                 <option key={d} value={String(d)}>{d}</option>
                                             ))}
                                         </select>
@@ -1798,12 +1855,12 @@ const AutoTrades = observer(() => {
                                                 className='auto-trades-config__streak-slider'
                                                 type='range'
                                                 min='1'
-                                                max='10'
+                                                max={MAX_STREAK_LENGTH}
                                                 step='1'
                                                 value={market2Streak}
                                                 onChange={e => setMarket2Streak(e.target.value)}
                                                 disabled={isRunning}
-                                                style={{ '--pct': `${(Number(market2Streak) / 10) * 100}%` } as any}
+                                                style={{ '--pct': `${(Number(market2Streak) / MAX_STREAK_LENGTH) * 100}%` } as any}
                                             />
                                             <span className='auto-trades-config__streak-value'>{market2Streak}</span>
                                         </div>
@@ -1816,7 +1873,7 @@ const AutoTrades = observer(() => {
                                             onChange={e => setMarket2AnalysisTicks(e.target.value)}
                                             disabled={isRunning}
                                         >
-                                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(d => (
+                                            {Array.from({ length: MAX_ANALYSIS_TICKS }, (_, i) => i + 1).map(d => (
                                                 <option key={d} value={String(d)}>{d}</option>
                                             ))}
                                         </select>
