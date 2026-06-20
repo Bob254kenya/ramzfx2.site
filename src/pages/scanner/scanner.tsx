@@ -18,10 +18,15 @@ type TTickPoint = {
 type TScannerStrategy = 'Matches & Differs' | 'Even & Odd' | 'Over & Under' | 'Rise & Fall';
 type TScannerMode = 'Analyze' | 'Trade';
 
+// Updated TScannerSignal to include recovery properties
 type TScannerSignal = {
     barrier?: string;
     contractType: 'DIGITEVEN' | 'DIGITODD' | 'DIGITOVER' | 'DIGITUNDER' | 'DIGITMATCH' | 'DIGITDIFF' | 'CALL' | 'PUT';
     label: string;
+    // Recovery properties for Over & Under strategy
+    recoveryBarrier?: string;
+    recoveryContractType?: 'DIGITOVER' | 'DIGITUNDER';
+    recoveryLabel?: string;
 };
 
 const MAX_TICKS = 1000;
@@ -122,7 +127,7 @@ const getQuoteFromTick = (data: any): TTickPoint | null => {
     };
 };
 
-// NEW: Enhanced Over & Under analysis with specific signal rules
+// Enhanced Over & Under analysis with specific signal rules
 const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
     const lastDigits = ticks.slice(-MAX_TICKS).map(tick => getLastDigitFromQuote(tick.quote, symbol));
     const sampleSize = Math.max(lastDigits.length, 1);
@@ -149,7 +154,7 @@ const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
 
     let signal: TScannerSignal;
     
-    // NEW LOGIC: Determine primary signal based on what's less frequent
+    // Determine primary signal based on what's less frequent
     if (overCount < underCount) {
         // OVER is the primary signal (less common)
         // Find the least common OVER digit (recovery: Over 1 or Over 4)
@@ -177,7 +182,6 @@ const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
             barrier: String(primaryOver), 
             contractType: 'DIGITOVER', 
             label: `Over ${primaryOver}`,
-            // Store recovery barrier for use in trade logic
             recoveryBarrier: String(recoveryOver),
             recoveryContractType: 'DIGITOVER',
             recoveryLabel: `Over ${recoveryOver}`
@@ -342,7 +346,7 @@ const Scanner = observer(() => {
     const martingaleMultiplierRef = useRef(DEFAULT_MARTINGALE_MULTIPLIER);
     const consecutiveLossesRef = useRef(0);
     
-    // NEW: Recovery signal tracking
+    // Recovery signal tracking
     const isRecoveryTradeRef = useRef(false);
     const recoverySignalRef = useRef<TScannerSignal | null>(null);
     const primarySignalRef = useRef<TScannerSignal | null>(null);
@@ -621,7 +625,7 @@ const Scanner = observer(() => {
         [buildTradeParameters, currency, pushContract, selectedMarket.label, selectedSymbol]
     );
 
-    // NEW: Execute trade with recovery logic for Over & Under
+    // Execute trade with recovery logic for Over & Under
     const executeTradeWithRecovery = useCallback(
         async (primarySignal: TScannerSignal, recoverySignal: TScannerSignal, currentTicks: TTickPoint[]) => {
             if (!tradeActiveRef.current || tradeInFlightRef.current || shouldStopRef.current || currentTicks.length < MAX_TICKS) {
@@ -913,7 +917,7 @@ const Scanner = observer(() => {
             setSessionProfit(0);
 
             // Store primary and recovery signals for Over & Under strategy
-            if (strategyRef.current === 'Over & Under' && firstSignal.recoveryBarrier) {
+            if (strategyRef.current === 'Over & Under' && firstSignal.recoveryBarrier && firstSignal.recoveryContractType && firstSignal.recoveryLabel) {
                 primarySignalRef.current = {
                     barrier: firstSignal.barrier,
                     contractType: firstSignal.contractType,
@@ -921,8 +925,8 @@ const Scanner = observer(() => {
                 };
                 recoverySignalRef.current = {
                     barrier: firstSignal.recoveryBarrier,
-                    contractType: firstSignal.recoveryContractType as any,
-                    label: firstSignal.recoveryLabel || `Over ${firstSignal.recoveryBarrier}`
+                    contractType: firstSignal.recoveryContractType,
+                    label: firstSignal.recoveryLabel
                 };
                 setTerminalDashboard(previous => [
                     ...previous,
