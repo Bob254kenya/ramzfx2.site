@@ -40,32 +40,35 @@ const TIMER_SOUND_URL = 'https://www.fesliyanstudios.com/play-mp3/4386';
 // Martingale multiplier from 1 to 10 with 0.1 increments
 const MARTINGALE_MULTIPLIERS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.2, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 
-// Updated MARKETS array with 1s, 15s, 30s, and 90s volatility indices
+// FIXED: Properly named volatility indices with correct symbols
 const MARKETS = [
-    // 1s indices
-    { label: 'Volatility 10(1s) Index', symbol: '1HZ10V' },
-    { label: 'Volatility 25(1s) Index', symbol: '1HZ25V' },
-    { label: 'Volatility 50(1s) Index', symbol: '1HZ50V' },
-    { label: 'Volatility 75(1s) Index', symbol: '1HZ75V' },
-    { label: 'Volatility 100(1s) Index', symbol: '1HZ100V' },
+    // 1s indices - properly named with (1s) suffix
+    { label: 'Volatility 10 (1s) Index', symbol: '1HZ10V' },
+    { label: 'Volatility 15 (1s) Index', symbol: '1HZ15V' },
+    { label: 'Volatility 25 (1s) Index', symbol: '1HZ25V' },
+    { label: 'Volatility 30 (1s) Index', symbol: '1HZ30V' },
+    { label: 'Volatility 50 (1s) Index', symbol: '1HZ50V' },
+    { label: 'Volatility 75 (1s) Index', symbol: '1HZ75V' },
+    { label: 'Volatility 90 (1s) Index', symbol: '1HZ90V' },
+    { label: 'Volatility 100 (1s) Index', symbol: '1HZ100V' },
     // 15s indices
-    { label: 'Volatility 10(15s) Index', symbol: '15HZ10V' },
-    { label: 'Volatility 25(15s) Index', symbol: '15HZ25V' },
-    { label: 'Volatility 50(15s) Index', symbol: '15HZ50V' },
-    { label: 'Volatility 75(15s) Index', symbol: '15HZ75V' },
-    { label: 'Volatility 100(15s) Index', symbol: '15HZ100V' },
+    { label: 'Volatility 10 (15s) Index', symbol: '15HZ10V' },
+    { label: 'Volatility 25 (15s) Index', symbol: '15HZ25V' },
+    { label: 'Volatility 50 (15s) Index', symbol: '15HZ50V' },
+    { label: 'Volatility 75 (15s) Index', symbol: '15HZ75V' },
+    { label: 'Volatility 100 (15s) Index', symbol: '15HZ100V' },
     // 30s indices
-    { label: 'Volatility 10(30s) Index', symbol: '30HZ10V' },
-    { label: 'Volatility 25(30s) Index', symbol: '30HZ25V' },
-    { label: 'Volatility 50(30s) Index', symbol: '30HZ50V' },
-    { label: 'Volatility 75(30s) Index', symbol: '30HZ75V' },
-    { label: 'Volatility 100(30s) Index', symbol: '30HZ100V' },
+    { label: 'Volatility 10 (30s) Index', symbol: '30HZ10V' },
+    { label: 'Volatility 25 (30s) Index', symbol: '30HZ25V' },
+    { label: 'Volatility 50 (30s) Index', symbol: '30HZ50V' },
+    { label: 'Volatility 75 (30s) Index', symbol: '30HZ75V' },
+    { label: 'Volatility 100 (30s) Index', symbol: '30HZ100V' },
     // 90s indices
-    { label: 'Volatility 10(90s) Index', symbol: '90HZ10V' },
-    { label: 'Volatility 25(90s) Index', symbol: '90HZ25V' },
-    { label: 'Volatility 50(90s) Index', symbol: '90HZ50V' },
-    { label: 'Volatility 75(90s) Index', symbol: '90HZ75V' },
-    { label: 'Volatility 100(90s) Index', symbol: '90HZ100V' },
+    { label: 'Volatility 10 (90s) Index', symbol: '90HZ10V' },
+    { label: 'Volatility 25 (90s) Index', symbol: '90HZ25V' },
+    { label: 'Volatility 50 (90s) Index', symbol: '90HZ50V' },
+    { label: 'Volatility 75 (90s) Index', symbol: '90HZ75V' },
+    { label: 'Volatility 100 (90s) Index', symbol: '90HZ100V' },
     // Standard volatility indices
     { label: 'Volatility 10 Index', symbol: 'R_10' },
     { label: 'Volatility 25 Index', symbol: 'R_25' },
