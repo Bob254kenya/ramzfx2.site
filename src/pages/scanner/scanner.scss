@@ -7,7 +7,7 @@
     flex: 1 1 auto;
     align-items: flex-start;
     justify-content: center;
-    padding: 20px;
+    padding: 20px 20px 7% 20px; /* Added 7% bottom padding */
     position: relative;
     overflow: auto;
 
@@ -452,6 +452,7 @@
 @media (max-width: 760px) {
     .scanner-page {
         align-items: flex-start;
+        padding: 15px 15px 7% 15px; /* Adjusted for mobile with 7% bottom padding */
         
         .container {
             padding: 20px 18px;
@@ -525,6 +526,8 @@
 // Tablet adjustments
 @media (min-width: 761px) and (max-width: 1024px) {
     .scanner-page {
+        padding: 20px 20px 7% 20px; /* Tablet with 7% bottom padding */
+        
         .container {
             margin-top: 9%;
         }
@@ -547,6 +550,8 @@
 // Large screens
 @media (min-width: 1440px) {
     .scanner-page {
+        padding: 25px 25px 7% 25px; /* Large screens with 7% bottom padding */
+        
         .container {
             margin-top: 11%;
         }
