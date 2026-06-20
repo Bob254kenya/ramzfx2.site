@@ -218,6 +218,8 @@ interface MarketState {
     consecutiveLosses: number;
     lastResultType: 'win' | 'loss' | null;
     tradeCount: number;
+    baseStake: number; // Track base stake separately
+    martingaleMultiplier: number; // Track martingale multiplier separately
 }
 
 interface MarketDisplay extends MarketState {
@@ -247,6 +249,8 @@ const createMarketState = (prev?: Partial<MarketState>): MarketState => ({
     consecutiveLosses: 0,
     lastResultType: null,
     tradeCount: 0,
+    baseStake: 1,
+    martingaleMultiplier: 1,
     ...prev,
 });
 
@@ -326,35 +330,55 @@ const getNextMartingaleState = ({
     consecutive_losses: number;
     consecutive_loss_trigger: number;
 }) => {
+    // If profit is positive (win), reset everything
     if (!(profit < 0)) {
         return {
             consecutiveLosses: 0,
             lastResult: 'win' as const,
-            nextStake: base_stake,
+            nextStake: base_stake, // Always reset to base stake on win
+            martingaleMultiplier: 1,
         };
     }
 
+    // Loss occurred
     const nextConsecutiveLosses = consecutive_losses + 1;
     const normalizedMode = normalizeMartingaleMode(martingale_mode);
     const normalizedTrigger = clampConsecutiveLossThreshold(consecutive_loss_trigger);
 
+    // No martingale - keep base stake
     if (normalizedMode === 'no_martingale') {
         return {
             consecutiveLosses: nextConsecutiveLosses,
             lastResult: 'loss' as const,
             nextStake: base_stake,
+            martingaleMultiplier: 1,
         };
     }
 
-    const shouldApplyMartingale =
-        normalizedMode === 'after_one_loss' ||
-        (normalizedMode === 'after_two_losses' && nextConsecutiveLosses >= 2) ||
-        (normalizedMode === 'custom_consecutive_loss_trigger' && nextConsecutiveLosses >= normalizedTrigger);
+    // Determine if martingale should be applied based on consecutive losses
+    let shouldApplyMartingale = false;
+    let martingaleMultiplier = 1;
+
+    if (normalizedMode === 'after_one_loss') {
+        shouldApplyMartingale = true; // Apply after 1 loss
+        martingaleMultiplier = multiplier;
+    } else if (normalizedMode === 'after_two_losses') {
+        shouldApplyMartingale = nextConsecutiveLosses >= 2;
+        martingaleMultiplier = shouldApplyMartingale ? Math.pow(multiplier, nextConsecutiveLosses - 1) : 1;
+    } else if (normalizedMode === 'custom_consecutive_loss_trigger') {
+        shouldApplyMartingale = nextConsecutiveLosses >= normalizedTrigger;
+        martingaleMultiplier = shouldApplyMartingale ? Math.pow(multiplier, nextConsecutiveLosses - normalizedTrigger + 1) : 1;
+    }
+
+    const nextStake = shouldApplyMartingale 
+        ? parseFloat((base_stake * martingaleMultiplier).toFixed(2))
+        : base_stake;
 
     return {
         consecutiveLosses: nextConsecutiveLosses,
         lastResult: 'loss' as const,
-        nextStake: shouldApplyMartingale ? parseFloat((current_stake * multiplier).toFixed(2)) : base_stake,
+        nextStake: nextStake,
+        martingaleMultiplier: martingaleMultiplier,
     };
 };
 
@@ -456,9 +480,7 @@ const AutoTrades = observer(() => {
     const [market1PredictionBeforeLoss, setMarket1PredictionBeforeLoss] = useState(() =>
         loadSavedNum('market1_predictionBeforeLoss', '4', 0, 9)
     );
-    const [market1PredictionAfterLoss, setMarket1PredictionAfterLoss] = useState(() =>
-        loadSavedNum('market1_predictionAfterLoss', '5', 0, 9)
-    );
+    // REMOVED: market1PredictionAfterLoss - no longer needed
     const [market1Streak, setMarket1Streak] = useState(() => loadSavedNum('market1_streak', '4', 1, MAX_STREAK_LENGTH));
     const [market1AnalysisTicks, setMarket1AnalysisTicks] = useState(() => 
         loadSavedNum('market1_analysisTicks', '1', 1, MAX_ANALYSIS_TICKS)
@@ -480,9 +502,7 @@ const AutoTrades = observer(() => {
     const [market2PredictionBeforeLoss, setMarket2PredictionBeforeLoss] = useState(() =>
         loadSavedNum('market2_predictionBeforeLoss', '5', 0, 9)
     );
-    const [market2PredictionAfterLoss, setMarket2PredictionAfterLoss] = useState(() =>
-        loadSavedNum('market2_predictionAfterLoss', '4', 0, 9)
-    );
+    // REMOVED: market2PredictionAfterLoss - no longer needed
     const [market2Streak, setMarket2Streak] = useState(() => loadSavedNum('market2_streak', '4', 1, MAX_STREAK_LENGTH));
     const [market2AnalysisTicks, setMarket2AnalysisTicks] = useState(() => 
         loadSavedNum('market2_analysisTicks', '1', 1, MAX_ANALYSIS_TICKS)
@@ -557,7 +577,7 @@ const AutoTrades = observer(() => {
         tradeType: market1TradeType,
         barrier: market1Barrier,
         predictionBeforeLoss: market1PredictionBeforeLoss,
-        predictionAfterLoss: market1PredictionAfterLoss,
+        predictionAfterLoss: market1PredictionBeforeLoss, // Use predictionBeforeLoss for both (no separate after loss)
         streak: market1Streak,
         analysisTicks: market1AnalysisTicks,
         inverseMode: market1Inverse,
@@ -569,7 +589,7 @@ const AutoTrades = observer(() => {
         tradeType: market2TradeType,
         barrier: market2Barrier,
         predictionBeforeLoss: market2PredictionBeforeLoss,
-        predictionAfterLoss: market2PredictionAfterLoss,
+        predictionAfterLoss: market2PredictionBeforeLoss, // Use predictionBeforeLoss for both (no separate after loss)
         streak: market2Streak,
         analysisTicks: market2AnalysisTicks,
         inverseMode: market2Inverse,
@@ -590,7 +610,7 @@ const AutoTrades = observer(() => {
                         tradeType: market1TradeType,
                         barrier: market1Barrier,
                         predictionBeforeLoss: market1PredictionBeforeLoss,
-                        predictionAfterLoss: market1PredictionAfterLoss,
+                        predictionAfterLoss: market1PredictionBeforeLoss, // Use same value
                         streak: market1Streak,
                         analysisTicks: market1AnalysisTicks,
                         inverseMode: false,
@@ -604,7 +624,7 @@ const AutoTrades = observer(() => {
         market1Symbol, market2Symbol, market1Config, market2Config, 
         market1Enabled, market2Enabled, scanAllMarkets,
         market1TradeType, market1Barrier, market1PredictionBeforeLoss,
-        market1PredictionAfterLoss, market1Streak, market1AnalysisTicks
+        market1Streak, market1AnalysisTicks
     ]);
 
     // ── Save to LocalStorage ─────────────────────────────────────────────
@@ -614,7 +634,7 @@ const AutoTrades = observer(() => {
             localStorage.setItem('auto_trades_market1_tradeType', market1TradeType);
             localStorage.setItem('auto_trades_market1_barrier', market1Barrier);
             localStorage.setItem('auto_trades_market1_predictionBeforeLoss', market1PredictionBeforeLoss);
-            localStorage.setItem('auto_trades_market1_predictionAfterLoss', market1PredictionAfterLoss);
+            // REMOVED: predictionAfterLoss saving
             localStorage.setItem('auto_trades_market1_streak', market1Streak);
             localStorage.setItem('auto_trades_market1_analysisTicks', market1AnalysisTicks);
             localStorage.setItem('auto_trades_market1_inverse', String(market1Inverse));
@@ -623,7 +643,7 @@ const AutoTrades = observer(() => {
             localStorage.setItem('auto_trades_market2_tradeType', market2TradeType);
             localStorage.setItem('auto_trades_market2_barrier', market2Barrier);
             localStorage.setItem('auto_trades_market2_predictionBeforeLoss', market2PredictionBeforeLoss);
-            localStorage.setItem('auto_trades_market2_predictionAfterLoss', market2PredictionAfterLoss);
+            // REMOVED: predictionAfterLoss saving
             localStorage.setItem('auto_trades_market2_streak', market2Streak);
             localStorage.setItem('auto_trades_market2_analysisTicks', market2AnalysisTicks);
             localStorage.setItem('auto_trades_market2_inverse', String(market2Inverse));
@@ -642,9 +662,9 @@ const AutoTrades = observer(() => {
             // Ignore localStorage write failures.
         }
     }, [
-        market1TradeType, market1Barrier, market1PredictionBeforeLoss, market1PredictionAfterLoss,
+        market1TradeType, market1Barrier, market1PredictionBeforeLoss,
         market1Streak, market1AnalysisTicks, market1Inverse, market1Enabled,
-        market2TradeType, market2Barrier, market2PredictionBeforeLoss, market2PredictionAfterLoss,
+        market2TradeType, market2Barrier, market2PredictionBeforeLoss,
         market2Streak, market2AnalysisTicks, market2Inverse, market2Enabled,
         stake, martingale, takeProfit, stopLoss, martingaleMode, consecutiveLossCount,
         market1Symbol, market2Symbol, switchOnLoss, scanAllMarkets
@@ -659,10 +679,9 @@ const AutoTrades = observer(() => {
         const ct = config.tradeType;
         if (!usesLossPrediction(ct)) return getDigitNumber(config.barrier, 4);
         
-        const beforeLoss = getDigitNumber(config.predictionBeforeLoss, 4);
-        const afterLoss = getDigitNumber(config.predictionAfterLoss, 5);
-        
-        return consecutiveLosses > 0 || lastResult === 'loss' ? afterLoss : beforeLoss;
+        // Always use the same digit prediction (no separate after loss)
+        const barrier = getDigitNumber(config.predictionBeforeLoss, 4);
+        return barrier;
     }, []);
 
     const flushDisplays = useCallback(() => {
@@ -891,6 +910,7 @@ const AutoTrades = observer(() => {
             state.lastResultType = nextMartingaleState.lastResult;
             state.lastResult = nextMartingaleState.lastResult;
             state.currentStake = nextMartingaleState.nextStake;
+            state.martingaleMultiplier = nextMartingaleState.martingaleMultiplier || 1;
             state.lossCooldownLeft = profit < 0 ? MARKET_LOSS_COOLDOWN_TICKS : 0;
             state.tradeCount++;
             state.trading = false;
@@ -975,6 +995,7 @@ const AutoTrades = observer(() => {
                 state.tradeStartTime = Math.floor(Date.now() / 1000);
                 state.verificationId = `${symbol}_${state.tradeStartTime}_${Math.random().toString(36).substring(2, 11)}`;
 
+                // Use the current stake from state (which handles martingale)
                 const stakeNow = state.currentStake || Number(stake) || 1;
 
                 if (stakeNow <= 0 || isNaN(stakeNow)) {
@@ -1339,8 +1360,16 @@ const AutoTrades = observer(() => {
     const resetSession = useCallback(() => {
         const baseStake = Number(stake) || 1;
         globalTradingRef.current = false;
-        marketStatesRef.current[market1Symbol] = createMarketState({ currentStake: baseStake });
-        marketStatesRef.current[market2Symbol] = createMarketState({ currentStake: baseStake });
+        marketStatesRef.current[market1Symbol] = createMarketState({ 
+            currentStake: baseStake,
+            baseStake: baseStake,
+            martingaleMultiplier: 1
+        });
+        marketStatesRef.current[market2Symbol] = createMarketState({ 
+            currentStake: baseStake,
+            baseStake: baseStake,
+            martingaleMultiplier: 1
+        });
         totalPnlRef.current = 0;
         totalTradesRef.current = 0;
         setTotalPnl(0);
@@ -1591,7 +1620,7 @@ const AutoTrades = observer(() => {
                                 <h2 className='auto-trades-card__title'>Global Settings</h2>
                                 <div className='auto-trades-global-grid'>
                                     <div className='auto-trades-config__field'>
-                                        <label>Stake ({currency || 'USD'})</label>
+                                        <label>Base Stake ({currency || 'USD'})</label>
                                         <Input
                                             type='number'
                                             min='0.35'
@@ -1600,6 +1629,7 @@ const AutoTrades = observer(() => {
                                             onChange={e => setStake(e.target.value)}
                                             disabled={isRunning}
                                         />
+                                        <small className='auto-trades-config__hint'>Initial stake amount</small>
                                     </div>
                                     <div className='auto-trades-config__field'>
                                         <label>Martingale ×</label>
@@ -1611,6 +1641,7 @@ const AutoTrades = observer(() => {
                                             onChange={e => setMartingale(e.target.value)}
                                             disabled={isRunning}
                                         />
+                                        <small className='auto-trades-config__hint'>Multiplier after consecutive losses</small>
                                     </div>
                                     <div className='auto-trades-config__field'>
                                         <label>Take Profit ({currency || 'USD'})</label>
@@ -1820,34 +1851,20 @@ const AutoTrades = observer(() => {
                                                 </div>
                                             )}
                                             {usesLossPrediction(market1TradeType) && (
-                                                <>
-                                                    <div className='auto-trades-config__field'>
-                                                        <label>W→digit (after Win)</label>
-                                                        <select
-                                                            className='auto-trades-config__select'
-                                                            value={market1PredictionBeforeLoss}
-                                                            onChange={e => setMarket1PredictionBeforeLoss(e.target.value)}
-                                                            disabled={isRunning}
-                                                        >
-                                                            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
-                                                                <option key={d} value={String(d)}>{d}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                    <div className='auto-trades-config__field'>
-                                                        <label>L→digit (after Loss)</label>
-                                                        <select
-                                                            className='auto-trades-config__select'
-                                                            value={market1PredictionAfterLoss}
-                                                            onChange={e => setMarket1PredictionAfterLoss(e.target.value)}
-                                                            disabled={isRunning}
-                                                        >
-                                                            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
-                                                                <option key={d} value={String(d)}>{d}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                </>
+                                                <div className='auto-trades-config__field'>
+                                                    <label>Digit to predict</label>
+                                                    <select
+                                                        className='auto-trades-config__select'
+                                                        value={market1PredictionBeforeLoss}
+                                                        onChange={e => setMarket1PredictionBeforeLoss(e.target.value)}
+                                                        disabled={isRunning}
+                                                    >
+                                                        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
+                                                            <option key={d} value={String(d)}>{d}</option>
+                                                        ))}
+                                                    </select>
+                                                    <small className='auto-trades-config__hint'>Always uses this digit for predictions</small>
+                                                </div>
                                             )}
                                             <div className='auto-trades-config__field'>
                                                 <label>Streak length</label>
@@ -1916,6 +1933,9 @@ const AutoTrades = observer(() => {
                                                         </span>
                                                         <span className='auto-trades-market-display__stake'>
                                                             Stake: {marketDisplays.find(m => m.symbol === market1Symbol)?.currentStake || baseStakeNum}
+                                                            {marketDisplays.find(m => m.symbol === market1Symbol)?.martingaleMultiplier && marketDisplays.find(m => m.symbol === market1Symbol)?.martingaleMultiplier !== 1 && 
+                                                                ` (×${marketDisplays.find(m => m.symbol === market1Symbol)?.martingaleMultiplier?.toFixed(2)})`
+                                                            }
                                                         </span>
                                                         <span className={classNames(
                                                             'auto-trades-market-display__result',
@@ -2050,34 +2070,20 @@ const AutoTrades = observer(() => {
                                                 </div>
                                             )}
                                             {usesLossPrediction(market2TradeType) && (
-                                                <>
-                                                    <div className='auto-trades-config__field'>
-                                                        <label>W→digit (after Win)</label>
-                                                        <select
-                                                            className='auto-trades-config__select'
-                                                            value={market2PredictionBeforeLoss}
-                                                            onChange={e => setMarket2PredictionBeforeLoss(e.target.value)}
-                                                            disabled={isRunning}
-                                                        >
-                                                            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
-                                                                <option key={d} value={String(d)}>{d}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                    <div className='auto-trades-config__field'>
-                                                        <label>L→digit (after Loss)</label>
-                                                        <select
-                                                            className='auto-trades-config__select'
-                                                            value={market2PredictionAfterLoss}
-                                                            onChange={e => setMarket2PredictionAfterLoss(e.target.value)}
-                                                            disabled={isRunning}
-                                                        >
-                                                            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
-                                                                <option key={d} value={String(d)}>{d}</option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                </>
+                                                <div className='auto-trades-config__field'>
+                                                    <label>Digit to predict</label>
+                                                    <select
+                                                        className='auto-trades-config__select'
+                                                        value={market2PredictionBeforeLoss}
+                                                        onChange={e => setMarket2PredictionBeforeLoss(e.target.value)}
+                                                        disabled={isRunning}
+                                                    >
+                                                        {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
+                                                            <option key={d} value={String(d)}>{d}</option>
+                                                        ))}
+                                                    </select>
+                                                    <small className='auto-trades-config__hint'>Always uses this digit for predictions</small>
+                                                </div>
                                             )}
                                             <div className='auto-trades-config__field'>
                                                 <label>Streak length</label>
@@ -2146,6 +2152,9 @@ const AutoTrades = observer(() => {
                                                         </span>
                                                         <span className='auto-trades-market-display__stake'>
                                                             Stake: {marketDisplays.find(m => m.symbol === market2Symbol)?.currentStake || baseStakeNum}
+                                                            {marketDisplays.find(m => m.symbol === market2Symbol)?.martingaleMultiplier && marketDisplays.find(m => m.symbol === market2Symbol)?.martingaleMultiplier !== 1 && 
+                                                                ` (×${marketDisplays.find(m => m.symbol === market2Symbol)?.martingaleMultiplier?.toFixed(2)})`
+                                                            }
                                                         </span>
                                                         <span className={classNames(
                                                             'auto-trades-market-display__result',
