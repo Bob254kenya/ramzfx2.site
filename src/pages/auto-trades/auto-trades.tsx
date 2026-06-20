@@ -542,7 +542,7 @@ const AutoTrades = observer(() => {
     const currentTradingMarketRef = useRef<string | null>(null);
     const forceUpdateCounterRef = useRef(0);
     
-    // NEW: Track global martingale state across market switches
+    // Global martingale state across market switches
     const globalMartingaleStateRef = useRef<{
         consecutiveLosses: number;
         currentStake: number;
@@ -978,15 +978,13 @@ const AutoTrades = observer(() => {
             const sl = Number(stopLoss) || 100;
 
             // Use global martingale state if we're in a martingale sequence
-            // or use the current market's state
             let consecutiveLosses = state.consecutiveLosses || 0;
             
-            // If we're in a martingale sequence (switching markets), use the global state
             if (globalMartingaleStateRef.current.isInMartingale) {
                 consecutiveLosses = globalMartingaleStateRef.current.consecutiveLosses;
             }
 
-            // Calculate next martingale state using the correct consecutive losses
+            // Calculate next martingale state
             const nextMartingaleState = getNextMartingaleState({
                 profit,
                 base_stake: baseStake,
@@ -1009,7 +1007,6 @@ const AutoTrades = observer(() => {
                     isInMartingale: true,
                 };
                 
-                // Also update the market state
                 state.consecutiveLosses = nextMartingaleState.consecutiveLosses;
                 state.currentStake = nextMartingaleState.nextStake;
                 state.martingaleMultiplier = nextMartingaleState.martingaleMultiplier || 1;
@@ -1022,12 +1019,10 @@ const AutoTrades = observer(() => {
                     isInMartingale: false,
                 };
                 
-                // Reset market state
                 state.consecutiveLosses = 0;
                 state.currentStake = baseStake;
                 state.martingaleMultiplier = 1;
             } else {
-                // Handle other cases (martingale disabled, etc.)
                 state.consecutiveLosses = nextMartingaleState.consecutiveLosses;
                 state.currentStake = nextMartingaleState.nextStake;
                 state.martingaleMultiplier = nextMartingaleState.martingaleMultiplier || 1;
@@ -1062,38 +1057,38 @@ const AutoTrades = observer(() => {
 
             lastResultRef.current[symbol] = nextMartingaleState.lastResult;
 
-            // Handle market switching on loss
+            // Handle market switching on loss - IMMEDIATE SWITCH
             if (switchOnLoss && market1Enabled && market2Enabled && !scanAllMarkets) {
                 if (profit < 0) {
+                    // IMMEDIATELY switch to the other market after loss
                     const nextSymbol = getNextMarketForSwitch(symbol);
                     if (nextSymbol && nextSymbol !== symbol) {
                         const nextConfig = marketConfigsRef.current[nextSymbol];
                         if (nextConfig && nextConfig.enabled) {
-                            // IMPORTANT: When switching markets, carry over the martingale state
-                            // The next market should use the global martingale state
+                            // Carry over martingale state to the next market
                             const nextState = marketStatesRef.current[nextSymbol];
                             if (nextState) {
-                                // Apply the global martingale state to the next market
                                 nextState.consecutiveLosses = globalMartingaleStateRef.current.consecutiveLosses;
                                 nextState.currentStake = globalMartingaleStateRef.current.currentStake;
                                 nextState.martingaleMultiplier = globalMartingaleStateRef.current.martingaleMultiplier;
                             }
                             
                             marketSwitchActiveRef.current = true;
+                            // Switch immediately
                             setActiveTradingMarket(nextSymbol);
                             activeTradingMarketRef.current = nextSymbol;
                             isPrimaryMarketActiveRef.current = false;
-                            console.log(`[AutoTrades] Switching from ${symbol} to ${nextSymbol} after loss with martingale state:`, 
+                            console.log(`[AutoTrades] IMMEDIATELY switching from ${symbol} to ${nextSymbol} after loss with martingale state:`, 
                                 globalMartingaleStateRef.current);
                         }
                     }
                 } else if (profit >= 0) {
-                    // On win, switch back to primary and reset global martingale state
+                    // On win, switch back to primary market
                     const primarySymbol = getPrimaryMarket();
                     if (primarySymbol && primarySymbol !== symbol) {
                         const primaryConfig = marketConfigsRef.current[primarySymbol];
                         if (primaryConfig && primaryConfig.enabled) {
-                            // Reset the primary market's martingale state
+                            // Reset primary market's martingale state
                             const primaryState = marketStatesRef.current[primarySymbol];
                             if (primaryState) {
                                 primaryState.consecutiveLosses = 0;
@@ -1101,11 +1096,12 @@ const AutoTrades = observer(() => {
                                 primaryState.martingaleMultiplier = 1;
                             }
                             
+                            // Switch back to primary immediately
                             setActiveTradingMarket(primarySymbol);
                             activeTradingMarketRef.current = primarySymbol;
                             isPrimaryMarketActiveRef.current = true;
                             marketSwitchActiveRef.current = false;
-                            console.log(`[AutoTrades] Switching back to primary market ${primarySymbol} after win`);
+                            console.log(`[AutoTrades] IMMEDIATELY switching back to primary market ${primarySymbol} after win`);
                         }
                     }
                 }
@@ -1152,13 +1148,10 @@ const AutoTrades = observer(() => {
                 return;
             }
 
-            // Use the global martingale state if we're in a martingale sequence
             let stakeToUse = state.currentStake || Number(stake) || 1;
             
-            // If global martingale is active, use that stake instead
             if (globalMartingaleStateRef.current.isInMartingale && martingaleEnabled) {
                 stakeToUse = globalMartingaleStateRef.current.currentStake;
-                // Also update the market state to match
                 state.currentStake = stakeToUse;
                 state.consecutiveLosses = globalMartingaleStateRef.current.consecutiveLosses;
                 state.martingaleMultiplier = globalMartingaleStateRef.current.martingaleMultiplier;
@@ -2162,6 +2155,44 @@ const AutoTrades = observer(() => {
                             )}
                         </div>
 
+                        {/* Stats - MOVED HERE (after Global Settings) */}
+                        <div className="auto-trades-stats">
+                            <div className="stat">
+                                <span className="label">Total P&L</span>
+                                <span className={classNames('value', {
+                                    'value--positive': pnlPositive,
+                                    'value--negative': pnlNegative,
+                                })}>
+                                    {pnlPositive ? '+' : ''}{totalPnl.toFixed(2)} {currency}
+                                </span>
+                            </div>
+                            <div className="stat">
+                                <span className="label">Total Trades</span>
+                                <span className="value">{totalTrades}</span>
+                            </div>
+                            <div className="stat">
+                                <span className="label">Martingale</span>
+                                <span className={classNames('value', {
+                                    'value--active': martingaleActive && martingaleEnabled,
+                                })}>
+                                    {martingaleEnabled && martingaleActive ? 'Active' : martingaleEnabled ? 'Waiting' : 'Off'}
+                                    {martingaleActive && martingaleEnabled && globalMartingaleStateRef.current.isInMartingale && (
+                                        <span className="martingale-detail">
+                                            (×{globalMartingaleStateRef.current.martingaleMultiplier.toFixed(1)})
+                                        </span>
+                                    )}
+                                </span>
+                            </div>
+                            <div className="stat">
+                                <span className="label">Status</span>
+                                <span className={classNames('value', {
+                                    'value--running': isRunning,
+                                })}>
+                                    {isRunning ? '▶ Running' : '⏸ Stopped'}
+                                </span>
+                            </div>
+                        </div>
+
                         {/* Markets Grid */}
                         <div className="auto-trades-markets">
                             {/* Market 1 */}
@@ -2705,45 +2736,7 @@ const AutoTrades = observer(() => {
                             </div>
                         </div>
 
-                        {/* Stats */}
-                        <div className="auto-trades-stats">
-                            <div className="stat">
-                                <span className="label">Total P&L</span>
-                                <span className={classNames('value', {
-                                    'value--positive': pnlPositive,
-                                    'value--negative': pnlNegative,
-                                })}>
-                                    {pnlPositive ? '+' : ''}{totalPnl.toFixed(2)} {currency}
-                                </span>
-                            </div>
-                            <div className="stat">
-                                <span className="label">Total Trades</span>
-                                <span className="value">{totalTrades}</span>
-                            </div>
-                            <div className="stat">
-                                <span className="label">Martingale</span>
-                                <span className={classNames('value', {
-                                    'value--active': martingaleActive && martingaleEnabled,
-                                })}>
-                                    {martingaleEnabled && martingaleActive ? 'Active' : martingaleEnabled ? 'Waiting' : 'Off'}
-                                    {martingaleActive && martingaleEnabled && globalMartingaleStateRef.current.isInMartingale && (
-                                        <span className="martingale-detail">
-                                            (×{globalMartingaleStateRef.current.martingaleMultiplier.toFixed(1)})
-                                        </span>
-                                    )}
-                                </span>
-                            </div>
-                            <div className="stat">
-                                <span className="label">Status</span>
-                                <span className={classNames('value', {
-                                    'value--running': isRunning,
-                                })}>
-                                    {isRunning ? '▶ Running' : '⏸ Stopped'}
-                                </span>
-                            </div>
-                        </div>
-
-                        {/* Controls */}
+                        {/* Controls - moved to bottom */}
                         <div className="auto-trades-controls">
                             {!isRunning ? (
                                 <button
