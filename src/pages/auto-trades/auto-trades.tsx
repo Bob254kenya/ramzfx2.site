@@ -1,5 +1,5 @@
 // auto-trades.tsx
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
 import Input from '@/components/shared_ui/input';
@@ -20,6 +20,7 @@ import './auto-trades.scss';
 
 type AutoMarket = { symbol: string; label: string; pip: number };
 type Direction = 1 | -1 | 0;
+type ComparisonOperator = '>' | '<' | '>=' | '<=' | '==';
 
 const FIVE_MINUTE_GRANULARITY = 300;
 const DATA_SILENCE_RESTART_MS = 15000;
@@ -105,10 +106,10 @@ const AUTO_MARKET_LOOKUP = new Map(AUTO_MARKETS.map(market => [market.symbol, ma
 
 // ── Utility Functions ──────────────────────────────────────────────────────
 
-const usesLossPrediction = (trade_type: TradeType) => 
+const usesLossPrediction = (trade_type: TradeType) =>
     trade_type === 'DIGITOVER' || trade_type === 'DIGITUNDER';
 
-const isRunTradeType = (trade_type: TradeType) => 
+const isRunTradeType = (trade_type: TradeType) =>
     trade_type === 'RUNHIGH' || trade_type === 'RUNLOW';
 
 const isCandleConfirmedTradeType = (trade_type: TradeType) =>
@@ -220,7 +221,7 @@ const createMarketState = (prev?: Partial<MarketState>): MarketState => ({
 // ── Signal Detection ──────────────────────────────────────────────────────
 
 const checkComparison = (digit: number, operator: ComparisonOperator, value: number): boolean => {
-    switch(operator) {
+    switch (operator) {
         case '>': return digit > value;
         case '<': return digit < value;
         case '>=': return digit >= value;
@@ -425,7 +426,7 @@ const AutoTrades = observer(() => {
     // ── Global Settings State ─────────────────────────────────────────────
 
     const [stake, setStake] = useState(() => loadSavedNum('stake', '1', 0.35, 100000));
-    
+
     // Simplified Martingale: enabled/disabled + multiplier
     const [martingaleEnabled, setMartingaleEnabled] = useState(() => loadSavedBoolean('martingaleEnabled', true));
     const [martingaleMultiplier, setMartingaleMultiplier] = useState(() => {
@@ -433,7 +434,7 @@ const AutoTrades = observer(() => {
         const num = parseFloat(saved);
         return !isNaN(num) && num >= 1 && num <= 10 ? num : 2;
     });
-    
+
     const [takeProfit, setTakeProfit] = useState(() => loadSavedNum('takeProfit', '100', 1, 1000000));
     const [stopLoss, setStopLoss] = useState(() => loadSavedNum('stopLoss', '100', 1, 1000000));
     const [switchOnLoss, setSwitchOnLoss] = useState(() => loadSavedBoolean('switchOnLoss', false));
@@ -457,10 +458,10 @@ const AutoTrades = observer(() => {
         const saved = loadSaved('market1_comparisonOperator', '<=');
         return ['>', '<', '>=', '<=', '=='].includes(saved) ? saved as ComparisonOperator : '<=';
     });
-    const [market1InputSequence, setMarket1InputSequence] = useState(() => 
+    const [market1InputSequence, setMarket1InputSequence] = useState(() =>
         loadSaved('market1_inputSequence', '')
     );
-    const [market1AnalysisTicks, setMarket1AnalysisTicks] = useState(() => 
+    const [market1AnalysisTicks, setMarket1AnalysisTicks] = useState(() =>
         loadSavedNum('market1_analysisTicks', '4', 1, MAX_ANALYSIS_TICKS)
     );
     const [market1Inverse, setMarket1Inverse] = useState(() => loadSavedBoolean('market1_inverse', false));
@@ -484,10 +485,10 @@ const AutoTrades = observer(() => {
         const saved = loadSaved('market2_comparisonOperator', '<=');
         return ['>', '<', '>=', '<=', '=='].includes(saved) ? saved as ComparisonOperator : '<=';
     });
-    const [market2InputSequence, setMarket2InputSequence] = useState(() => 
+    const [market2InputSequence, setMarket2InputSequence] = useState(() =>
         loadSaved('market2_inputSequence', '')
     );
-    const [market2AnalysisTicks, setMarket2AnalysisTicks] = useState(() => 
+    const [market2AnalysisTicks, setMarket2AnalysisTicks] = useState(() =>
         loadSavedNum('market2_analysisTicks', '4', 1, MAX_ANALYSIS_TICKS)
     );
     const [market2Inverse, setMarket2Inverse] = useState(() => loadSavedBoolean('market2_inverse', false));
@@ -530,9 +531,9 @@ const AutoTrades = observer(() => {
     const restartTimerRef = useRef<number | null>(null);
     const contractStreamAbortControllersRef = useRef<Set<AbortController>>(new Set());
     const isRecoveringDataRef = useRef(false);
-    const handleTickRef = useRef<(symbol: string, tick: any) => void>(() => {});
-    const handleCandleRef = useRef<(symbol: string, candle: any) => void>(() => {});
-    const stopTradingRef = useRef<() => void>(() => {});
+    const handleTickRef = useRef<(symbol: string, tick: any) => void>(() => { });
+    const handleCandleRef = useRef<(symbol: string, candle: any) => void>(() => { });
+    const stopTradingRef = useRef<() => void>(() => { });
     const selectedMarketsRef = useRef<string[]>([]);
     const lastResultRef = useRef<Record<string, 'win' | 'loss' | null>>({});
     const marketSwitchActiveRef = useRef<boolean>(false);
@@ -541,7 +542,7 @@ const AutoTrades = observer(() => {
     const pendingTradePromisesRef = useRef<Record<string, Promise<number> | null>>({});
     const currentTradingMarketRef = useRef<string | null>(null);
     const forceUpdateCounterRef = useRef(0);
-    
+
     // Global martingale state across market switches
     const globalMartingaleStateRef = useRef<{
         consecutiveLosses: number;
@@ -569,7 +570,7 @@ const AutoTrades = observer(() => {
         const markets: string[] = [];
         if (market1Enabled) markets.push(market1Symbol);
         if (market2Enabled) markets.push(market2Symbol);
-        
+
         if (scanAllMarkets) {
             selectedMarketsRef.current = AUTO_MARKET_SYMBOLS;
         } else {
@@ -597,7 +598,7 @@ const AutoTrades = observer(() => {
     const getMarketConfig = useCallback((symbol: string): MarketConfig | null => {
         if (scanAllMarkets) {
             if (!market1Enabled) return null;
-            
+
             return {
                 marketSymbol: symbol,
                 tradeType: market1TradeType,
@@ -648,7 +649,7 @@ const AutoTrades = observer(() => {
 
     useEffect(() => {
         const configs: Record<string, MarketConfig> = {};
-        
+
         if (scanAllMarkets) {
             if (market1Enabled) {
                 AUTO_MARKET_SYMBOLS.forEach(symbol => {
@@ -668,7 +669,7 @@ const AutoTrades = observer(() => {
                 if (config) configs[market2Symbol] = config;
             }
         }
-        
+
         marketConfigsRef.current = configs;
     }, [
         getMarketConfig,
@@ -689,7 +690,7 @@ const AutoTrades = observer(() => {
             localStorage.setItem('auto_trades_market1_analysisTicks', market1AnalysisTicks);
             localStorage.setItem('auto_trades_market1_inverse', String(market1Inverse));
             localStorage.setItem('auto_trades_market1_enabled', String(market1Enabled));
-            
+
             localStorage.setItem('auto_trades_market2_tradeType', market2TradeType);
             localStorage.setItem('auto_trades_market2_barrier', market2Barrier);
             localStorage.setItem('auto_trades_market2_predictionDigit', market2PredictionDigit);
@@ -698,7 +699,7 @@ const AutoTrades = observer(() => {
             localStorage.setItem('auto_trades_market2_analysisTicks', market2AnalysisTicks);
             localStorage.setItem('auto_trades_market2_inverse', String(market2Inverse));
             localStorage.setItem('auto_trades_market2_enabled', String(market2Enabled));
-            
+
             localStorage.setItem('auto_trades_stake', stake);
             localStorage.setItem('auto_trades_martingaleEnabled', String(martingaleEnabled));
             localStorage.setItem('auto_trades_martingaleMultiplier', String(martingaleMultiplier));
@@ -950,7 +951,7 @@ const AutoTrades = observer(() => {
         }
 
         const activeSymbol = activeTradingMarketRef.current;
-        
+
         if (!activeSymbol) {
             const primary = getPrimaryMarket();
             if (primary === symbol) {
@@ -979,7 +980,7 @@ const AutoTrades = observer(() => {
 
             // Use global martingale state if we're in a martingale sequence
             let consecutiveLosses = state.consecutiveLosses || 0;
-            
+
             if (globalMartingaleStateRef.current.isInMartingale) {
                 consecutiveLosses = globalMartingaleStateRef.current.consecutiveLosses;
             }
@@ -1006,7 +1007,7 @@ const AutoTrades = observer(() => {
                     martingaleMultiplier: nextMartingaleState.martingaleMultiplier || 1,
                     isInMartingale: true,
                 };
-                
+
                 state.consecutiveLosses = nextMartingaleState.consecutiveLosses;
                 state.currentStake = nextMartingaleState.nextStake;
                 state.martingaleMultiplier = nextMartingaleState.martingaleMultiplier || 1;
@@ -1018,7 +1019,7 @@ const AutoTrades = observer(() => {
                     martingaleMultiplier: 1,
                     isInMartingale: false,
                 };
-                
+
                 state.consecutiveLosses = 0;
                 state.currentStake = baseStake;
                 state.martingaleMultiplier = 1;
@@ -1026,7 +1027,7 @@ const AutoTrades = observer(() => {
                 state.consecutiveLosses = nextMartingaleState.consecutiveLosses;
                 state.currentStake = nextMartingaleState.nextStake;
                 state.martingaleMultiplier = nextMartingaleState.martingaleMultiplier || 1;
-                
+
                 if (profit < 0) {
                     globalMartingaleStateRef.current.isInMartingale = true;
                 }
@@ -1072,13 +1073,13 @@ const AutoTrades = observer(() => {
                                 nextState.currentStake = globalMartingaleStateRef.current.currentStake;
                                 nextState.martingaleMultiplier = globalMartingaleStateRef.current.martingaleMultiplier;
                             }
-                            
+
                             marketSwitchActiveRef.current = true;
                             // Switch immediately
                             setActiveTradingMarket(nextSymbol);
                             activeTradingMarketRef.current = nextSymbol;
                             isPrimaryMarketActiveRef.current = false;
-                            console.log(`[AutoTrades] IMMEDIATELY switching from ${symbol} to ${nextSymbol} after loss with martingale state:`, 
+                            console.log(`[AutoTrades] IMMEDIATELY switching from ${symbol} to ${nextSymbol} after loss with martingale state:`,
                                 globalMartingaleStateRef.current);
                         }
                     }
@@ -1095,7 +1096,7 @@ const AutoTrades = observer(() => {
                                 primaryState.currentStake = baseStake;
                                 primaryState.martingaleMultiplier = 1;
                             }
-                            
+
                             // Switch back to primary immediately
                             setActiveTradingMarket(primarySymbol);
                             activeTradingMarketRef.current = primarySymbol;
@@ -1149,7 +1150,7 @@ const AutoTrades = observer(() => {
             }
 
             let stakeToUse = state.currentStake || Number(stake) || 1;
-            
+
             if (globalMartingaleStateRef.current.isInMartingale && martingaleEnabled) {
                 stakeToUse = globalMartingaleStateRef.current.currentStake;
                 state.currentStake = stakeToUse;
@@ -1237,7 +1238,7 @@ const AutoTrades = observer(() => {
             if (!config || !config.enabled) {
                 return;
             }
-            
+
             const state = marketStatesRef.current[symbol];
             if (!state) return;
 
@@ -1249,7 +1250,7 @@ const AutoTrades = observer(() => {
             state.lastQuote = quote;
             state.lastPrice = quote;
             state.priceHistory = [...state.priceHistory.slice(-50), quote];
-            
+
             state.isRecovering = false;
             lastTickAtRef.current = Date.now();
             if (isRecoveringDataRef.current) {
@@ -1282,7 +1283,7 @@ const AutoTrades = observer(() => {
                 state.prevQuote = quote;
 
                 let match = false;
-                
+
                 if (ct === 'DIGITOVER' || ct === 'DIGITUNDER') {
                     const operator = config.comparisonOperator;
                     const tickCount = Math.max(1, getDigitNumber(config.analysisTicks, 1));
@@ -1311,7 +1312,7 @@ const AutoTrades = observer(() => {
                 }
             }
 
-            const candleMatch = isCandleConfirmedTradeType(ct) 
+            const candleMatch = isCandleConfirmedTradeType(ct)
                 ? (inv ? isCandleMatch(ct, state.candleDirection) : isCandleMatch(ct, state.candleDirection))
                 : true;
 
@@ -1330,7 +1331,7 @@ const AutoTrades = observer(() => {
             } else {
                 const recent = state.lastDigits.slice(-targetLen);
                 digitsStr = `[${recent.join(', ')}]`;
-                
+
                 if (ct === 'DIGITOVER' || ct === 'DIGITUNDER') {
                     condStr = `${invLabel}Last ${targetLen} ticks ${getComparisonOperatorLabel(config.comparisonOperator)} ${bar}`;
                 } else if ((ct === 'DIGITEVEN' || ct === 'DIGITODD') && config.inputSequence) {
@@ -1350,7 +1351,7 @@ const AutoTrades = observer(() => {
             });
 
             refreshDisplays();
-            
+
             tryExecuteSignal(symbol, state, signalReady);
         },
         [clearDataRecoveryLoading, getActiveDigitBarrier, refreshDisplays, tryExecuteSignal]
@@ -1394,7 +1395,7 @@ const AutoTrades = observer(() => {
     const startSubscriptions = useCallback(async () => {
         const subscriptionVersion = subscriptionVersionRef.current;
         let marketsToMonitor: string[] = [];
-        
+
         if (scanAllMarkets) {
             if (market1Enabled) {
                 marketsToMonitor = AUTO_MARKET_SYMBOLS;
@@ -1403,12 +1404,12 @@ const AutoTrades = observer(() => {
             if (market1Enabled) marketsToMonitor.push(market1Symbol);
             if (market2Enabled) marketsToMonitor.push(market2Symbol);
         }
-        
+
         const monitoredSymbolSet = new Set(marketsToMonitor);
 
         Object.entries(subscriptionsRef.current).forEach(([symbol, sub]) => {
             if (!monitoredSymbolSet.has(symbol)) {
-                try { sub?.unsubscribe?.(); } catch {}
+                try { sub?.unsubscribe?.(); } catch { }
                 delete subscriptionsRef.current[symbol];
                 updateSubscriptionDiagnostics();
             }
@@ -1416,7 +1417,7 @@ const AutoTrades = observer(() => {
 
         Object.entries(candleSubscriptionsRef.current).forEach(([symbol, sub]) => {
             if (!monitoredSymbolSet.has(symbol)) {
-                try { sub?.unsubscribe?.(); } catch {}
+                try { sub?.unsubscribe?.(); } catch { }
                 delete candleSubscriptionsRef.current[symbol];
                 updateSubscriptionDiagnostics();
             }
@@ -1574,7 +1575,7 @@ const AutoTrades = observer(() => {
         const baseStake = Number(stake) || 1;
         globalTradingRef.current = false;
         currentTradingMarketRef.current = null;
-        
+
         // Reset global martingale state
         globalMartingaleStateRef.current = {
             consecutiveLosses: 0,
@@ -1582,9 +1583,9 @@ const AutoTrades = observer(() => {
             martingaleMultiplier: 1,
             isInMartingale: false,
         };
-        
+
         AUTO_MARKET_SYMBOLS.forEach(symbol => {
-            marketStatesRef.current[symbol] = createMarketState({ 
+            marketStatesRef.current[symbol] = createMarketState({
                 currentStake: baseStake,
                 baseStake: baseStake,
                 martingaleMultiplier: 1,
@@ -1596,15 +1597,15 @@ const AutoTrades = observer(() => {
                 priceHistory: [],
             });
         });
-        
+
         pendingTradePromisesRef.current = {};
-        
+
         totalPnlRef.current = 0;
         totalTradesRef.current = 0;
         setTotalPnl(0);
         setTotalTrades(0);
         setError(null);
-        
+
         if (switchOnLoss && market1Enabled && market2Enabled && !scanAllMarkets) {
             const primary = market1Enabled ? market1Symbol : market2Symbol;
             setActiveTradingMarket(primary);
@@ -1648,11 +1649,11 @@ const AutoTrades = observer(() => {
         globalTradingRef.current = false;
         currentTradingMarketRef.current = null;
         clearDeferredWork();
-        
+
         Object.keys(pendingTradePromisesRef.current).forEach(key => {
             pendingTradePromisesRef.current[key] = null;
         });
-        
+
         Object.values(marketStatesRef.current).forEach(state => {
             state.trading = false;
             state.isExecuting = false;
@@ -1843,7 +1844,7 @@ const AutoTrades = observer(() => {
 
     const renderAnalysisContainer = (symbol: string, config: MarketConfig | null) => {
         if (!config) return null;
-        
+
         const analysis = getMarketAnalysis(symbol, config);
         if (!analysis) return null;
 
@@ -1869,7 +1870,7 @@ const AutoTrades = observer(() => {
                         <span>💰 Price:</span>
                         <span className="price-value">{formatPrice(analysis.currentPrice)}</span>
                     </div>
-                    
+
                     {analysis.priceHistory && analysis.priceHistory.length > 0 && (
                         <div className="analysis-history">
                             <span className="history-label">📈 Price History</span>
@@ -1880,8 +1881,8 @@ const AutoTrades = observer(() => {
                                     const range = maxPrice - minPrice || 1;
                                     const height = ((price - minPrice) / range) * 28 + 4;
                                     return (
-                                        <div 
-                                            key={idx} 
+                                        <div
+                                            key={idx}
                                             className="bar"
                                             style={{ height: `${height}px` }}
                                             title={formatPrice(price)}
@@ -1905,8 +1906,8 @@ const AutoTrades = observer(() => {
                     </div>
                     <div className="analysis-ticks">
                         {analysis.recentDigits.map((digit, idx) => (
-                            <span 
-                                key={idx} 
+                            <span
+                                key={idx}
                                 className={classNames('tick', {
                                     'tick--match': analysis.tickResults[idx],
                                     'tick--nomatch': !analysis.tickResults[idx] && analysis.recentDigits.length >= analysis.targetLen,
@@ -1952,7 +1953,7 @@ const AutoTrades = observer(() => {
 
     const market1Config = marketConfigsRef.current[market1Symbol] || null;
     const market2Config = marketConfigsRef.current[market2Symbol] || null;
-    
+
     const hasEnabledMarkets = market1Enabled || market2Enabled || scanAllMarkets;
 
     return (
@@ -1978,12 +1979,12 @@ const AutoTrades = observer(() => {
                                 {inCooldown
                                     ? 'Cooldown'
                                     : isLoading
-                                      ? 'Loading data'
-                                    : isRunning
-                                      ? 'Trading'
-                                      : isConnected
-                                        ? 'Live data'
-                                        : 'Connecting…'}
+                                        ? 'Loading data'
+                                        : isRunning
+                                            ? 'Trading'
+                                            : isConnected
+                                                ? 'Live data'
+                                                : 'Connecting…'}
                             </span>
                         </div>
                     </div>
@@ -2013,6 +2014,23 @@ const AutoTrades = observer(() => {
                     )}
 
                     <div className="auto-trades-page__body">
+                        {/* Run / Stop Button - Now before Global Settings */}
+                        <div className="auto-trades-controls">
+                            {!isRunning ? (
+                                <button
+                                    className="btn btn--start"
+                                    onClick={handleRun}
+                                    disabled={!client.is_logged_in || !hasEnabledMarkets}
+                                >
+                                    ▶ Start Trading
+                                </button>
+                            ) : (
+                                <button className="btn btn--stop" onClick={handleStop}>
+                                    ■ Stop Trading
+                                </button>
+                            )}
+                        </div>
+
                         {/* Global Settings */}
                         <div className="auto-trades-global">
                             <div className="auto-trades-global__header">
@@ -2036,7 +2054,7 @@ const AutoTrades = observer(() => {
                                         className="input"
                                     />
                                 </div>
-                                
+
                                 <div className="auto-trades-global__field">
                                     <label>Martingale</label>
                                     <button
@@ -2145,7 +2163,7 @@ const AutoTrades = observer(() => {
                                             Martingale: stake multiplies by ×{martingaleMultiplier.toFixed(1)} on each consecutive loss
                                             {globalMartingaleStateRef.current.isInMartingale && (
                                                 <span className="martingale-active">
-                                                    🔥 Active: ×{globalMartingaleStateRef.current.martingaleMultiplier.toFixed(1)} 
+                                                    🔥 Active: ×{globalMartingaleStateRef.current.martingaleMultiplier.toFixed(1)}
                                                     (Loss #{globalMartingaleStateRef.current.consecutiveLosses})
                                                 </span>
                                             )}
@@ -2271,7 +2289,7 @@ const AutoTrades = observer(() => {
                                                     </optgroup>
                                                 </select>
                                             </div>
-                                            
+
                                             {(market1TradeType === 'DIGITOVER' || market1TradeType === 'DIGITUNDER') && (
                                                 <>
                                                     <div className="auto-trades-market__field">
@@ -2410,8 +2428,8 @@ const AutoTrades = observer(() => {
                                         {marketDisplays.find(m => m.symbol === market1Symbol) && (
                                             <div className="auto-trades-market__live">
                                                 <div className="quote">
-                                                    {marketDisplays.find(m => m.symbol === market1Symbol)?.lastQuote !== null 
-                                                        ? marketDisplays.find(m => m.symbol === market1Symbol)?.lastQuote?.toFixed(marketDisplays.find(m => m.symbol === market1Symbol)?.pip || 2) 
+                                                    {marketDisplays.find(m => m.symbol === market1Symbol)?.lastQuote !== null
+                                                        ? marketDisplays.find(m => m.symbol === market1Symbol)?.lastQuote?.toFixed(marketDisplays.find(m => m.symbol === market1Symbol)?.pip || 2)
                                                         : '—'}
                                                 </div>
                                                 <div className="info">
@@ -2420,7 +2438,7 @@ const AutoTrades = observer(() => {
                                                     </span>
                                                     <span className="stake">
                                                         Stake: {marketDisplays.find(m => m.symbol === market1Symbol)?.currentStake || baseStakeNum}
-                                                        {marketDisplays.find(m => m.symbol === market1Symbol)?.martingaleMultiplier && marketDisplays.find(m => m.symbol === market1Symbol)?.martingaleMultiplier !== 1 && 
+                                                        {marketDisplays.find(m => m.symbol === market1Symbol)?.martingaleMultiplier && marketDisplays.find(m => m.symbol === market1Symbol)?.martingaleMultiplier !== 1 &&
                                                             ` (×${marketDisplays.find(m => m.symbol === market1Symbol)?.martingaleMultiplier?.toFixed(2)})`
                                                         }
                                                     </span>
@@ -2428,8 +2446,8 @@ const AutoTrades = observer(() => {
                                                         'result--win': marketDisplays.find(m => m.symbol === market1Symbol)?.lastResult === 'win',
                                                         'result--loss': marketDisplays.find(m => m.symbol === market1Symbol)?.lastResult === 'loss',
                                                     })}>
-                                                        {marketDisplays.find(m => m.symbol === market1Symbol)?.lastResult === 'win' ? '✓' : 
-                                                         marketDisplays.find(m => m.symbol === market1Symbol)?.lastResult === 'loss' ? '✗' : '—'}
+                                                        {marketDisplays.find(m => m.symbol === market1Symbol)?.lastResult === 'win' ? '✓' :
+                                                            marketDisplays.find(m => m.symbol === market1Symbol)?.lastResult === 'loss' ? '✗' : '—'}
                                                     </span>
                                                 </div>
                                                 {marketDisplays.find(m => m.symbol === market1Symbol)?.lastDigits.length > 0 && (
@@ -2447,13 +2465,13 @@ const AutoTrades = observer(() => {
                                                         'status--buying': marketDisplays.find(m => m.symbol === market1Symbol)?.trading,
                                                         'status--cooldown': marketDisplays.find(m => m.symbol === market1Symbol)?.lossCooldownLeft > 0,
                                                         'status--ready': marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive && marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive >= Math.min(MAX_STREAK_LENGTH, Math.max(1, Number(market1AnalysisTicks) || 1)),
-                                                        'status--waiting': !marketDisplays.find(m => m.symbol === market1Symbol)?.trading && 
+                                                        'status--waiting': !marketDisplays.find(m => m.symbol === market1Symbol)?.trading &&
                                                             !(marketDisplays.find(m => m.symbol === market1Symbol)?.lossCooldownLeft > 0) &&
                                                             !(marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive && marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive >= Math.min(MAX_STREAK_LENGTH, Math.max(1, Number(market1AnalysisTicks) || 1))),
                                                     })}>
-                                                        {marketDisplays.find(m => m.symbol === market1Symbol)?.trading ? '🔄 Buying...' : 
-                                                         marketDisplays.find(m => m.symbol === market1Symbol)?.lossCooldownLeft > 0 ? `⏳ Cooldown ${marketDisplays.find(m => m.symbol === market1Symbol)?.lossCooldownLeft}t` :
-                                                         marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive && marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive >= Math.min(MAX_STREAK_LENGTH, Math.max(1, Number(market1AnalysisTicks) || 1)) ? '✅ Ready' : '⏳ Waiting'}
+                                                        {marketDisplays.find(m => m.symbol === market1Symbol)?.trading ? '🔄 Buying...' :
+                                                            marketDisplays.find(m => m.symbol === market1Symbol)?.lossCooldownLeft > 0 ? `⏳ Cooldown ${marketDisplays.find(m => m.symbol === market1Symbol)?.lossCooldownLeft}t` :
+                                                                marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive && marketDisplays.find(m => m.symbol === market1Symbol)?.consecutive >= Math.min(MAX_STREAK_LENGTH, Math.max(1, Number(market1AnalysisTicks) || 1)) ? '✅ Ready' : '⏳ Waiting'}
                                                     </span>
                                                 </div>
                                             </div>
@@ -2541,7 +2559,7 @@ const AutoTrades = observer(() => {
                                                     </optgroup>
                                                 </select>
                                             </div>
-                                            
+
                                             {(market2TradeType === 'DIGITOVER' || market2TradeType === 'DIGITUNDER') && (
                                                 <>
                                                     <div className="auto-trades-market__field">
@@ -2680,8 +2698,8 @@ const AutoTrades = observer(() => {
                                         {marketDisplays.find(m => m.symbol === market2Symbol) && (
                                             <div className="auto-trades-market__live">
                                                 <div className="quote">
-                                                    {marketDisplays.find(m => m.symbol === market2Symbol)?.lastQuote !== null 
-                                                        ? marketDisplays.find(m => m.symbol === market2Symbol)?.lastQuote?.toFixed(marketDisplays.find(m => m.symbol === market2Symbol)?.pip || 2) 
+                                                    {marketDisplays.find(m => m.symbol === market2Symbol)?.lastQuote !== null
+                                                        ? marketDisplays.find(m => m.symbol === market2Symbol)?.lastQuote?.toFixed(marketDisplays.find(m => m.symbol === market2Symbol)?.pip || 2)
                                                         : '—'}
                                                 </div>
                                                 <div className="info">
@@ -2690,7 +2708,7 @@ const AutoTrades = observer(() => {
                                                     </span>
                                                     <span className="stake">
                                                         Stake: {marketDisplays.find(m => m.symbol === market2Symbol)?.currentStake || baseStakeNum}
-                                                        {marketDisplays.find(m => m.symbol === market2Symbol)?.martingaleMultiplier && marketDisplays.find(m => m.symbol === market2Symbol)?.martingaleMultiplier !== 1 && 
+                                                        {marketDisplays.find(m => m.symbol === market2Symbol)?.martingaleMultiplier && marketDisplays.find(m => m.symbol === market2Symbol)?.martingaleMultiplier !== 1 &&
                                                             ` (×${marketDisplays.find(m => m.symbol === market2Symbol)?.martingaleMultiplier?.toFixed(2)})`
                                                         }
                                                     </span>
@@ -2698,8 +2716,8 @@ const AutoTrades = observer(() => {
                                                         'result--win': marketDisplays.find(m => m.symbol === market2Symbol)?.lastResult === 'win',
                                                         'result--loss': marketDisplays.find(m => m.symbol === market2Symbol)?.lastResult === 'loss',
                                                     })}>
-                                                        {marketDisplays.find(m => m.symbol === market2Symbol)?.lastResult === 'win' ? '✓' : 
-                                                         marketDisplays.find(m => m.symbol === market2Symbol)?.lastResult === 'loss' ? '✗' : '—'}
+                                                        {marketDisplays.find(m => m.symbol === market2Symbol)?.lastResult === 'win' ? '✓' :
+                                                            marketDisplays.find(m => m.symbol === market2Symbol)?.lastResult === 'loss' ? '✗' : '—'}
                                                     </span>
                                                 </div>
                                                 {marketDisplays.find(m => m.symbol === market2Symbol)?.lastDigits.length > 0 && (
@@ -2717,13 +2735,13 @@ const AutoTrades = observer(() => {
                                                         'status--buying': marketDisplays.find(m => m.symbol === market2Symbol)?.trading,
                                                         'status--cooldown': marketDisplays.find(m => m.symbol === market2Symbol)?.lossCooldownLeft > 0,
                                                         'status--ready': marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive && marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive >= Math.min(MAX_STREAK_LENGTH, Math.max(1, Number(market2AnalysisTicks) || 1)),
-                                                        'status--waiting': !marketDisplays.find(m => m.symbol === market2Symbol)?.trading && 
+                                                        'status--waiting': !marketDisplays.find(m => m.symbol === market2Symbol)?.trading &&
                                                             !(marketDisplays.find(m => m.symbol === market2Symbol)?.lossCooldownLeft > 0) &&
                                                             !(marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive && marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive >= Math.min(MAX_STREAK_LENGTH, Math.max(1, Number(market2AnalysisTicks) || 1))),
                                                     })}>
-                                                        {marketDisplays.find(m => m.symbol === market2Symbol)?.trading ? '🔄 Buying...' : 
-                                                         marketDisplays.find(m => m.symbol === market2Symbol)?.lossCooldownLeft > 0 ? `⏳ Cooldown ${marketDisplays.find(m => m.symbol === market2Symbol)?.lossCooldownLeft}t` :
-                                                         marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive && marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive >= Math.min(MAX_STREAK_LENGTH, Math.max(1, Number(market2AnalysisTicks) || 1)) ? '✅ Ready' : '⏳ Waiting'}
+                                                        {marketDisplays.find(m => m.symbol === market2Symbol)?.trading ? '🔄 Buying...' :
+                                                            marketDisplays.find(m => m.symbol === market2Symbol)?.lossCooldownLeft > 0 ? `⏳ Cooldown ${marketDisplays.find(m => m.symbol === market2Symbol)?.lossCooldownLeft}t` :
+                                                                marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive && marketDisplays.find(m => m.symbol === market2Symbol)?.consecutive >= Math.min(MAX_STREAK_LENGTH, Math.max(1, Number(market2AnalysisTicks) || 1)) ? '✅ Ready' : '⏳ Waiting'}
                                                     </span>
                                                 </div>
                                             </div>
