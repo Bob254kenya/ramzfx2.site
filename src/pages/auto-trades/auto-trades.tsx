@@ -541,6 +541,19 @@ const AutoTrades = observer(() => {
     const pendingTradePromisesRef = useRef<Record<string, Promise<number> | null>>({});
     const currentTradingMarketRef = useRef<string | null>(null);
     const forceUpdateCounterRef = useRef(0);
+    
+    // NEW: Track global martingale state across market switches
+    const globalMartingaleStateRef = useRef<{
+        consecutiveLosses: number;
+        currentStake: number;
+        martingaleMultiplier: number;
+        isInMartingale: boolean;
+    }>({
+        consecutiveLosses: 0,
+        currentStake: 1,
+        martingaleMultiplier: 1,
+        isInMartingale: false,
+    });
 
     // ── Update Refs ──────────────────────────────────────────────────────
 
@@ -964,25 +977,68 @@ const AutoTrades = observer(() => {
             const tp = Number(takeProfit) || 100;
             const sl = Number(stopLoss) || 100;
 
-            // Calculate next martingale state
+            // Use global martingale state if we're in a martingale sequence
+            // or use the current market's state
+            let consecutiveLosses = state.consecutiveLosses || 0;
+            
+            // If we're in a martingale sequence (switching markets), use the global state
+            if (globalMartingaleStateRef.current.isInMartingale) {
+                consecutiveLosses = globalMartingaleStateRef.current.consecutiveLosses;
+            }
+
+            // Calculate next martingale state using the correct consecutive losses
             const nextMartingaleState = getNextMartingaleState({
                 profit,
                 base_stake: baseStake,
                 multiplier: mult,
                 martingale_enabled: martingaleEnabled,
-                consecutive_losses: state.consecutiveLosses || 0,
+                consecutive_losses: consecutiveLosses,
             });
 
             // Update PnL and trade count
             totalPnlRef.current = parseFloat((totalPnlRef.current + profit).toFixed(2));
             totalTradesRef.current++;
 
-            // Update state with martingale results
-            state.consecutiveLosses = nextMartingaleState.consecutiveLosses;
+            // Update both the global state and the market state
+            if (profit < 0 && martingaleEnabled) {
+                // Loss: Update global martingale state
+                globalMartingaleStateRef.current = {
+                    consecutiveLosses: nextMartingaleState.consecutiveLosses,
+                    currentStake: nextMartingaleState.nextStake,
+                    martingaleMultiplier: nextMartingaleState.martingaleMultiplier || 1,
+                    isInMartingale: true,
+                };
+                
+                // Also update the market state
+                state.consecutiveLosses = nextMartingaleState.consecutiveLosses;
+                state.currentStake = nextMartingaleState.nextStake;
+                state.martingaleMultiplier = nextMartingaleState.martingaleMultiplier || 1;
+            } else if (profit >= 0) {
+                // Win: Reset global martingale state
+                globalMartingaleStateRef.current = {
+                    consecutiveLosses: 0,
+                    currentStake: baseStake,
+                    martingaleMultiplier: 1,
+                    isInMartingale: false,
+                };
+                
+                // Reset market state
+                state.consecutiveLosses = 0;
+                state.currentStake = baseStake;
+                state.martingaleMultiplier = 1;
+            } else {
+                // Handle other cases (martingale disabled, etc.)
+                state.consecutiveLosses = nextMartingaleState.consecutiveLosses;
+                state.currentStake = nextMartingaleState.nextStake;
+                state.martingaleMultiplier = nextMartingaleState.martingaleMultiplier || 1;
+                
+                if (profit < 0) {
+                    globalMartingaleStateRef.current.isInMartingale = true;
+                }
+            }
+
             state.lastResultType = nextMartingaleState.lastResult;
             state.lastResult = nextMartingaleState.lastResult;
-            state.currentStake = nextMartingaleState.nextStake;
-            state.martingaleMultiplier = nextMartingaleState.martingaleMultiplier || 1;
             state.lossCooldownLeft = profit < 0 ? MARKET_LOSS_COOLDOWN_TICKS : 0;
             state.tradeCount++;
             state.trading = false;
@@ -1013,18 +1069,38 @@ const AutoTrades = observer(() => {
                     if (nextSymbol && nextSymbol !== symbol) {
                         const nextConfig = marketConfigsRef.current[nextSymbol];
                         if (nextConfig && nextConfig.enabled) {
+                            // IMPORTANT: When switching markets, carry over the martingale state
+                            // The next market should use the global martingale state
+                            const nextState = marketStatesRef.current[nextSymbol];
+                            if (nextState) {
+                                // Apply the global martingale state to the next market
+                                nextState.consecutiveLosses = globalMartingaleStateRef.current.consecutiveLosses;
+                                nextState.currentStake = globalMartingaleStateRef.current.currentStake;
+                                nextState.martingaleMultiplier = globalMartingaleStateRef.current.martingaleMultiplier;
+                            }
+                            
                             marketSwitchActiveRef.current = true;
                             setActiveTradingMarket(nextSymbol);
                             activeTradingMarketRef.current = nextSymbol;
                             isPrimaryMarketActiveRef.current = false;
-                            console.log(`[AutoTrades] Switching from ${symbol} to ${nextSymbol} after loss`);
+                            console.log(`[AutoTrades] Switching from ${symbol} to ${nextSymbol} after loss with martingale state:`, 
+                                globalMartingaleStateRef.current);
                         }
                     }
                 } else if (profit >= 0) {
+                    // On win, switch back to primary and reset global martingale state
                     const primarySymbol = getPrimaryMarket();
                     if (primarySymbol && primarySymbol !== symbol) {
                         const primaryConfig = marketConfigsRef.current[primarySymbol];
                         if (primaryConfig && primaryConfig.enabled) {
+                            // Reset the primary market's martingale state
+                            const primaryState = marketStatesRef.current[primarySymbol];
+                            if (primaryState) {
+                                primaryState.consecutiveLosses = 0;
+                                primaryState.currentStake = baseStake;
+                                primaryState.martingaleMultiplier = 1;
+                            }
+                            
                             setActiveTradingMarket(primarySymbol);
                             activeTradingMarketRef.current = primarySymbol;
                             isPrimaryMarketActiveRef.current = true;
@@ -1076,6 +1152,19 @@ const AutoTrades = observer(() => {
                 return;
             }
 
+            // Use the global martingale state if we're in a martingale sequence
+            let stakeToUse = state.currentStake || Number(stake) || 1;
+            
+            // If global martingale is active, use that stake instead
+            if (globalMartingaleStateRef.current.isInMartingale && martingaleEnabled) {
+                stakeToUse = globalMartingaleStateRef.current.currentStake;
+                // Also update the market state to match
+                state.currentStake = stakeToUse;
+                state.consecutiveLosses = globalMartingaleStateRef.current.consecutiveLosses;
+                state.martingaleMultiplier = globalMartingaleStateRef.current.martingaleMultiplier;
+                marketStatesRef.current[symbol] = { ...state };
+            }
+
             if (
                 runningRef.current &&
                 signalReady &&
@@ -1093,10 +1182,8 @@ const AutoTrades = observer(() => {
                 state.tradeStartTime = Math.floor(Date.now() / 1000);
                 state.verificationId = `${symbol}_${state.tradeStartTime}_${Math.random().toString(36).substring(2, 11)}`;
 
-                const stakeNow = state.currentStake || Number(stake) || 1;
-
-                if (stakeNow <= 0 || isNaN(stakeNow)) {
-                    console.error(`[AutoTrades] Sanity check failed: Invalid stake amount ${stakeNow} for ${symbol}`);
+                if (stakeToUse <= 0 || isNaN(stakeToUse)) {
+                    console.error(`[AutoTrades] Sanity check failed: Invalid stake amount ${stakeToUse} for ${symbol}`);
                     state.trading = false;
                     state.isExecuting = false;
                     globalTradingRef.current = false;
@@ -1108,7 +1195,7 @@ const AutoTrades = observer(() => {
 
                 marketStatesRef.current[symbol] = { ...state };
 
-                const tradePromise = executeTrade(symbol, stakeNow, state.lastResultType);
+                const tradePromise = executeTrade(symbol, stakeToUse, state.lastResultType);
                 pendingTradePromisesRef.current[symbol] = tradePromise;
 
                 tradePromise
@@ -1146,7 +1233,7 @@ const AutoTrades = observer(() => {
                     });
             }
         },
-        [client.is_logged_in, executeTrade, handleAfterTrade, refreshDisplays, stake, shouldMarketTrade]
+        [client.is_logged_in, executeTrade, handleAfterTrade, refreshDisplays, stake, shouldMarketTrade, martingaleEnabled]
     );
 
     // ── Tick Handler ─────────────────────────────────────────────────────
@@ -1494,6 +1581,14 @@ const AutoTrades = observer(() => {
         const baseStake = Number(stake) || 1;
         globalTradingRef.current = false;
         currentTradingMarketRef.current = null;
+        
+        // Reset global martingale state
+        globalMartingaleStateRef.current = {
+            consecutiveLosses: 0,
+            currentStake: baseStake,
+            martingaleMultiplier: 1,
+            isInMartingale: false,
+        };
         
         AUTO_MARKET_SYMBOLS.forEach(symbol => {
             marketStatesRef.current[symbol] = createMarketState({ 
@@ -1850,7 +1945,7 @@ const AutoTrades = observer(() => {
     const pnlPositive = totalPnl > 0;
     const pnlNegative = totalPnl < 0;
     const baseStakeNum = Number(stake) || 1;
-    const martingaleActive = marketDisplays.some(m => m.currentStake > baseStakeNum);
+    const martingaleActive = marketDisplays.some(m => m.currentStake > baseStakeNum) || globalMartingaleStateRef.current.isInMartingale;
     const inCooldown = marketDisplays.some(m => m.lossCooldownLeft > 0);
     const hasAnyLiveQuote = marketDisplays.some(m => m.lastQuote !== null);
     const isLoading = selectedMarketsRef.current.length > 0 && !hasAnyLiveQuote && (dataStreamLoading || !isConnected);
@@ -2055,6 +2150,12 @@ const AutoTrades = observer(() => {
                                     {martingaleEnabled && (
                                         <span className="martingale-badge">
                                             Martingale: stake multiplies by ×{martingaleMultiplier.toFixed(1)} on each consecutive loss
+                                            {globalMartingaleStateRef.current.isInMartingale && (
+                                                <span className="martingale-active">
+                                                    🔥 Active: ×{globalMartingaleStateRef.current.martingaleMultiplier.toFixed(1)} 
+                                                    (Loss #{globalMartingaleStateRef.current.consecutiveLosses})
+                                                </span>
+                                            )}
                                         </span>
                                     )}
                                 </div>
@@ -2625,6 +2726,11 @@ const AutoTrades = observer(() => {
                                     'value--active': martingaleActive && martingaleEnabled,
                                 })}>
                                     {martingaleEnabled && martingaleActive ? 'Active' : martingaleEnabled ? 'Waiting' : 'Off'}
+                                    {martingaleActive && martingaleEnabled && globalMartingaleStateRef.current.isInMartingale && (
+                                        <span className="martingale-detail">
+                                            (×{globalMartingaleStateRef.current.martingaleMultiplier.toFixed(1)})
+                                        </span>
+                                    )}
                                 </span>
                             </div>
                             <div className="stat">
