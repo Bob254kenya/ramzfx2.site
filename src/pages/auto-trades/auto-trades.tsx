@@ -1,5 +1,5 @@
 // auto-trades.tsx
-import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
 import Input from '@/components/shared_ui/input';
@@ -9,10 +9,7 @@ import { contract_stages } from '@/constants/contract-stage';
 import { api_base, observer as globalObserver } from '@/external/bot-skeleton';
 import { useStore } from '@/hooks/useStore';
 import { conditionNotifierStore } from '@/stores/condition-notifier-store';
-import {
-    SUPPORTED_VOLATILITY_MARKETS,
-    type DigitStrategyId,
-} from '@/utils/digit-strategy';
+import { SUPPORTED_VOLATILITY_MARKETS } from '@/utils/digit-strategy';
 import { recordDiagnosticEvent, setDiagnosticGauge } from '@/utils/diagnostics';
 import { getLastDigitFromQuote, getMarketPipSize, isExpectedStreamInterruption } from '@/utils/market-data';
 import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purchase';
@@ -233,7 +230,6 @@ const createMarketState = (prev?: Partial<MarketState>): MarketState => ({
 
 // ── Signal Detection ──────────────────────────────────────────────────────
 
-// Check if digit matches comparison operator
 const checkComparison = (digit: number, operator: ComparisonOperator, value: number): boolean => {
     switch(operator) {
         case '>': return digit > value;
@@ -245,36 +241,28 @@ const checkComparison = (digit: number, operator: ComparisonOperator, value: num
     }
 };
 
-// Check if last N ticks all match the comparison against barrier
 const checkTickPattern = (digits: number[], tickCount: number, operator: ComparisonOperator, barrier: number): boolean => {
     if (digits.length < tickCount) return false;
-    
     const recentDigits = digits.slice(-tickCount);
     return recentDigits.every(digit => checkComparison(digit, operator, barrier));
 };
 
-// Parse Even/Odd pattern sequence (e.g., "EEO", "OEE", "EOOE")
 const parseEOPattern = (sequence: string): string[] => {
     return sequence.replace(/[,;\s]/g, '').split('').filter(ch => ch === 'E' || ch === 'O');
 };
 
-// Check if last digits match Even/Odd pattern
 const checkEOPattern = (digits: number[], pattern: string[]): boolean => {
     if (digits.length < pattern.length) return false;
-    
     const recentDigits = digits.slice(-pattern.length);
-    
     for (let i = 0; i < pattern.length; i++) {
         const expected = pattern[i];
         const actual = recentDigits[i];
-        
         if (expected === 'E' && actual % 2 !== 0) return false;
         if (expected === 'O' && actual % 2 === 0) return false;
     }
     return true;
 };
 
-// Check if digit matches based on trade type
 const isDigitSignalMatch = ({
     trade_type,
     digit,
@@ -787,12 +775,9 @@ const AutoTrades = observer(() => {
     const getActiveDigitBarrier = useCallback((symbol: string, lastResult: 'win' | 'loss' | null, consecutiveLosses = 0) => {
         const config = marketConfigsRef.current[symbol];
         if (!config) return 4;
-        
         const ct = config.tradeType;
         if (!usesLossPrediction(ct)) return getDigitNumber(config.barrier, 4);
-        
-        const barrier = getDigitNumber(config.predictionDigit, 4);
-        return barrier;
+        return getDigitNumber(config.predictionDigit, 4);
     }, []);
 
     const flushDisplays = useCallback(() => {
@@ -803,7 +788,6 @@ const AutoTrades = observer(() => {
 
     const refreshDisplays = useCallback(() => {
         if (unmountedRef.current || !show_auto_ref.current) return;
-
         const elapsed = Date.now() - lastUiRefreshAtRef.current;
         if (elapsed >= UI_REFRESH_THROTTLE_MS) {
             if (uiRefreshTimerRef.current !== null) {
@@ -813,7 +797,6 @@ const AutoTrades = observer(() => {
             flushDisplays();
             return;
         }
-
         if (uiRefreshTimerRef.current !== null) return;
         uiRefreshTimerRef.current = window.setTimeout(() => {
             uiRefreshTimerRef.current = null;
@@ -870,7 +853,6 @@ const AutoTrades = observer(() => {
         } catch {
             // Ignore optional run-panel cleanup failures.
         }
-
         try {
             api_base.is_stopping = false;
             api_base.setIsRunning?.(false);
@@ -921,13 +903,11 @@ const AutoTrades = observer(() => {
         async (symbol: string, stakeAmount: number, lastResult: 'win' | 'loss' | null): Promise<number> => {
             const config = marketConfigsRef.current[symbol];
             if (!config) return 0;
-
             const ct = config.tradeType;
             const bar = getActiveDigitBarrier(symbol, lastResult, marketStatesRef.current[symbol]?.consecutiveLosses || 0);
             const tradeStartTime = Math.floor(Date.now() / 1000);
             const verificationId = `${symbol}_${tradeStartTime}_${Math.random().toString(36).substring(2, 11)}`;
             const abortController = new AbortController();
-
             const params: Record<string, any> = {
                 amount: stakeAmount,
                 basis: 'stake',
@@ -938,7 +918,6 @@ const AutoTrades = observer(() => {
                 symbol,
             };
             if (BARRIER_NEEDED[ct]) params.barrier = String(bar);
-
             try {
                 const buy = await buyContractForUi({ parameters: params, price: stakeAmount, source: 'AutoTrades' });
                 const { contract_id, buy_price, transaction_id } = buy;
@@ -954,7 +933,6 @@ const AutoTrades = observer(() => {
                     currency: currency || 'USD',
                     verification_id: verificationId,
                 });
-
                 contractStreamAbortControllersRef.current.add(abortController);
                 const contract = await streamContractUntilSettled({
                     contractId: contract_id,
@@ -1000,7 +978,6 @@ const AutoTrades = observer(() => {
             const nextIndex = (currentIndex + 1) % markets.length;
             return markets[nextIndex];
         }
-
         if (market1Enabled && market2Enabled) {
             if (currentSymbol === market1Symbol) return market2Symbol;
             if (currentSymbol === market2Symbol) return market1Symbol;
@@ -1066,7 +1043,6 @@ const AutoTrades = observer(() => {
 
             lastResultRef.current[symbol] = nextMartingaleState.lastResult;
 
-            // ── Market Switching Logic ──────────────────────────────────
             if (switchOnLoss && market1Enabled && market2Enabled && !scanAllMarkets) {
                 if (profit < 0) {
                     const nextSymbol = getNextMarketForSwitch(symbol);
@@ -1211,10 +1187,8 @@ const AutoTrades = observer(() => {
             if (IS_DIRECTION_TYPE[ct]) {
                 const prev = state.prevQuote;
                 const dir: Direction = prev === null ? 0 : quote > prev ? 1 : quote < prev ? -1 : 0;
-
                 state.directionHistory = [...state.directionHistory.slice(-9), dir];
                 state.prevQuote = quote;
-
                 if (dir !== 0) {
                     const match = isDirectionMatch(ct, dir);
                     if (inv ? !match : match) {
@@ -1243,7 +1217,6 @@ const AutoTrades = observer(() => {
                         if (eoPattern.length > 0) {
                             match = checkEOPattern(state.lastDigits, eoPattern);
                         } else {
-                            // Fallback: single digit check
                             match = isDigitSignalMatch({ trade_type: ct, digit: lastDigit, barrier: bar, inverse: inv });
                         }
                     } else {
@@ -1268,7 +1241,6 @@ const AutoTrades = observer(() => {
 
             const signalReady = state.consecutive >= targetLen && candleMatch;
 
-            // Update condition notifier
             const mkt = AUTO_MARKET_LOOKUP.get(symbol);
             const label = TRADE_TYPE_LABELS[ct];
             const invLabel = inv ? 'Inverse ' : '';
@@ -1302,7 +1274,6 @@ const AutoTrades = observer(() => {
             });
 
             tryExecuteSignal(symbol, state, signalReady);
-
             refreshDisplays();
         },
         [clearDataRecoveryLoading, getActiveDigitBarrier, refreshDisplays, tryExecuteSignal, scanAllMarkets]
@@ -1318,29 +1289,22 @@ const AutoTrades = observer(() => {
             if (!config || !config.enabled) {
                 if (!scanAllMarkets) return;
             }
-
             const state = marketStatesRef.current[symbol];
             if (!state) return;
-
             const open = Number(candle?.open);
             const close = Number(candle?.close);
             if (!Number.isFinite(open) || !Number.isFinite(close)) return;
-
             state.candleOpen = open;
             state.candleClose = close;
             state.candleDirection = close > open ? 1 : close < open ? -1 : 0;
-
             const ct = config.tradeType;
             const inv = config.inverseMode || false;
             const targetLen = Math.min(MAX_STREAK_LENGTH, Math.max(1, getDigitNumber(config.analysisTicks, 1)));
-            
             const signalReady =
                 isCandleConfirmedTradeType(ct) &&
                 state.consecutive >= targetLen &&
                 (inv ? isCandleMatch(ct, state.candleDirection) : isCandleMatch(ct, state.candleDirection));
-
             tryExecuteSignal(symbol, state, signalReady);
-
             refreshDisplays();
         },
         [refreshDisplays, tryExecuteSignal, scanAllMarkets]
@@ -1365,11 +1329,7 @@ const AutoTrades = observer(() => {
 
         Object.entries(subscriptionsRef.current).forEach(([symbol, sub]) => {
             if (!monitoredSymbolSet.has(symbol)) {
-                try {
-                    sub?.unsubscribe?.();
-                } catch {
-                    // Ignore unsubscribe failures.
-                }
+                try { sub?.unsubscribe?.(); } catch {}
                 delete subscriptionsRef.current[symbol];
                 updateSubscriptionDiagnostics();
             }
@@ -1377,11 +1337,7 @@ const AutoTrades = observer(() => {
 
         Object.entries(candleSubscriptionsRef.current).forEach(([symbol, sub]) => {
             if (!monitoredSymbolSet.has(symbol)) {
-                try {
-                    sub?.unsubscribe?.();
-                } catch {
-                    // Ignore unsubscribe failures.
-                }
+                try { sub?.unsubscribe?.(); } catch {}
                 delete candleSubscriptionsRef.current[symbol];
                 updateSubscriptionDiagnostics();
             }
@@ -1641,19 +1597,16 @@ const AutoTrades = observer(() => {
 
     useEffect(() => {
         if (!show_auto) return undefined;
-
         const intervalId = window.setInterval(() => {
             if (!show_auto_ref.current || unmountedRef.current) return;
             const has_selected_markets = selectedMarketsRef.current.length > 0;
             const silent_for = Date.now() - lastTickAtRef.current;
-
             if (has_selected_markets && silent_for > DATA_SILENCE_RESTART_MS) {
                 if (!restartInFlightRef.current) {
                     restartSubscriptions();
                 }
             }
         }, 5000);
-
         return () => {
             window.clearInterval(intervalId);
         };
@@ -1683,14 +1636,12 @@ const AutoTrades = observer(() => {
 
     useEffect(() => {
         if (!show_auto) return undefined;
-
         dashboard.registerTradingStopHandler('auto_trades', stopTrading);
         globalObserver.register('bot.running', run_panel.onBotRunningEvent);
         globalObserver.register('contract.status', run_panel.onContractStatusEvent);
         globalObserver.register('Error', run_panel.onError);
         globalObserver.register('bot.setPurchaseInProgress', run_panel.SetpurchaseInProgress);
         globalObserver.register('bot.manual_stop', stopTrading);
-
         return () => {
             dashboard.unregisterTradingStopHandler('auto_trades');
             globalObserver.unregister('bot.running', run_panel.onBotRunningEvent);
@@ -1744,7 +1695,7 @@ const AutoTrades = observer(() => {
             const operator = config.comparisonOperator;
             tickResults = recentDigits.map(d => checkComparison(d, operator, bar));
             allMatch = recentDigits.length >= targetLen && tickResults.every(Boolean);
-            conditionText = `${inv ? 'Inverse ' : ''}${TRADE_TYPE_LABELS[ct]}: Last ${targetLen} ticks ${getComparisonOperatorLabel(operator)} ${bar}`;
+            conditionText = `Last ${targetLen} ticks ${getComparisonOperatorLabel(operator)} ${bar}`;
         } else if (ct === 'DIGITEVEN' || ct === 'DIGITODD') {
             if (config.inputSequence && config.inputSequence.length > 0) {
                 const eoPattern = parseEOPattern(config.inputSequence);
@@ -1753,16 +1704,16 @@ const AutoTrades = observer(() => {
                     return eoPattern[i] === 'E' ? d % 2 === 0 : d % 2 !== 0;
                 });
                 allMatch = recentDigits.length >= eoPattern.length && checkEOPattern(state.lastDigits, eoPattern);
-                conditionText = `${inv ? 'Inverse ' : ''}Pattern: ${config.inputSequence}`;
+                conditionText = `Pattern: ${config.inputSequence}`;
             } else {
                 tickResults = recentDigits.map(d => isDigitSignalMatch({ trade_type: ct, digit: d, barrier: bar, inverse: inv }));
                 allMatch = recentDigits.length >= targetLen && tickResults.every(Boolean);
-                conditionText = `${inv ? 'Inverse ' : ''}${TRADE_TYPE_LABELS[ct]}: ${bar}`;
+                conditionText = `${TRADE_TYPE_LABELS[ct]}: ${bar}`;
             }
         } else {
             tickResults = recentDigits.map(d => isDigitSignalMatch({ trade_type: ct, digit: d, barrier: bar, inverse: inv }));
             allMatch = recentDigits.length >= targetLen && tickResults.every(Boolean);
-            conditionText = `${inv ? 'Inverse ' : ''}${TRADE_TYPE_LABELS[ct]}: ${bar}`;
+            conditionText = `${TRADE_TYPE_LABELS[ct]}: ${bar}`;
         }
 
         return {
@@ -2665,8 +2616,8 @@ const AutoTrades = observer(() => {
                             </div>
                         </div>
 
-                        {/* Controls */}
-                        <div className='auto-trades-controls'>
+                        {/* Controls - ALWAYS VISIBLE */}
+                        <div className='auto-trades-controls' style={{ paddingBottom: '20vh' }}>
                             {!isRunning ? (
                                 <button
                                     className='auto-trades-controls__run'
