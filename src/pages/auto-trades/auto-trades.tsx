@@ -1,4 +1,5 @@
-// auto-trades.tsx
+// auto-trades.tsx - FIXED VERSION
+
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
@@ -406,7 +407,7 @@ export const hasRequiredDigitStreak = ({
         .every(digit => isDigitSignalMatch({ trade_type, digit, barrier, inverse }));
 };
 
-// Evaluate L→digit strategy condition
+// Evaluate L→digit strategy condition - FIXED: Properly check pattern
 const evaluateLDigitCondition = (
     lDigitStrategy: LDigitAnalysis | null,
     digits: number[],
@@ -432,22 +433,22 @@ const evaluateLDigitCondition = (
                    recentDigits.every(d => d % 2 === 0);
         
         case 'over_to_under':
-            if (!lDigitStrategy.thresholdDigit) return false;
+            if (lDigitStrategy.thresholdDigit === undefined) return false;
             return recentDigits.length >= lDigitStrategy.lookbackTicks && 
-                   recentDigits.every(d => d > lDigitStrategy.thresholdDigit!);
+                   recentDigits.every(d => d > lDigitStrategy.thresholdDigit);
         
         case 'under_to_over':
-            if (!lDigitStrategy.thresholdDigit) return false;
+            if (lDigitStrategy.thresholdDigit === undefined) return false;
             return recentDigits.length >= lDigitStrategy.lookbackTicks && 
-                   recentDigits.every(d => d < lDigitStrategy.thresholdDigit!);
+                   recentDigits.every(d => d < lDigitStrategy.thresholdDigit);
         
         case 'match_to_diff':
-            if (!lDigitStrategy.barrierDigit) return false;
+            if (lDigitStrategy.barrierDigit === undefined) return false;
             return recentDigits.length >= lDigitStrategy.lookbackTicks && 
                    recentDigits.every(d => d === lDigitStrategy.barrierDigit);
         
         case 'diff_to_match':
-            if (!lDigitStrategy.barrierDigit) return false;
+            if (lDigitStrategy.barrierDigit === undefined) return false;
             return recentDigits.length >= lDigitStrategy.lookbackTicks && 
                    recentDigits.every(d => d !== lDigitStrategy.barrierDigit);
         
@@ -1083,15 +1084,15 @@ const AutoTrades = observer(() => {
         }
     }, [tradeType]);
 
-    // Only update tradeTypeRef when not in L→Digit mode
-    // This is controlled by the handleTick logic
+    // Update tradeTypeRef based on L→Digit state
     useEffect(() => {
-        // Don't override if L→Digit is active
+        // Check if any market has L→Digit active
         const hasActiveLDigit = Object.values(marketStatesRef.current).some(state => state.lDigitActive);
         if (!hasActiveLDigit) {
-            tradeTypeRef.current = tradeType;
+            // Restore original trade type when L→Digit is not active
+            tradeTypeRef.current = originalTradeTypeRef.current;
         }
-    }, [tradeType]);
+    }, [tradeType, lDigitStrategy]);
     
     useEffect(() => {
         strategyTemplateRef.current = strategyTemplate;
@@ -1103,7 +1104,6 @@ const AutoTrades = observer(() => {
         const templateConfig = getTemplateTradeConfig(strategyTemplate);
         if (!templateConfig) return;
 
-        // Fix: Ensure OVER_2_MARKET and UNDER_7_MARKET work correctly
         setTradeType(templateConfig.tradeType);
         setBarrier(templateConfig.barrier);
         setAnalysisTicks('1');
@@ -1528,6 +1528,7 @@ const AutoTrades = observer(() => {
         [currency, getActiveDigitBarrier, pushContract, setError]
     );
 
+    // FIXED: handleAfterTrade - Properly reset L→Digit on win
     const handleAfterTrade = useCallback(
         (symbol: string, profit: number) => {
             if (!runningRef.current) return;
@@ -1558,7 +1559,7 @@ const AutoTrades = observer(() => {
             state.trading = false;
             globalTradingRef.current = false;
 
-            // FIX: L→Digit strategy - Reset on win, restore original trade type immediately
+            // FIXED: L→Digit strategy - Reset on win, restore original trade type
             if (profit > 0 && state.lDigitActive) {
                 // Deactivate L→Digit
                 state.lDigitActive = false;
@@ -1568,7 +1569,7 @@ const AutoTrades = observer(() => {
                 if (state.lDigitOriginalTradeType) {
                     tradeTypeRef.current = state.lDigitOriginalTradeType;
                     state.lDigitOriginalTradeType = null;
-                    // Also update the ref for future use
+                    // Update originalTradeTypeRef to match
                     originalTradeTypeRef.current = tradeTypeRef.current;
                 }
                 
@@ -1584,7 +1585,7 @@ const AutoTrades = observer(() => {
             }
 
             // If it's a loss and L→Digit is enabled but not active, we'll activate in handleTick
-            // The activation happens in handleTick when isLossActive and state.lDigitActive is false
+            // The activation happens in handleTick when previousContractResultRef.current === 'loss'
 
             if (!unmountedRef.current) {
                 refreshDisplays();
@@ -1695,6 +1696,7 @@ const AutoTrades = observer(() => {
 
     handleCandleRef.current = handleCandle;
 
+    // FIXED: handleTick - Properly activate L→Digit on loss
     const handleTick = useCallback(
         (symbol: string, tick: any) => {
             if (!monitoredMarketSymbolsRef.current.has(symbol)) return;
@@ -1816,12 +1818,17 @@ const AutoTrades = observer(() => {
                 state.alertMessage = '';
             }
 
-            // FIX: L→Digit strategy - Check and activate on loss
-            // Check if we're in a loss state (previous trade was loss or consecutive losses > 0)
-            const isLossActive = previousContractResultRef.current === 'loss' || consecutiveLossRef.current > 0;
+            // FIXED: L→Digit strategy - Check and activate on loss
+            // Check if we're in a loss state (previous trade was loss)
+            const isLossActive = previousContractResultRef.current === 'loss';
             
+            // Only activate L→Digit if:
+            // 1. L→Digit is enabled
+            // 2. We're in a loss state
+            // 3. L→Digit is not already active
+            // 4. We have a valid original trade type stored
             if (lDigitStrategyRef.current.enabled && isLossActive && !state.lDigitActive) {
-                // Evaluate the L→Digit condition
+                // Evaluate the L→Digit condition using the current digits/directions
                 const lDigitConditionMet = evaluateLDigitCondition(
                     lDigitStrategyRef.current,
                     state.lastDigits,
@@ -1830,11 +1837,7 @@ const AutoTrades = observer(() => {
                 );
                 
                 if (lDigitConditionMet) {
-                    // Activate L→Digit strategy
-                    state.lDigitActive = true;
-                    state.lDigitActiveSince = Date.now();
-                    
-                    // Store the original trade type before switching
+                    // Store the current trade type as the original
                     state.lDigitOriginalTradeType = originalTradeTypeRef.current;
                     
                     // Get the new trade type based on the pattern
@@ -1845,24 +1848,28 @@ const AutoTrades = observer(() => {
                     );
                     
                     if (newTradeType) {
+                        // Activate L→Digit
+                        state.lDigitActive = true;
+                        state.lDigitActiveSince = Date.now();
+                        
                         // Immediately switch the trade type
                         tradeTypeRef.current = newTradeType;
                         ct = newTradeType; // Update local ct for condition logging
+                        
+                        // Log the activation
+                        conditionNotifierStore.setCondition({
+                            market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
+                            condition: `L→Digit: ACTIVATED - ${lDigitStrategyRef.current.patternType} pattern detected after loss`,
+                            digits: `[${state.lastDigits.slice(-lDigitStrategyRef.current.lookbackTicks).join(', ')}]`,
+                            result: true,
+                            source: 'l-digit-activate',
+                            timestamp: Date.now(),
+                        });
                     }
-                    
-                    // Log the activation
-                    conditionNotifierStore.setCondition({
-                        market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                        condition: `L→Digit: ACTIVATED - ${lDigitStrategyRef.current.patternType} pattern detected after loss`,
-                        digits: `[${state.lastDigits.slice(-lDigitStrategyRef.current.lookbackTicks).join(', ')}]`,
-                        result: true,
-                        source: 'l-digit-activate',
-                        timestamp: Date.now(),
-                    });
                 }
             }
 
-            // FIX: Reset L→Digit on win - handled in handleAfterTrade
+            // FIXED: Reset L→Digit on win - handled in handleAfterTrade
             // The deactivation happens in handleAfterTrade when profit > 0
 
             const riskFilteredDigitStreakReady =
@@ -2839,7 +2846,7 @@ const AutoTrades = observer(() => {
                                     </div>
                                 )}
 
-                                {/* L→Digit Strategy Section - AFTER SIGNAL MODE */}
+                                {/* L→Digit Strategy Section - FIXED: Added visible styling */}
                                 <div className='auto-trades-l-digit-section'>
                                     <div className='auto-trades-l-digit-section__header'>
                                         <span className='auto-trades-l-digit-section__icon'>🎯</span>
@@ -2931,9 +2938,10 @@ const AutoTrades = observer(() => {
                                     {lDigitStrategy.enabled && (
                                         <div className='auto-trades-l-digit-section__config'>
                                             <div className='auto-trades-l-digit-section__field'>
-                                                <label>Lookback Ticks</label>
+                                                <label className='auto-trades-l-digit-section__label'>Lookback Ticks</label>
                                                 <div className='auto-trades-l-digit-section__lookback'>
                                                     <input
+                                                        className='auto-trades-l-digit-section__range'
                                                         type='range'
                                                         min='1'
                                                         max='20'
@@ -2944,25 +2952,58 @@ const AutoTrades = observer(() => {
                                                             lookbackTicks: parseInt(e.target.value)
                                                         }))}
                                                         disabled={isRunning}
+                                                        style={{
+                                                            width: '100%',
+                                                            height: '6px',
+                                                            borderRadius: '3px',
+                                                            background: `linear-gradient(to right, #2a7de1 0%, #2a7de1 ${(lDigitStrategy.lookbackTicks / 20) * 100}%, #e0e0e0 ${(lDigitStrategy.lookbackTicks / 20) * 100}%, #e0e0e0 100%)`,
+                                                            outline: 'none',
+                                                            transition: 'background 0.2s ease',
+                                                            cursor: isRunning ? 'not-allowed' : 'pointer'
+                                                        }}
                                                     />
                                                     <div className='auto-trades-l-digit-section__lookback-value'>
-                                                        <span>{lDigitStrategy.lookbackTicks}</span>
-                                                        <span>ticks</span>
+                                                        <span style={{ 
+                                                            fontSize: '1.2rem', 
+                                                            fontWeight: 'bold',
+                                                            color: '#2a7de1',
+                                                            minWidth: '24px',
+                                                            display: 'inline-block',
+                                                            textAlign: 'center'
+                                                        }}>
+                                                            {lDigitStrategy.lookbackTicks}
+                                                        </span>
+                                                        <span style={{ 
+                                                            fontSize: '0.75rem', 
+                                                            color: '#666',
+                                                            marginLeft: '4px'
+                                                        }}>
+                                                            ticks
+                                                        </span>
                                                     </div>
                                                 </div>
                                             </div>
                                             
                                             {(lDigitStrategy.patternType === 'over_to_under' || lDigitStrategy.patternType === 'under_to_over') && (
                                                 <div className='auto-trades-l-digit-section__field'>
-                                                    <label>Threshold Digit</label>
+                                                    <label className='auto-trades-l-digit-section__label'>Threshold Digit</label>
                                                     <select
-                                                        className='auto-trades-config__select'
+                                                        className='auto-trades-config__select auto-trades-l-digit-section__select'
                                                         value={lDigitStrategy.thresholdDigit}
                                                         onChange={e => setLDigitStrategy(prev => ({
                                                             ...prev,
                                                             thresholdDigit: parseInt(e.target.value)
                                                         }))}
                                                         disabled={isRunning}
+                                                        style={{
+                                                            padding: '6px 8px',
+                                                            borderRadius: '4px',
+                                                            border: '1px solid #d6d6d6',
+                                                            fontSize: '0.9rem',
+                                                            width: '100%',
+                                                            background: isRunning ? '#f5f5f5' : 'white',
+                                                            cursor: isRunning ? 'not-allowed' : 'pointer'
+                                                        }}
                                                     >
                                                         {[0,1,2,3,4,5,6,7,8,9].map(d => (
                                                             <option key={d} value={d}>{d}</option>
@@ -2973,15 +3014,24 @@ const AutoTrades = observer(() => {
                                             
                                             {(lDigitStrategy.patternType === 'match_to_diff' || lDigitStrategy.patternType === 'diff_to_match') && (
                                                 <div className='auto-trades-l-digit-section__field'>
-                                                    <label>Barrier Digit</label>
+                                                    <label className='auto-trades-l-digit-section__label'>Barrier Digit</label>
                                                     <select
-                                                        className='auto-trades-config__select'
+                                                        className='auto-trades-config__select auto-trades-l-digit-section__select'
                                                         value={lDigitStrategy.barrierDigit}
                                                         onChange={e => setLDigitStrategy(prev => ({
                                                             ...prev,
                                                             barrierDigit: parseInt(e.target.value)
                                                         }))}
                                                         disabled={isRunning}
+                                                        style={{
+                                                            padding: '6px 8px',
+                                                            borderRadius: '4px',
+                                                            border: '1px solid #d6d6d6',
+                                                            fontSize: '0.9rem',
+                                                            width: '100%',
+                                                            background: isRunning ? '#f5f5f5' : 'white',
+                                                            cursor: isRunning ? 'not-allowed' : 'pointer'
+                                                        }}
                                                     >
                                                         {[0,1,2,3,4,5,6,7,8,9].map(d => (
                                                             <option key={d} value={d}>{d}</option>
@@ -2990,7 +3040,15 @@ const AutoTrades = observer(() => {
                                                 </div>
                                             )}
                                             
-                                            <p className='auto-trades-l-digit-section__hint'>
+                                            <p className='auto-trades-l-digit-section__hint' style={{
+                                                fontSize: '0.8rem',
+                                                color: '#666',
+                                                marginTop: '8px',
+                                                padding: '8px',
+                                                background: '#f8f9fa',
+                                                borderRadius: '4px',
+                                                borderLeft: '3px solid #2a7de1'
+                                            }}>
                                                 ⚡ <strong>Activates</strong> AFTER a loss when pattern matches<br />
                                                 🔄 <strong>Deactivates</strong> AFTER a win, restoring original strategy<br />
                                                 📊 Overrides current trade type with opposite pattern when active
