@@ -9,7 +9,6 @@ import { contract_stages } from '@/constants/contract-stage';
 import { api_base, observer as globalObserver } from '@/external/bot-skeleton';
 import { useStore } from '@/hooks/useStore';
 import { conditionNotifierStore } from '@/stores/condition-notifier-store';
-import { API_BASE } from '@/utils/api-base';
 import {
     DIGIT_STRATEGIES,
     evaluateDigitStrategy,
@@ -20,12 +19,6 @@ import { recordDiagnosticEvent, setDiagnosticGauge } from '@/utils/diagnostics';
 import { getLastDigitFromQuote, getMarketPipSize, isExpectedStreamInterruption } from '@/utils/market-data';
 import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purchase';
 import { safeSubscribe } from '@/utils/websocket-handler';
-import {
-    AUTO_TRADE_STRATEGY_FAMILIES,
-    AUTO_TRADE_STRATEGY_PRESET_COUNT,
-    AUTO_TRADE_STRATEGY_PRESET_LOOKUP,
-} from './strategy-presets';
-import type { AutoTradeStrategyPreset } from './strategy-presets';
 import './auto-trades.scss';
 
 type MartingaleModeType =
@@ -74,42 +67,6 @@ const AUTO_MARKETS: AutoMarket[] = SUPPORTED_VOLATILITY_MARKETS.map(market => ({
 
 const AUTO_MARKET_SYMBOLS = AUTO_MARKETS.map(({ symbol }) => symbol);
 const AUTO_MARKET_LOOKUP = new Map(AUTO_MARKETS.map(market => [market.symbol, market]));
-
-type AiAutoTradeSettings = {
-    tradeType?: TradeType | null;
-    barrier?: string | null;
-    predictionBeforeLoss?: string | null;
-    predictionAfterLoss?: string | null;
-    analysisTicks?: string | null;
-    selectedMarketSymbols?: string[];
-    stake?: string | null;
-    martingale?: string | null;
-    takeProfit?: string | null;
-    stopLoss?: string | null;
-    streak?: string | null;
-    strategyMode?: StrategyMode | null;
-    martingaleMode?: MartingaleModeType | null;
-    consecutiveLossCount?: string | null;
-    lDigitStrategy?: LDigitAnalysis | null;
-};
-
-type AiCustomStrategy = {
-    intent?: string;
-    entryRules?: string[];
-    exitRules?: string[];
-    riskRules?: string[];
-    notes?: string[];
-};
-
-type AiAutoTradeParseResult = {
-    settings: AiAutoTradeSettings;
-    summary: string[];
-    warnings: string[];
-    unsupportedCapabilities?: string[];
-    customStrategy?: AiCustomStrategy;
-    confidence?: number;
-    source?: 'openai' | 'local' | 'preset';
-};
 
 const DATA_SILENCE_RESTART_MS = 15000;
 const DATA_RESTART_COOLDOWN_MS = 10000;
@@ -324,308 +281,9 @@ const getInitialConsecutiveLossThreshold = () => {
     }
 };
 
-const getAiNumber = (text: string, patterns: RegExp[], min: number, max: number) => {
-    for (const pattern of patterns) {
-        const match = text.match(pattern);
-        const value = Number(match?.[1]);
-        if (Number.isFinite(value) && value >= min && value <= max) return String(value);
-    }
-    return undefined;
-};
-
-const getAiMoney = (text: string, patterns: RegExp[]) => {
-    for (const pattern of patterns) {
-        const match = text.match(pattern);
-        const value = Number(match?.[1]);
-        if (Number.isFinite(value) && value > 0) return String(value);
-    }
-    return undefined;
-};
-
-const getAiMarketSymbols = (text: string) => {
-    const symbols = new Set<string>();
-    const normalized = text.toLowerCase();
-
-    AUTO_MARKETS.forEach(market => {
-        if (normalized.includes(market.symbol.toLowerCase()) || normalized.includes(market.label.toLowerCase())) {
-            symbols.add(market.symbol);
-        }
-    });
-
-    const volatilityMatches = normalized.matchAll(/\b(?:v|vol|volatility)\s*(10|15|25|30|50|75|90|100)\b/g);
-    for (const match of volatilityMatches) {
-        const value = match[1];
-        const wantsOneSecond = /\b(?:1s|1\s*second|one\s*second|1hz)\b/.test(normalized);
-        const oneSecondSymbol = `1HZ${value}V`;
-        const standardSymbol = `R_${value}`;
-        const symbol = wantsOneSecond && AUTO_MARKET_LOOKUP.has(oneSecondSymbol) ? oneSecondSymbol : standardSymbol;
-        if (AUTO_MARKET_LOOKUP.has(symbol)) symbols.add(symbol);
-    }
-
-    return [...symbols];
-};
-
-const isAiTradeType = (value: unknown): value is TradeType =>
-    typeof value === 'string' && Object.prototype.hasOwnProperty.call(TRADE_TYPE_LABELS, value);
-
-const isAiStrategyMode = (value: unknown): value is StrategyMode =>
-    value === 'STANDARD' || value === 'INVERSE' || value === 'PERCENTAGE';
-
-const getAiDigitString = (value: unknown) => {
-    const digit = Number(value);
-    return Number.isInteger(digit) && digit >= 0 && digit <= 9 ? String(digit) : undefined;
-};
-
 const getDigitNumber = (value: unknown, fallback: number) => {
     const digit = Number(value);
     return Number.isFinite(digit) ? Math.min(9, Math.max(0, Math.trunc(digit))) : fallback;
-};
-
-const getAiBoundedIntString = (value: unknown, min: number, max: number) => {
-    const numeric = Number(value);
-    return Number.isInteger(numeric) && numeric >= min && numeric <= max ? String(numeric) : undefined;
-};
-
-const getAiPositiveNumberString = (value: unknown) => {
-    const numeric = Number(value);
-    return Number.isFinite(numeric) && numeric > 0 ? String(value) : undefined;
-};
-
-export const normalizeAiAutoTradePlan = (plan: Partial<AiAutoTradeParseResult>): AiAutoTradeParseResult => {
-    const settings = plan.settings || {};
-    const normalizedSettings: AiAutoTradeSettings = {};
-
-    if (isAiTradeType(settings.tradeType)) normalizedSettings.tradeType = settings.tradeType;
-    if (isAiStrategyMode(settings.strategyMode)) normalizedSettings.strategyMode = settings.strategyMode;
-
-    const barrier = getAiDigitString(settings.barrier);
-    if (barrier !== undefined) normalizedSettings.barrier = barrier;
-
-    const predictionBeforeLoss = getAiDigitString(settings.predictionBeforeLoss);
-    if (predictionBeforeLoss !== undefined) normalizedSettings.predictionBeforeLoss = predictionBeforeLoss;
-
-    const predictionAfterLoss = getAiDigitString(settings.predictionAfterLoss);
-    if (predictionAfterLoss !== undefined) normalizedSettings.predictionAfterLoss = predictionAfterLoss;
-
-    const analysisTicks = getAiBoundedIntString(settings.analysisTicks, 1, 10);
-    if (analysisTicks !== undefined) normalizedSettings.analysisTicks = analysisTicks;
-
-    const streak = getAiBoundedIntString(settings.streak, 1, 10);
-    if (streak !== undefined) normalizedSettings.streak = streak;
-
-    if (Array.isArray(settings.selectedMarketSymbols)) {
-        normalizedSettings.selectedMarketSymbols = [
-            ...new Set(settings.selectedMarketSymbols.filter(symbol => AUTO_MARKET_LOOKUP.has(symbol))),
-        ];
-    }
-
-    const stake = getAiPositiveNumberString(settings.stake);
-    if (stake !== undefined) normalizedSettings.stake = stake;
-
-    const martingale = getAiPositiveNumberString(settings.martingale);
-    if (martingale !== undefined) normalizedSettings.martingale = martingale;
-
-    const takeProfit = getAiPositiveNumberString(settings.takeProfit);
-    if (takeProfit !== undefined) normalizedSettings.takeProfit = takeProfit;
-
-    const stopLoss = getAiPositiveNumberString(settings.stopLoss);
-    if (stopLoss !== undefined) normalizedSettings.stopLoss = stopLoss;
-
-    if (settings.martingaleMode != null) {
-        normalizedSettings.martingaleMode = normalizeMartingaleMode(settings.martingaleMode);
-    }
-
-    const consecutiveLossCount = getAiBoundedIntString(settings.consecutiveLossCount, 1, 10);
-    if (consecutiveLossCount !== undefined) normalizedSettings.consecutiveLossCount = consecutiveLossCount;
-
-    if (settings.lDigitStrategy) {
-        normalizedSettings.lDigitStrategy = settings.lDigitStrategy;
-    }
-
-    return {
-        settings: normalizedSettings,
-        summary: Array.isArray(plan.summary) ? plan.summary.filter(item => typeof item === 'string') : [],
-        warnings: Array.isArray(plan.warnings) ? plan.warnings.filter(item => typeof item === 'string') : [],
-        unsupportedCapabilities: Array.isArray(plan.unsupportedCapabilities)
-            ? plan.unsupportedCapabilities.filter(item => typeof item === 'string')
-            : [],
-        customStrategy: {
-            intent: typeof plan.customStrategy?.intent === 'string' ? plan.customStrategy.intent : undefined,
-            entryRules: Array.isArray(plan.customStrategy?.entryRules)
-                ? plan.customStrategy.entryRules.filter(item => typeof item === 'string')
-                : [],
-            exitRules: Array.isArray(plan.customStrategy?.exitRules)
-                ? plan.customStrategy.exitRules.filter(item => typeof item === 'string')
-                : [],
-            riskRules: Array.isArray(plan.customStrategy?.riskRules)
-                ? plan.customStrategy.riskRules.filter(item => typeof item === 'string')
-                : [],
-            notes: Array.isArray(plan.customStrategy?.notes)
-                ? plan.customStrategy.notes.filter(item => typeof item === 'string')
-                : [],
-        },
-        confidence: Number.isFinite(Number(plan.confidence)) ? Number(plan.confidence) : undefined,
-        source:
-            plan.source === 'openai' || plan.source === 'local' || plan.source === 'preset' ? plan.source : undefined,
-    };
-};
-
-export const parseAiAutoTradeStrategy = (rawText: string): AiAutoTradeParseResult => {
-    const text = rawText.toLowerCase().replace(/\s+/g, ' ').trim();
-    const settings: AiAutoTradeSettings = {};
-    const summary: string[] = [];
-    const warnings: string[] = [];
-
-    if (!text) {
-        return { settings, summary, warnings: ['Enter a strategy before applying settings.'], source: 'local' };
-    }
-
-    // Parse L→digit strategy patterns
-    const lDigitOddToEvenMatch = text.match(/\b(?:l→digit|loss to digit|after loss check|pattern)\s*odd\s*to\s*even\s*(?:with|using|lookback)?\s*(\d+)?\s*ticks?\b/i);
-    const lDigitEvenToOddMatch = text.match(/\b(?:l→digit|loss to digit|after loss check|pattern)\s*even\s*to\s*odd\s*(?:with|using|lookback)?\s*(\d+)?\s*ticks?\b/i);
-    const lDigitOverToUnderMatch = text.match(/\b(?:l→digit|loss to digit|after loss check|pattern)\s*over\s*(\d+)\s*to\s*under\s*(?:with|using|lookback)?\s*(\d+)?\s*ticks?\b/i);
-    const lDigitUnderToOverMatch = text.match(/\b(?:l→digit|loss to digit|after loss check|pattern)\s*under\s*(\d+)\s*to\s*over\s*(?:with|using|lookback)?\s*(\d+)?\s*ticks?\b/i);
-    const lDigitMatchToDiffMatch = text.match(/\b(?:l→digit|loss to digit|after loss check|pattern)\s*match\s*(\d+)\s*to\s*diff(?:ers)?\s*(?:with|using|lookback)?\s*(\d+)?\s*ticks?\b/i);
-    const lDigitDiffToMatchMatch = text.match(/\b(?:l→digit|loss to digit|after loss check|pattern)\s*diff(?:ers)?\s*(\d+)\s*to\s*match\s*(?:with|using|lookback)?\s*(\d+)?\s*ticks?\b/i);
-    const lDigitRiseToFallMatch = text.match(/\b(?:l→digit|loss to digit|after loss check|pattern)\s*rise\s*to\s*fall\s*(?:with|using|lookback)?\s*(\d+)?\s*ticks?\b/i);
-    const lDigitFallToRiseMatch = text.match(/\b(?:l→digit|loss to digit|after loss check|pattern)\s*fall\s*to\s*rise\s*(?:with|using|lookback)?\s*(\d+)?\s*ticks?\b/i);
-
-    if (lDigitOddToEvenMatch) {
-        const lookback = lDigitOddToEvenMatch[1] ? parseInt(lDigitOddToEvenMatch[1]) : 5;
-        settings.lDigitStrategy = {
-            enabled: true,
-            patternType: 'odd_to_even',
-            lookbackTicks: Math.min(20, Math.max(1, lookback)),
-        };
-        summary.push(`L→Digit: After loss, check last ${lookback} ticks, if all odd → trade Even`);
-    } else if (lDigitEvenToOddMatch) {
-        const lookback = lDigitEvenToOddMatch[1] ? parseInt(lDigitEvenToOddMatch[1]) : 5;
-        settings.lDigitStrategy = {
-            enabled: true,
-            patternType: 'even_to_odd',
-            lookbackTicks: Math.min(20, Math.max(1, lookback)),
-        };
-        summary.push(`L→Digit: After loss, check last ${lookback} ticks, if all even → trade Odd`);
-    } else if (lDigitOverToUnderMatch) {
-        const threshold = parseInt(lDigitOverToUnderMatch[1]);
-        const lookback = lDigitOverToUnderMatch[2] ? parseInt(lDigitOverToUnderMatch[2]) : 5;
-        if (threshold >= 0 && threshold <= 9) {
-            settings.lDigitStrategy = {
-                enabled: true,
-                patternType: 'over_to_under',
-                lookbackTicks: Math.min(20, Math.max(1, lookback)),
-                thresholdDigit: threshold,
-            };
-            summary.push(`L→Digit: After loss, check last ${lookback} ticks, if all > ${threshold} → trade Under ${threshold}`);
-        }
-    } else if (lDigitUnderToOverMatch) {
-        const threshold = parseInt(lDigitUnderToOverMatch[1]);
-        const lookback = lDigitUnderToOverMatch[2] ? parseInt(lDigitUnderToOverMatch[2]) : 5;
-        if (threshold >= 0 && threshold <= 9) {
-            settings.lDigitStrategy = {
-                enabled: true,
-                patternType: 'under_to_over',
-                lookbackTicks: Math.min(20, Math.max(1, lookback)),
-                thresholdDigit: threshold,
-            };
-            summary.push(`L→Digit: After loss, check last ${lookback} ticks, if all < ${threshold} → trade Over ${threshold}`);
-        }
-    }
-
-    const afterLossMatch = text.match(
-        /(?:after|if|when|incase|in case|following)\s+(?:of\s+)?(?:a\s+)?loss.*?\b(over|under)\s*(?:digit\s*)?([0-9])\b/
-    );
-    const firstOverUnderMatch = text.match(/\b(over|under)\s*(?:digit\s*)?([0-9])\b/);
-
-    if (firstOverUnderMatch) {
-        settings.tradeType = firstOverUnderMatch[1] === 'under' ? 'DIGITUNDER' : 'DIGITOVER';
-        settings.predictionBeforeLoss = firstOverUnderMatch[2];
-        settings.strategyMode = 'STANDARD';
-        summary.push(
-            `${settings.tradeType === 'DIGITUNDER' ? 'Digit Under' : 'Digit Over'} before-loss prediction ${firstOverUnderMatch[2]}`
-        );
-
-        if (afterLossMatch) {
-            const afterLossType = afterLossMatch[1] === 'under' ? 'DIGITUNDER' : 'DIGITOVER';
-            if (afterLossType !== settings.tradeType) {
-                warnings.push('After-loss prediction type was different, so only the digit value was applied.');
-            }
-            settings.predictionAfterLoss = afterLossMatch[2];
-            summary.push(`After-loss prediction ${afterLossMatch[2]}`);
-        }
-    } else if (/\b(?:rise|call)\b/.test(text)) {
-        settings.tradeType = 'CALL';
-        settings.strategyMode = 'STANDARD';
-        summary.push('Trade type Rise');
-    } else if (/\b(?:fall|put)\b/.test(text)) {
-        settings.tradeType = 'PUT';
-        settings.strategyMode = 'STANDARD';
-        summary.push('Trade type Fall');
-    } else if (/\b(?:only\s*ups?|run\s*high|higher)\b/.test(text)) {
-        settings.tradeType = 'RUNHIGH';
-        settings.strategyMode = 'STANDARD';
-        summary.push('Trade type Only Ups');
-    } else if (/\b(?:only\s*downs?|run\s*low|lower)\b/.test(text)) {
-        settings.tradeType = 'RUNLOW';
-        settings.strategyMode = 'STANDARD';
-        summary.push('Trade type Only Downs');
-    } else if (/\b(?:even)\b/.test(text)) {
-        settings.tradeType = 'DIGITEVEN';
-        settings.strategyMode = 'STANDARD';
-        summary.push('Trade type Digit Even');
-    } else if (/\b(?:odd)\b/.test(text)) {
-        settings.tradeType = 'DIGITODD';
-        settings.strategyMode = 'STANDARD';
-        summary.push('Trade type Digit Odd');
-    }
-
-    const analysisTicks = getAiNumber(text, [/\b(?:using|use|duration|for)\s*(\d+)\s*ticks?\b/, /\b(\d+)\s*ticks?\b/], 1, 10);
-    if (analysisTicks) {
-        settings.analysisTicks = analysisTicks;
-        summary.push(`${analysisTicks} analysis tick${analysisTicks === '1' ? '' : 's'}`);
-    }
-
-    const streak = getAiNumber(text, [/\bstreak\s*(?:of|=|is)?\s*(\d+)\b/, /\b(\d+)\s*(?:match|matches|streak)\b/], 1, 10);
-    if (streak) {
-        settings.streak = streak;
-        summary.push(`Streak ${streak}`);
-    }
-
-    const stake = getAiMoney(text, [/\bstake\s*(?:of|=|is)?\s*(\d+(?:\.\d+)?)\b/, /\bamount\s*(?:of|=|is)?\s*(\d+(?:\.\d+)?)\b/]);
-    if (stake) {
-        settings.stake = stake;
-        summary.push(`Stake ${stake}`);
-    }
-
-    const martingale = getAiMoney(text, [/\bmartingale\s*(?:x|of|=|is)?\s*(\d+(?:\.\d+)?)\b/]);
-    if (martingale) {
-        settings.martingale = martingale;
-        summary.push(`Martingale ${martingale}`);
-    }
-
-    const takeProfit = getAiMoney(text, [/\btake\s*profit\s*(?:of|=|is)?\s*(\d+(?:\.\d+)?)\b/, /\btp\s*(?:of|=|is)?\s*(\d+(?:\.\d+)?)\b/]);
-    if (takeProfit) {
-        settings.takeProfit = takeProfit;
-        summary.push(`Take profit ${takeProfit}`);
-    }
-
-    const stopLoss = getAiMoney(text, [/\bstop\s*loss\s*(?:of|=|is)?\s*(\d+(?:\.\d+)?)\b/, /\bsl\s*(?:of|=|is)?\s*(\d+(?:\.\d+)?)\b/]);
-    if (stopLoss) {
-        settings.stopLoss = stopLoss;
-        summary.push(`Stop loss ${stopLoss}`);
-    }
-
-    const marketSymbols = getAiMarketSymbols(text);
-    if (marketSymbols.length > 0) {
-        settings.selectedMarketSymbols = marketSymbols;
-        summary.push(`Markets: ${marketSymbols.join(', ')}`);
-    }
-
-    if (!settings.tradeType && !settings.selectedMarketSymbols?.length) {
-        warnings.push('I could not identify a contract type or market from that text.');
-    }
-
-    return { settings, summary, warnings, source: 'local' };
 };
 
 export const getPredictionForLastOutcome = ({
@@ -1056,6 +714,7 @@ interface MarketState {
     trailingTriggerCount: number;
     lDigitActive: boolean;
     lDigitOriginalTradeType: TradeType | null;
+    lDigitActiveSince: number | null;
 }
 
 interface MarketDisplay extends MarketState {
@@ -1097,6 +756,7 @@ const createMarketState = (prev?: Partial<MarketState>): MarketState => ({
     trailingTriggerCount: prev?.trailingTriggerCount ?? 0,
     lDigitActive: prev?.lDigitActive ?? false,
     lDigitOriginalTradeType: prev?.lDigitOriginalTradeType ?? null,
+    lDigitActiveSince: prev?.lDigitActiveSince ?? null,
 });
 
 const getDirectionSamplesFromQuotes = (quotes: number[]): Direction[] =>
@@ -1330,6 +990,7 @@ const AutoTrades = observer(() => {
             cooldownLeft: 0,
             lDigitActive: false,
             lDigitOriginalTradeType: null,
+            lDigitActiveSince: null,
         }))
     );
 
@@ -1353,6 +1014,7 @@ const AutoTrades = observer(() => {
         consecutiveLossThreshold: 2,
     });
     const tradeTypeRef = useRef<TradeType>('DIGITOVER');
+    const originalTradeTypeRef = useRef<TradeType>('DIGITOVER');
     const strategyTemplateRef = useRef<StrategyTemplate>('STANDARD');
     const barrierRef = useRef(4);
     const predictionBeforeLossRef = useRef(4);
@@ -1381,8 +1043,6 @@ const AutoTrades = observer(() => {
     const stopTradingRef = useRef<() => void>(() => {});
     const floatingStrategyAlertRef = useRef<FloatingStrategyAlert | null>(null);
     const lDigitStrategyRef = useRef(lDigitStrategy);
-    // Store original trade type for L→Digit restoration
-    const originalTradeTypeRef = useRef<TradeType>(tradeType);
 
     // Save L→digit strategy to localStorage
     useEffect(() => {
@@ -1413,13 +1073,23 @@ const AutoTrades = observer(() => {
         }
     }, [stake, martingale, takeProfit, stopLoss, martingaleMode, consecutiveLossCount]);
 
+    // Track original trade type separately
     useEffect(() => {
-        tradeTypeRef.current = tradeType;
         originalTradeTypeRef.current = tradeType;
         try {
             localStorage.setItem('auto_trades_tradeType', tradeType);
         } catch {
             // Ignore localStorage write failures.
+        }
+    }, [tradeType]);
+
+    // Only update tradeTypeRef when not in L→Digit mode
+    // This is controlled by the handleTick logic
+    useEffect(() => {
+        // Don't override if L→Digit is active
+        const hasActiveLDigit = Object.values(marketStatesRef.current).some(state => state.lDigitActive);
+        if (!hasActiveLDigit) {
+            tradeTypeRef.current = tradeType;
         }
     }, [tradeType]);
     
@@ -1788,14 +1458,8 @@ const AutoTrades = observer(() => {
 
     const executeTrade = useCallback(
         async (symbol: string, stakeAmount: number, lastResult: 'win' | 'loss' | null): Promise<number> => {
-            let ct = tradeTypeRef.current;
-            const state = marketStatesRef.current[symbol];
-            
-            // Check if L→Digit strategy is active and should override trade type
-            if (state?.lDigitActive && state.lDigitOriginalTradeType) {
-                // Use the L→Digit trade type (already set in tradeTypeRef)
-                ct = tradeTypeRef.current;
-            }
+            // Use the current trade type (which may have been switched by L→Digit)
+            const ct = tradeTypeRef.current;
             
             const bar = getActiveDigitBarrier(ct, lastResult, consecutiveLossRef.current);
             const tradeStartTime = Math.floor(Date.now() / 1000);
@@ -1896,15 +1560,31 @@ const AutoTrades = observer(() => {
 
             // FIX: L→Digit strategy - Reset on win, restore original trade type immediately
             if (profit > 0 && state.lDigitActive) {
+                // Deactivate L→Digit
                 state.lDigitActive = false;
+                state.lDigitActiveSince = null;
+                
+                // Restore original trade type immediately after win
                 if (state.lDigitOriginalTradeType) {
-                    // Restore original trade type immediately after win
                     tradeTypeRef.current = state.lDigitOriginalTradeType;
                     state.lDigitOriginalTradeType = null;
-                    // Update the original trade type ref
+                    // Also update the ref for future use
                     originalTradeTypeRef.current = tradeTypeRef.current;
                 }
+                
+                // Log the reset
+                conditionNotifierStore.setCondition({
+                    market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
+                    condition: `L→Digit: Deactivated on WIN, restored ${tradeTypeRef.current}`,
+                    digits: '',
+                    result: true,
+                    source: 'l-digit-reset',
+                    timestamp: Date.now(),
+                });
             }
+
+            // If it's a loss and L→Digit is enabled but not active, we'll activate in handleTick
+            // The activation happens in handleTick when isLossActive and state.lDigitActive is false
 
             if (!unmountedRef.current) {
                 refreshDisplays();
@@ -2024,7 +1704,7 @@ const AutoTrades = observer(() => {
 
             const pip = getMarketPipSize(symbol, AUTO_MARKET_LOOKUP.get(symbol)?.pip ?? 2);
             const quote = tick.quote as number;
-            const ct = tradeTypeRef.current;
+            let ct = tradeTypeRef.current;
             const targetLen = getEffectiveSignalStreak({
                 trade_type: ct,
                 configured_streak: streakRef.current,
@@ -2136,10 +1816,12 @@ const AutoTrades = observer(() => {
                 state.alertMessage = '';
             }
 
-            // FIX: L→Digit strategy - Check and activate on loss, deactivate on win
+            // FIX: L→Digit strategy - Check and activate on loss
+            // Check if we're in a loss state (previous trade was loss or consecutive losses > 0)
             const isLossActive = previousContractResultRef.current === 'loss' || consecutiveLossRef.current > 0;
             
             if (lDigitStrategyRef.current.enabled && isLossActive && !state.lDigitActive) {
+                // Evaluate the L→Digit condition
                 const lDigitConditionMet = evaluateLDigitCondition(
                     lDigitStrategyRef.current,
                     state.lastDigits,
@@ -2148,42 +1830,40 @@ const AutoTrades = observer(() => {
                 );
                 
                 if (lDigitConditionMet) {
+                    // Activate L→Digit strategy
                     state.lDigitActive = true;
-                    // Store the original trade type
+                    state.lDigitActiveSince = Date.now();
+                    
+                    // Store the original trade type before switching
                     state.lDigitOriginalTradeType = originalTradeTypeRef.current;
                     
+                    // Get the new trade type based on the pattern
                     const newTradeType = getLDigitTradeType(
                         lDigitStrategyRef.current,
-                        tradeTypeRef.current,
+                        originalTradeTypeRef.current,
                         activeBarrier
                     );
+                    
                     if (newTradeType) {
-                        // Immediately override the trade type
+                        // Immediately switch the trade type
                         tradeTypeRef.current = newTradeType;
+                        ct = newTradeType; // Update local ct for condition logging
                     }
                     
+                    // Log the activation
                     conditionNotifierStore.setCondition({
                         market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                        condition: `L→Digit: ${lDigitStrategyRef.current.patternType} pattern detected after loss`,
+                        condition: `L→Digit: ACTIVATED - ${lDigitStrategyRef.current.patternType} pattern detected after loss`,
                         digits: `[${state.lastDigits.slice(-lDigitStrategyRef.current.lookbackTicks).join(', ')}]`,
                         result: true,
-                        source: 'l-digit',
+                        source: 'l-digit-activate',
                         timestamp: Date.now(),
                     });
                 }
             }
 
-            // FIX: Reset L→Digit on win - restore original trade type immediately
-            if (state.lDigitActive && previousContractResultRef.current === 'win') {
-                state.lDigitActive = false;
-                if (state.lDigitOriginalTradeType) {
-                    // Restore the original trade type immediately on win
-                    tradeTypeRef.current = state.lDigitOriginalTradeType;
-                    state.lDigitOriginalTradeType = null;
-                    // Update the original trade type ref
-                    originalTradeTypeRef.current = tradeTypeRef.current;
-                }
-            }
+            // FIX: Reset L→Digit on win - handled in handleAfterTrade
+            // The deactivation happens in handleAfterTrade when profit > 0
 
             const riskFilteredDigitStreakReady =
                 !usesLossPrediction(ct) ||
@@ -2248,7 +1928,7 @@ const AutoTrades = observer(() => {
                 }
                 conditionNotifierStore.setCondition({
                     market: mkt?.label ?? symbol,
-                    condition: state.lDigitActive ? `L→Digit ACTIVE: ${condStr}` : condStr,
+                    condition: state.lDigitActive ? `🔴 L→Digit ACTIVE: ${condStr}` : condStr,
                     digits: digitsStr,
                     result: specialStrategyEvaluation ? specialStrategyEvaluation.isQualified : signalReady,
                     source: state.lDigitActive ? 'l-digit-active' : (specialStrategyEvaluation ? 'strategy-alert' : 'auto'),
@@ -2579,6 +2259,7 @@ const AutoTrades = observer(() => {
             state.lossCooldownLeft = 0;
             state.lDigitActive = false;
             state.lDigitOriginalTradeType = null;
+            state.lDigitActiveSince = null;
         });
         // Restore original trade type when stopping
         tradeTypeRef.current = originalTradeTypeRef.current;
@@ -2791,9 +2472,12 @@ const AutoTrades = observer(() => {
         const inv = inverseModeRef.current;
         const label = inv ? INVERSE_LABELS[tradeType] : TRADE_TYPE_LABELS[tradeType];
         
-        if (lDigitText && isLossActive) {
-            return `${lDigitText} | Streak: ${streakNum}+ → ${label}`;
-        } else if (lDigitStrategy.enabled && !isLossActive) {
+        // Check if any market has L→Digit active
+        const hasActiveLDigit = Object.values(marketStatesRef.current).some(state => state.lDigitActive);
+        
+        if (lDigitText && (isLossActive || hasActiveLDigit)) {
+            return `🔴 ${lDigitText} | Streak: ${streakNum}+ → ${label}`;
+        } else if (lDigitStrategy.enabled && !isLossActive && !hasActiveLDigit) {
             return `⚡ L→Digit Ready (activates after loss) | Streak: ${streakNum}+ → ${label}`;
         }
         
@@ -3127,7 +2811,7 @@ const AutoTrades = observer(() => {
                                     </p>
                                 </div>
 
-                                {/* Signal Mode - moved L→Digit to after this section */}
+                                {/* Signal Mode - L→Digit moved to after this section */}
                                 {strategyMode !== 'PERCENTAGE' && !usingSpecialStrategy && (
                                     <div className='auto-trades-config__group'>
                                         <button
@@ -3155,7 +2839,7 @@ const AutoTrades = observer(() => {
                                     </div>
                                 )}
 
-                                {/* L→Digit Strategy Section - MOVED AFTER SIGNAL MODE */}
+                                {/* L→Digit Strategy Section - AFTER SIGNAL MODE */}
                                 <div className='auto-trades-l-digit-section'>
                                     <div className='auto-trades-l-digit-section__header'>
                                         <span className='auto-trades-l-digit-section__icon'>🎯</span>
