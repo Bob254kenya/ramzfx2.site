@@ -1,5 +1,4 @@
-// auto-trades.tsx - FIXED VERSION
-
+// auto-trades.tsx - FULLY WORKING VERSION
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
@@ -407,7 +406,7 @@ export const hasRequiredDigitStreak = ({
         .every(digit => isDigitSignalMatch({ trade_type, digit, barrier, inverse }));
 };
 
-// Evaluate L→digit strategy condition - FIXED: Properly check pattern
+// Evaluate L→digit strategy condition
 const evaluateLDigitCondition = (
     lDigitStrategy: LDigitAnalysis | null,
     digits: number[],
@@ -713,9 +712,11 @@ interface MarketState {
     qualifyingWinningDigits: number[];
     specialEntryReady: boolean;
     trailingTriggerCount: number;
+    // L→Digit state
     lDigitActive: boolean;
     lDigitOriginalTradeType: TradeType | null;
     lDigitActiveSince: number | null;
+    lDigitPatternMatched: boolean; // Track if pattern was matched for this loss cycle
 }
 
 interface MarketDisplay extends MarketState {
@@ -758,6 +759,7 @@ const createMarketState = (prev?: Partial<MarketState>): MarketState => ({
     lDigitActive: prev?.lDigitActive ?? false,
     lDigitOriginalTradeType: prev?.lDigitOriginalTradeType ?? null,
     lDigitActiveSince: prev?.lDigitActiveSince ?? null,
+    lDigitPatternMatched: prev?.lDigitPatternMatched ?? false,
 });
 
 const getDirectionSamplesFromQuotes = (quotes: number[]): Direction[] =>
@@ -992,6 +994,7 @@ const AutoTrades = observer(() => {
             lDigitActive: false,
             lDigitOriginalTradeType: null,
             lDigitActiveSince: null,
+            lDigitPatternMatched: false,
         }))
     );
 
@@ -1564,6 +1567,7 @@ const AutoTrades = observer(() => {
                 // Deactivate L→Digit
                 state.lDigitActive = false;
                 state.lDigitActiveSince = null;
+                state.lDigitPatternMatched = false;
                 
                 // Restore original trade type immediately after win
                 if (state.lDigitOriginalTradeType) {
@@ -1584,8 +1588,10 @@ const AutoTrades = observer(() => {
                 });
             }
 
-            // If it's a loss and L→Digit is enabled but not active, we'll activate in handleTick
-            // The activation happens in handleTick when previousContractResultRef.current === 'loss'
+            // If it's a loss, reset the pattern matched flag so we can re-evaluate
+            if (profit < 0) {
+                state.lDigitPatternMatched = false;
+            }
 
             if (!unmountedRef.current) {
                 refreshDisplays();
@@ -1696,7 +1702,7 @@ const AutoTrades = observer(() => {
 
     handleCandleRef.current = handleCandle;
 
-    // FIXED: handleTick - Properly activate L→Digit on loss
+    // FIXED: handleTick - Properly activate L→Digit on loss with pattern matching
     const handleTick = useCallback(
         (symbol: string, tick: any) => {
             if (!monitoredMarketSymbolsRef.current.has(symbol)) return;
@@ -1818,59 +1824,103 @@ const AutoTrades = observer(() => {
                 state.alertMessage = '';
             }
 
-            // FIXED: L→Digit strategy - Check and activate on loss
-            // Check if we're in a loss state (previous trade was loss)
+            // ============================================================
+            // FIXED: L→Digit Strategy Logic
+            // ============================================================
+            
+            // Check if we're in a loss state
             const isLossActive = previousContractResultRef.current === 'loss';
             
-            // Only activate L→Digit if:
-            // 1. L→Digit is enabled
-            // 2. We're in a loss state
-            // 3. L→Digit is not already active
-            // 4. We have a valid original trade type stored
-            if (lDigitStrategyRef.current.enabled && isLossActive && !state.lDigitActive) {
-                // Evaluate the L→Digit condition using the current digits/directions
-                const lDigitConditionMet = evaluateLDigitCondition(
+            // Check if L→Digit is enabled
+            const lDigitEnabled = lDigitStrategyRef.current.enabled;
+            
+            // Evaluate the L→Digit condition using the current data
+            const lDigitConditionMet = lDigitEnabled ? evaluateLDigitCondition(
+                lDigitStrategyRef.current,
+                state.lastDigits,
+                state.directionHistory,
+                activeBarrier
+            ) : false;
+
+            // CASE 1: L→Digit is NOT active, but we're in a loss state AND the pattern matches
+            if (lDigitEnabled && isLossActive && !state.lDigitActive && lDigitConditionMet && !state.lDigitPatternMatched) {
+                // Store the current trade type as the original
+                state.lDigitOriginalTradeType = originalTradeTypeRef.current;
+                
+                // Get the new trade type based on the pattern
+                const newTradeType = getLDigitTradeType(
+                    lDigitStrategyRef.current,
+                    originalTradeTypeRef.current,
+                    activeBarrier
+                );
+                
+                if (newTradeType) {
+                    // Activate L→Digit
+                    state.lDigitActive = true;
+                    state.lDigitActiveSince = Date.now();
+                    state.lDigitPatternMatched = true;
+                    
+                    // Immediately switch the trade type
+                    tradeTypeRef.current = newTradeType;
+                    ct = newTradeType; // Update local ct for condition logging
+                    
+                    // Log the activation
+                    conditionNotifierStore.setCondition({
+                        market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
+                        condition: `🔴 L→Digit: ACTIVATED - ${lDigitStrategyRef.current.patternType} pattern detected after loss`,
+                        digits: `[${state.lastDigits.slice(-lDigitStrategyRef.current.lookbackTicks).join(', ')}]`,
+                        result: true,
+                        source: 'l-digit-activate',
+                        timestamp: Date.now(),
+                    });
+                }
+            }
+
+            // CASE 2: L→Digit IS active, verify the pattern still matches
+            if (state.lDigitActive) {
+                // Check if pattern still matches
+                const patternStillMatches = evaluateLDigitCondition(
                     lDigitStrategyRef.current,
                     state.lastDigits,
                     state.directionHistory,
                     activeBarrier
                 );
                 
-                if (lDigitConditionMet) {
-                    // Store the current trade type as the original
-                    state.lDigitOriginalTradeType = originalTradeTypeRef.current;
+                // If pattern no longer matches, deactivate L→Digit and restore original
+                if (!patternStillMatches && state.lDigitOriginalTradeType) {
+                    // Deactivate L→Digit
+                    state.lDigitActive = false;
+                    state.lDigitActiveSince = null;
+                    state.lDigitPatternMatched = false;
                     
-                    // Get the new trade type based on the pattern
-                    const newTradeType = getLDigitTradeType(
-                        lDigitStrategyRef.current,
-                        originalTradeTypeRef.current,
-                        activeBarrier
-                    );
+                    // Restore original trade type
+                    tradeTypeRef.current = state.lDigitOriginalTradeType;
+                    ct = tradeTypeRef.current;
+                    state.lDigitOriginalTradeType = null;
                     
-                    if (newTradeType) {
-                        // Activate L→Digit
-                        state.lDigitActive = true;
-                        state.lDigitActiveSince = Date.now();
-                        
-                        // Immediately switch the trade type
-                        tradeTypeRef.current = newTradeType;
-                        ct = newTradeType; // Update local ct for condition logging
-                        
-                        // Log the activation
-                        conditionNotifierStore.setCondition({
-                            market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                            condition: `L→Digit: ACTIVATED - ${lDigitStrategyRef.current.patternType} pattern detected after loss`,
-                            digits: `[${state.lastDigits.slice(-lDigitStrategyRef.current.lookbackTicks).join(', ')}]`,
-                            result: true,
-                            source: 'l-digit-activate',
-                            timestamp: Date.now(),
-                        });
-                    }
+                    // Log the deactivation
+                    conditionNotifierStore.setCondition({
+                        market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
+                        condition: `L→Digit: Deactivated - pattern no longer matches, restored ${tradeTypeRef.current}`,
+                        digits: `[${state.lastDigits.slice(-lDigitStrategyRef.current.lookbackTicks).join(', ')}]`,
+                        result: false,
+                        source: 'l-digit-deactivate',
+                        timestamp: Date.now(),
+                    });
                 }
             }
 
-            // FIXED: Reset L→Digit on win - handled in handleAfterTrade
-            // The deactivation happens in handleAfterTrade when profit > 0
+            // CASE 3: L→Digit is active but we're in a loss state and the pattern matched flag is not set
+            // This handles the case where we're in a loss state but the pattern wasn't matched yet
+            if (lDigitEnabled && isLossActive && !state.lDigitActive && lDigitConditionMet && !state.lDigitPatternMatched) {
+                // This is handled in CASE 1 above
+                // But we need to ensure we don't miss it if the condition just became true
+                // The CASE 1 check handles this
+            }
+
+            // ============================================================
+            // END L→Digit Strategy Logic
+            // ============================================================
 
             const riskFilteredDigitStreakReady =
                 !usesLossPrediction(ct) ||
@@ -2267,6 +2317,7 @@ const AutoTrades = observer(() => {
             state.lDigitActive = false;
             state.lDigitOriginalTradeType = null;
             state.lDigitActiveSince = null;
+            state.lDigitPatternMatched = false;
         });
         // Restore original trade type when stopping
         tradeTypeRef.current = originalTradeTypeRef.current;
@@ -2450,6 +2501,9 @@ const AutoTrades = observer(() => {
     const activeBarrier = getActiveDigitBarrier(tradeType, previousContractResult, consecutiveLossRef.current);
     const isLossActive = previousContractResult === 'loss' || consecutiveLossRef.current > 0;
 
+    // Check if any market has L→Digit active
+    const hasActiveLDigit = Object.values(marketStatesRef.current).some(state => state.lDigitActive);
+
     const getLDigitStrategyText = () => {
         if (!lDigitStrategy.enabled) return null;
         switch (lDigitStrategy.patternType) {
@@ -2478,9 +2532,6 @@ const AutoTrades = observer(() => {
         const lDigitText = getLDigitStrategyText();
         const inv = inverseModeRef.current;
         const label = inv ? INVERSE_LABELS[tradeType] : TRADE_TYPE_LABELS[tradeType];
-        
-        // Check if any market has L→Digit active
-        const hasActiveLDigit = Object.values(marketStatesRef.current).some(state => state.lDigitActive);
         
         if (lDigitText && (isLossActive || hasActiveLDigit)) {
             return `🔴 ${lDigitText} | Streak: ${streakNum}+ → ${label}`;
@@ -2852,10 +2903,10 @@ const AutoTrades = observer(() => {
                                         <span className='auto-trades-l-digit-section__icon'>🎯</span>
                                         <span className='auto-trades-l-digit-section__title'>L→Digit Strategy</span>
                                         <span className={classNames('auto-trades-l-digit-section__badge', {
-                                            'auto-trades-l-digit-section__badge--active': lDigitStrategy.enabled && isLossActive && isRunning,
-                                            'auto-trades-l-digit-section__badge--ready': lDigitStrategy.enabled && !isLossActive && isRunning,
+                                            'auto-trades-l-digit-section__badge--active': lDigitStrategy.enabled && isLossActive && isRunning && hasActiveLDigit,
+                                            'auto-trades-l-digit-section__badge--ready': lDigitStrategy.enabled && isLossActive && isRunning && !hasActiveLDigit,
                                         })}>
-                                            {lDigitStrategy.enabled ? (isLossActive && isRunning ? 'ACTIVE' : isRunning ? 'READY' : 'ON') : 'OFF'}
+                                            {lDigitStrategy.enabled && isRunning ? (hasActiveLDigit ? 'ACTIVE' : isLossActive ? 'READY' : 'ON') : 'OFF'}
                                         </span>
                                     </div>
                                     
@@ -3050,7 +3101,7 @@ const AutoTrades = observer(() => {
                                                 borderLeft: '3px solid #2a7de1'
                                             }}>
                                                 ⚡ <strong>Activates</strong> AFTER a loss when pattern matches<br />
-                                                🔄 <strong>Deactivates</strong> AFTER a win, restoring original strategy<br />
+                                                🔄 <strong>Deactivates</strong> AFTER a win or when pattern breaks<br />
                                                 📊 Overrides current trade type with opposite pattern when active
                                             </p>
                                         </div>
@@ -3225,9 +3276,10 @@ const AutoTrades = observer(() => {
                                 )}
                                 {lDigitStrategy.enabled && (
                                     <span className={classNames('auto-trades-markets__l-digit-badge', {
-                                        'auto-trades-markets__l-digit-badge--active': isLossActive && isRunning
+                                        'auto-trades-markets__l-digit-badge--active': hasActiveLDigit && isRunning,
+                                        'auto-trades-markets__l-digit-badge--ready': isLossActive && !hasActiveLDigit && isRunning,
                                     })}>
-                                        {isLossActive && isRunning ? '🔴 L→Digit ACTIVE' : '⚡ L→Digit Ready'}
+                                        {hasActiveLDigit && isRunning ? '🔴 L→Digit ACTIVE' : isLossActive && isRunning ? '⚡ L→Digit Ready' : '⚡ L→Digit On'}
                                     </span>
                                 )}
                             </h2>
