@@ -36,7 +36,6 @@ type MartingaleModeType =
 
 type AutoMarket = { symbol: string; label: string; pip: number };
 type Direction = 1 | -1 | 0;
-type AiFabPosition = { left: number; top: number };
 type StrategyTemplate = 'STANDARD' | DigitStrategyId;
 type FloatingStrategyAlert = {
     marketLabel: string;
@@ -65,9 +64,6 @@ type LDigitAnalysis = {
 };
 
 const FIVE_MINUTE_GRANULARITY = 300;
-const AI_FAB_SIZE = 72;
-const AI_FAB_MARGIN = 12;
-const AI_FAB_BOTTOM_GUARD = 82;
 const STRATEGY_ALERT_SOUND_ID = 'announcement';
 
 const AUTO_MARKETS: AutoMarket[] = SUPPORTED_VOLATILITY_MARKETS.map(market => ({
@@ -302,24 +298,6 @@ const playStrategyAlertSound = () => {
 
     audio.currentTime = 0;
     audio.play().catch(() => {});
-};
-
-const clampAiFabPosition = (left: number, top: number): AiFabPosition => {
-    if (typeof window === 'undefined') return { left, top };
-
-    const maxLeft = Math.max(AI_FAB_MARGIN, window.innerWidth - AI_FAB_SIZE - AI_FAB_MARGIN);
-    const maxTop = Math.max(AI_FAB_MARGIN, window.innerHeight - AI_FAB_SIZE - AI_FAB_BOTTOM_GUARD);
-
-    return {
-        left: Math.min(Math.max(AI_FAB_MARGIN, left), maxLeft),
-        top: Math.min(Math.max(AI_FAB_MARGIN, left), maxTop),
-    };
-};
-
-const getDefaultAiFabPosition = () => {
-    if (typeof window === 'undefined') return { left: AI_FAB_MARGIN, top: AI_FAB_MARGIN };
-
-    return clampAiFabPosition(window.innerWidth - AI_FAB_SIZE - 16, window.innerHeight - AI_FAB_SIZE - 104);
 };
 
 const normalizeMartingaleMode = (value: unknown): MartingaleModeType => {
@@ -1316,33 +1294,6 @@ const AutoTrades = observer(() => {
     const modeTransitionLockRef = useRef(false);
     const isRecoveringDataRef = useRef(false);
     const [showDisclaimer, setShowDisclaimer] = useState(false);
-    const [showAiStrategy, setShowAiStrategy] = useState(false);
-    const [aiStrategyText, setAiStrategyText] = useState('');
-    const [aiStrategyResult, setAiStrategyResult] = useState<AiAutoTradeParseResult | null>(null);
-    const [aiStrategyLoading, setAiStrategyLoading] = useState(false);
-    const [selectedAiPresetId, setSelectedAiPresetId] = useState('');
-    const aiPresetFamilies = useMemo(
-        () =>
-            AUTO_TRADE_STRATEGY_FAMILIES.map(family => ({
-                ...family,
-                presets: family.presetIds
-                    .map(id => AUTO_TRADE_STRATEGY_PRESET_LOOKUP.get(id))
-                    .filter((preset): preset is AutoTradeStrategyPreset => Boolean(preset)),
-            })),
-        []
-    );
-    const [aiFabPosition, setAiFabPosition] = useState<AiFabPosition | null>(() => {
-        try {
-            const saved = localStorage.getItem('auto_trades_aiFabPosition');
-            if (!saved) return null;
-            const parsed = JSON.parse(saved);
-            if (typeof parsed?.left !== 'number' || typeof parsed?.top !== 'number') return null;
-            return parsed;
-        } catch {
-            return null;
-        }
-    });
-    const [isAiFabDragging, setIsAiFabDragging] = useState(false);
     const [currentStakeDisplay, setCurrentStakeDisplay] = useState(1);
     const [cooldownDisplay, setCooldownDisplay] = useState(0);
     const [dataStreamLoading, setDataStreamLoading] = useState(false);
@@ -1423,16 +1374,6 @@ const AutoTrades = observer(() => {
     const restartTimerRef = useRef<number | null>(null);
     const modeTransitionTimerRef = useRef<number | null>(null);
     const contractStreamAbortControllersRef = useRef<Set<AbortController>>(new Set());
-    const aiFabDragRef = useRef({
-        active: false,
-        moved: false,
-        pointerId: null as number | null,
-        startX: 0,
-        startY: 0,
-        startLeft: 0,
-        startTop: 0,
-    });
-    const suppressAiFabClickRef = useRef(false);
     const show_auto = active_tab === DBOT_TABS.AUTO_TRADES;
     const show_auto_ref = useRef(show_auto);
     show_auto_ref.current = show_auto;
@@ -1452,91 +1393,6 @@ const AutoTrades = observer(() => {
         }
         lDigitStrategyRef.current = lDigitStrategy;
     }, [lDigitStrategy]);
-
-    useEffect(() => {
-        setAiFabPosition(current => {
-            const fallback = getDefaultAiFabPosition();
-            return clampAiFabPosition(current?.left ?? fallback.left, current?.top ?? fallback.top);
-        });
-
-        const handleResize = () => {
-            setAiFabPosition(current => {
-                const next = current ? clampAiFabPosition(current.left, current.top) : getDefaultAiFabPosition();
-                try {
-                    localStorage.setItem('auto_trades_aiFabPosition', JSON.stringify(next));
-                } catch {
-                    // Ignore localStorage write failures.
-                }
-                return next;
-            });
-        };
-
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
-
-    useEffect(() => {
-        if (!aiFabPosition) return;
-        try {
-            localStorage.setItem('auto_trades_aiFabPosition', JSON.stringify(aiFabPosition));
-        } catch {
-            // Ignore localStorage write failures.
-        }
-    }, [aiFabPosition]);
-
-    const handleAiFabPointerDown = useCallback(
-        (event: any) => {
-            if (isRunning) return;
-
-            const currentPosition = aiFabPosition ?? getDefaultAiFabPosition();
-            aiFabDragRef.current = {
-                active: true,
-                moved: false,
-                pointerId: event.pointerId,
-                startX: event.clientX,
-                startY: event.clientY,
-                startLeft: currentPosition.left,
-                startTop: currentPosition.top,
-            };
-            setAiFabPosition(currentPosition);
-            setIsAiFabDragging(true);
-            event.currentTarget?.setPointerCapture?.(event.pointerId);
-        },
-        [aiFabPosition, isRunning]
-    );
-
-    const handleAiFabPointerMove = useCallback((event: any) => {
-        const drag = aiFabDragRef.current;
-        if (!drag.active || drag.pointerId !== event.pointerId) return;
-
-        const dx = event.clientX - drag.startX;
-        const dy = event.clientY - drag.startY;
-        if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
-            drag.moved = true;
-        }
-        setAiFabPosition(clampAiFabPosition(drag.startLeft + dx, drag.startTop + dy));
-    }, []);
-
-    const finishAiFabDrag = useCallback((event: any) => {
-        const drag = aiFabDragRef.current;
-        if (!drag.active || drag.pointerId !== event.pointerId) return;
-
-        aiFabDragRef.current = { ...drag, active: false, pointerId: null };
-        setIsAiFabDragging(false);
-        event.currentTarget?.releasePointerCapture?.(event.pointerId);
-
-        if (drag.moved) {
-            suppressAiFabClickRef.current = true;
-            window.setTimeout(() => {
-                suppressAiFabClickRef.current = false;
-            }, 0);
-        }
-    }, []);
-
-    const handleAiFabClick = useCallback(() => {
-        if (suppressAiFabClickRef.current || isRunning) return;
-        setShowAiStrategy(true);
-    }, [isRunning]);
 
     useEffect(() => {
         configRef.current = {
@@ -1566,6 +1422,7 @@ const AutoTrades = observer(() => {
             // Ignore localStorage write failures.
         }
     }, [tradeType]);
+    
     useEffect(() => {
         strategyTemplateRef.current = strategyTemplate;
         try {
@@ -1576,11 +1433,13 @@ const AutoTrades = observer(() => {
         const templateConfig = getTemplateTradeConfig(strategyTemplate);
         if (!templateConfig) return;
 
+        // Fix: Ensure OVER_2_MARKET and UNDER_7_MARKET work correctly
         setTradeType(templateConfig.tradeType);
         setBarrier(templateConfig.barrier);
         setAnalysisTicks('1');
         setInverseMode(false);
     }, [strategyTemplate]);
+    
     useEffect(() => {
         barrierRef.current = getDigitNumber(barrier, 4);
         try {
@@ -1865,107 +1724,6 @@ const AutoTrades = observer(() => {
         }
     }, []);
 
-    const applyAiSettings = useCallback((result: AiAutoTradeParseResult) => {
-        const { settings } = result;
-
-        if (settings.tradeType) {
-            setTradeType(settings.tradeType);
-            setBarrier(settings.barrier ?? DEFAULT_BARRIER[settings.tradeType]);
-        }
-        if (settings.predictionBeforeLoss != null) setPredictionBeforeLoss(settings.predictionBeforeLoss);
-        if (settings.predictionAfterLoss != null) setPredictionAfterLoss(settings.predictionAfterLoss);
-        if (settings.analysisTicks != null) setAnalysisTicks(settings.analysisTicks);
-        if (settings.selectedMarketSymbols?.length) setSelectedMarketSymbols(settings.selectedMarketSymbols);
-        if (settings.stake != null) setStake(settings.stake);
-        if (settings.martingale != null) setMartingale(settings.martingale);
-        if (settings.takeProfit != null) setTakeProfit(settings.takeProfit);
-        if (settings.stopLoss != null) setStopLoss(settings.stopLoss);
-        if (settings.streak != null) setStreak(settings.streak);
-        if (settings.strategyMode != null) setStrategyMode(settings.strategyMode);
-        if (settings.martingaleMode != null) setMartingaleMode(normalizeMartingaleMode(settings.martingaleMode));
-        if (settings.consecutiveLossCount != null) {
-            const normalizedLossCount = clampConsecutiveLossThreshold(settings.consecutiveLossCount);
-            setConsecutiveLossCount(normalizedLossCount);
-            setConsecutiveLossCountInput(String(normalizedLossCount));
-        }
-        if (settings.lDigitStrategy != null) {
-            setLDigitStrategy(settings.lDigitStrategy);
-        }
-    }, []);
-
-    const handleAiPresetChange = useCallback(
-        (event: ChangeEvent<HTMLSelectElement>) => {
-            const presetId = event.target.value;
-            setSelectedAiPresetId(presetId);
-
-            const preset = AUTO_TRADE_STRATEGY_PRESET_LOOKUP.get(presetId);
-            if (!preset) return;
-
-            const presetResult = normalizeAiAutoTradePlan({
-                settings: preset.settings,
-                summary: preset.summary,
-                warnings: [],
-                customStrategy: {
-                    intent: preset.description,
-                    entryRules: [preset.description],
-                    riskRules: [
-                        `Stake ${preset.settings.stake}, martingale ${preset.settings.martingale}, stop loss ${preset.settings.stopLoss}`,
-                    ],
-                },
-                confidence: preset.confidence,
-                source: 'preset',
-            });
-
-            setAiStrategyText(preset.description);
-            setAiStrategyResult(presetResult);
-            applyAiSettings(presetResult);
-        },
-        [applyAiSettings]
-    );
-
-    const applyAiStrategy = useCallback(async () => {
-        const localResult = parseAiAutoTradeStrategy(aiStrategyText);
-
-        if (!aiStrategyText.trim()) {
-            setAiStrategyResult(localResult);
-            return;
-        }
-
-        setAiStrategyLoading(true);
-
-        try {
-            const response = await fetch(`${API_BASE}/ai/auto-trade-strategy`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ strategyText: aiStrategyText }),
-            });
-
-            if (!response.ok) {
-                const error = await response.json().catch(() => null);
-                throw new Error(error?.error || 'AI strategy service is unavailable.');
-            }
-
-            const aiResult = normalizeAiAutoTradePlan({ ...(await response.json()), source: 'openai' });
-            setAiStrategyResult(aiResult);
-            if (aiResult.warnings.length === 0 || aiResult.summary.length > 0) applyAiSettings(aiResult);
-        } catch (error) {
-            const fallback = normalizeAiAutoTradePlan({
-                ...localResult,
-                warnings: [
-                    ...localResult.warnings,
-                    error instanceof Error
-                        ? `OpenAI unavailable, applied local understanding instead: ${error.message}`
-                        : 'OpenAI unavailable, applied local understanding instead.',
-                ],
-                source: 'local',
-            });
-            setAiStrategyResult(fallback);
-            if (fallback.warnings.length === 0 || fallback.summary.length > 0) applyAiSettings(fallback);
-        } finally {
-            setAiStrategyLoading(false);
-        }
-    }, [aiStrategyText, applyAiSettings]);
-
     const pushContract = useCallback(
         (data: any) => {
             try {
@@ -2136,14 +1894,14 @@ const AutoTrades = observer(() => {
             state.trading = false;
             globalTradingRef.current = false;
 
-            // Reset L→Digit active flag on win - FIXED: Restore original trade type
+            // FIX: L→Digit strategy - Reset on win, restore original trade type immediately
             if (profit > 0 && state.lDigitActive) {
                 state.lDigitActive = false;
                 if (state.lDigitOriginalTradeType) {
-                    // Restore original trade type after win
+                    // Restore original trade type immediately after win
                     tradeTypeRef.current = state.lDigitOriginalTradeType;
                     state.lDigitOriginalTradeType = null;
-                    // Also update the ref for future use
+                    // Update the original trade type ref
                     originalTradeTypeRef.current = tradeTypeRef.current;
                 }
             }
@@ -2378,7 +2136,7 @@ const AutoTrades = observer(() => {
                 state.alertMessage = '';
             }
 
-            // Check L→Digit strategy activation on loss - FIXED: Proper activation and deactivation
+            // FIX: L→Digit strategy - Check and activate on loss, deactivate on win
             const isLossActive = previousContractResultRef.current === 'loss' || consecutiveLossRef.current > 0;
             
             if (lDigitStrategyRef.current.enabled && isLossActive && !state.lDigitActive) {
@@ -2400,7 +2158,7 @@ const AutoTrades = observer(() => {
                         activeBarrier
                     );
                     if (newTradeType) {
-                        // Temporarily override the trade type
+                        // Immediately override the trade type
                         tradeTypeRef.current = newTradeType;
                     }
                     
@@ -2415,11 +2173,11 @@ const AutoTrades = observer(() => {
                 }
             }
 
-            // Reset L→Digit on win - FIXED: This now properly restores the original trade type
+            // FIX: Reset L→Digit on win - restore original trade type immediately
             if (state.lDigitActive && previousContractResultRef.current === 'win') {
                 state.lDigitActive = false;
                 if (state.lDigitOriginalTradeType) {
-                    // Restore the original trade type
+                    // Restore the original trade type immediately on win
                     tradeTypeRef.current = state.lDigitOriginalTradeType;
                     state.lDigitOriginalTradeType = null;
                     // Update the original trade type ref
@@ -3078,12 +2836,6 @@ const AutoTrades = observer(() => {
         return subtitleTxt;
     })();
 
-    const resolvedAiFabPosition = aiFabPosition ?? getDefaultAiFabPosition();
-    const aiFabStyle = {
-        '--auto-trades-ai-fab-left': `${resolvedAiFabPosition.left}px`,
-        '--auto-trades-ai-fab-top': `${resolvedAiFabPosition.top}px`,
-    } as any;
-
     return (
         <div className='auto-trades-page'>
             <ThemedScrollbars className='auto-trades-page__scroll'>
@@ -3186,166 +2938,6 @@ const AutoTrades = observer(() => {
                             {/* Settings card */}
                             <div className='auto-trades-card'>
                                 <h2 className='auto-trades-card__title'>Settings</h2>
-
-                                {/* L→Digit Strategy Section - MOVED BEFORE MARTINGALE STRATEGY */}
-                                <div className='auto-trades-l-digit-section'>
-                                    <div className='auto-trades-l-digit-section__header'>
-                                        <span className='auto-trades-l-digit-section__icon'>🎯</span>
-                                        <span className='auto-trades-l-digit-section__title'>L→Digit Strategy</span>
-                                        <span className={classNames('auto-trades-l-digit-section__badge', {
-                                            'auto-trades-l-digit-section__badge--active': lDigitStrategy.enabled && isLossActive && isRunning,
-                                            'auto-trades-l-digit-section__badge--ready': lDigitStrategy.enabled && !isLossActive && isRunning,
-                                        })}>
-                                            {lDigitStrategy.enabled ? (isLossActive && isRunning ? 'ACTIVE' : isRunning ? 'READY' : 'ON') : 'OFF'}
-                                        </span>
-                                    </div>
-                                    
-                                    <div className='auto-trades-strategy-selector'>
-                                        <select
-                                            className='auto-trades-strategy-selector__select l-digit-select'
-                                            value={lDigitStrategy.enabled ? lDigitStrategy.patternType : 'disabled'}
-                                            onChange={e => {
-                                                const value = e.target.value;
-                                                if (value === 'disabled') {
-                                                    setLDigitStrategy({ enabled: false, patternType: 'odd_to_even', lookbackTicks: 5 });
-                                                } else if (value === 'odd_to_even') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'odd_to_even',
-                                                        lookbackTicks: 5,
-                                                    });
-                                                } else if (value === 'even_to_odd') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'even_to_odd',
-                                                        lookbackTicks: 5,
-                                                    });
-                                                } else if (value === 'over_to_under') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'over_to_under',
-                                                        lookbackTicks: 5,
-                                                        thresholdDigit: 4,
-                                                    });
-                                                } else if (value === 'under_to_over') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'under_to_over',
-                                                        lookbackTicks: 5,
-                                                        thresholdDigit: 4,
-                                                    });
-                                                } else if (value === 'match_to_diff') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'match_to_diff',
-                                                        lookbackTicks: 5,
-                                                        barrierDigit: 4,
-                                                    });
-                                                } else if (value === 'diff_to_match') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'diff_to_match',
-                                                        lookbackTicks: 5,
-                                                        barrierDigit: 4,
-                                                    });
-                                                } else if (value === 'rise_to_fall') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'rise_to_fall',
-                                                        lookbackTicks: 5,
-                                                    });
-                                                } else if (value === 'fall_to_rise') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'fall_to_rise',
-                                                        lookbackTicks: 5,
-                                                    });
-                                                }
-                                            }}
-                                            disabled={isRunning}
-                                        >
-                                            <option value='disabled'>⚫ Disabled</option>
-                                            <option value='odd_to_even'>🔴 Odd → Even</option>
-                                            <option value='even_to_odd'>🟢 Even → Odd</option>
-                                            <option value='over_to_under'>📉 Over → Under</option>
-                                            <option value='under_to_over'>📈 Under → Over</option>
-                                            <option value='match_to_diff'>🎯 Match → Differs</option>
-                                            <option value='diff_to_match'>🎯 Differs → Match</option>
-                                            <option value='rise_to_fall'>⬆️ Rise → Fall</option>
-                                            <option value='fall_to_rise'>⬇️ Fall → Rise</option>
-                                        </select>
-                                    </div>
-                                    
-                                    {lDigitStrategy.enabled && (
-                                        <div className='auto-trades-l-digit-section__config'>
-                                            <div className='auto-trades-l-digit-section__field'>
-                                                <label>Lookback Ticks</label>
-                                                <div className='auto-trades-l-digit-section__lookback'>
-                                                    <input
-                                                        type='range'
-                                                        min='1'
-                                                        max='20'
-                                                        step='1'
-                                                        value={lDigitStrategy.lookbackTicks}
-                                                        onChange={e => setLDigitStrategy(prev => ({
-                                                            ...prev,
-                                                            lookbackTicks: parseInt(e.target.value)
-                                                        }))}
-                                                        disabled={isRunning}
-                                                    />
-                                                    <div className='auto-trades-l-digit-section__lookback-value'>
-                                                        <span>{lDigitStrategy.lookbackTicks}</span>
-                                                        <span>ticks</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            
-                                            {(lDigitStrategy.patternType === 'over_to_under' || lDigitStrategy.patternType === 'under_to_over') && (
-                                                <div className='auto-trades-l-digit-section__field'>
-                                                    <label>Threshold Digit</label>
-                                                    <select
-                                                        className='auto-trades-config__select'
-                                                        value={lDigitStrategy.thresholdDigit}
-                                                        onChange={e => setLDigitStrategy(prev => ({
-                                                            ...prev,
-                                                            thresholdDigit: parseInt(e.target.value)
-                                                        }))}
-                                                        disabled={isRunning}
-                                                    >
-                                                        {[0,1,2,3,4,5,6,7,8,9].map(d => (
-                                                            <option key={d} value={d}>{d}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            )}
-                                            
-                                            {(lDigitStrategy.patternType === 'match_to_diff' || lDigitStrategy.patternType === 'diff_to_match') && (
-                                                <div className='auto-trades-l-digit-section__field'>
-                                                    <label>Barrier Digit</label>
-                                                    <select
-                                                        className='auto-trades-config__select'
-                                                        value={lDigitStrategy.barrierDigit}
-                                                        onChange={e => setLDigitStrategy(prev => ({
-                                                            ...prev,
-                                                            barrierDigit: parseInt(e.target.value)
-                                                        }))}
-                                                        disabled={isRunning}
-                                                    >
-                                                        {[0,1,2,3,4,5,6,7,8,9].map(d => (
-                                                            <option key={d} value={d}>{d}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            )}
-                                            
-                                            <p className='auto-trades-l-digit-section__hint'>
-                                                ⚡ <strong>Activates</strong> AFTER a loss when pattern matches<br />
-                                                🔄 <strong>Deactivates</strong> AFTER a win, restoring original strategy<br />
-                                                📊 Overrides current trade type with opposite pattern when active
-                                            </p>
-                                        </div>
-                                    )}
-                                </div>
 
                                 <div className='auto-trades-config__group'>
                                     <div className='auto-trades-strategy-selector'>
@@ -3535,7 +3127,7 @@ const AutoTrades = observer(() => {
                                     </p>
                                 </div>
 
-                                {/* Inverse Toggle for Standard/Inverse modes */}
+                                {/* Signal Mode - moved L→Digit to after this section */}
                                 {strategyMode !== 'PERCENTAGE' && !usingSpecialStrategy && (
                                     <div className='auto-trades-config__group'>
                                         <button
@@ -3562,6 +3154,166 @@ const AutoTrades = observer(() => {
                                         </button>
                                     </div>
                                 )}
+
+                                {/* L→Digit Strategy Section - MOVED AFTER SIGNAL MODE */}
+                                <div className='auto-trades-l-digit-section'>
+                                    <div className='auto-trades-l-digit-section__header'>
+                                        <span className='auto-trades-l-digit-section__icon'>🎯</span>
+                                        <span className='auto-trades-l-digit-section__title'>L→Digit Strategy</span>
+                                        <span className={classNames('auto-trades-l-digit-section__badge', {
+                                            'auto-trades-l-digit-section__badge--active': lDigitStrategy.enabled && isLossActive && isRunning,
+                                            'auto-trades-l-digit-section__badge--ready': lDigitStrategy.enabled && !isLossActive && isRunning,
+                                        })}>
+                                            {lDigitStrategy.enabled ? (isLossActive && isRunning ? 'ACTIVE' : isRunning ? 'READY' : 'ON') : 'OFF'}
+                                        </span>
+                                    </div>
+                                    
+                                    <div className='auto-trades-strategy-selector'>
+                                        <select
+                                            className='auto-trades-strategy-selector__select l-digit-select'
+                                            value={lDigitStrategy.enabled ? lDigitStrategy.patternType : 'disabled'}
+                                            onChange={e => {
+                                                const value = e.target.value;
+                                                if (value === 'disabled') {
+                                                    setLDigitStrategy({ enabled: false, patternType: 'odd_to_even', lookbackTicks: 5 });
+                                                } else if (value === 'odd_to_even') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'odd_to_even',
+                                                        lookbackTicks: 5,
+                                                    });
+                                                } else if (value === 'even_to_odd') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'even_to_odd',
+                                                        lookbackTicks: 5,
+                                                    });
+                                                } else if (value === 'over_to_under') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'over_to_under',
+                                                        lookbackTicks: 5,
+                                                        thresholdDigit: 4,
+                                                    });
+                                                } else if (value === 'under_to_over') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'under_to_over',
+                                                        lookbackTicks: 5,
+                                                        thresholdDigit: 4,
+                                                    });
+                                                } else if (value === 'match_to_diff') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'match_to_diff',
+                                                        lookbackTicks: 5,
+                                                        barrierDigit: 4,
+                                                    });
+                                                } else if (value === 'diff_to_match') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'diff_to_match',
+                                                        lookbackTicks: 5,
+                                                        barrierDigit: 4,
+                                                    });
+                                                } else if (value === 'rise_to_fall') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'rise_to_fall',
+                                                        lookbackTicks: 5,
+                                                    });
+                                                } else if (value === 'fall_to_rise') {
+                                                    setLDigitStrategy({
+                                                        enabled: true,
+                                                        patternType: 'fall_to_rise',
+                                                        lookbackTicks: 5,
+                                                    });
+                                                }
+                                            }}
+                                            disabled={isRunning}
+                                        >
+                                            <option value='disabled'>⚫ Disabled</option>
+                                            <option value='odd_to_even'>🔴 Odd → Even</option>
+                                            <option value='even_to_odd'>🟢 Even → Odd</option>
+                                            <option value='over_to_under'>📉 Over → Under</option>
+                                            <option value='under_to_over'>📈 Under → Over</option>
+                                            <option value='match_to_diff'>🎯 Match → Differs</option>
+                                            <option value='diff_to_match'>🎯 Differs → Match</option>
+                                            <option value='rise_to_fall'>⬆️ Rise → Fall</option>
+                                            <option value='fall_to_rise'>⬇️ Fall → Rise</option>
+                                        </select>
+                                    </div>
+                                    
+                                    {lDigitStrategy.enabled && (
+                                        <div className='auto-trades-l-digit-section__config'>
+                                            <div className='auto-trades-l-digit-section__field'>
+                                                <label>Lookback Ticks</label>
+                                                <div className='auto-trades-l-digit-section__lookback'>
+                                                    <input
+                                                        type='range'
+                                                        min='1'
+                                                        max='20'
+                                                        step='1'
+                                                        value={lDigitStrategy.lookbackTicks}
+                                                        onChange={e => setLDigitStrategy(prev => ({
+                                                            ...prev,
+                                                            lookbackTicks: parseInt(e.target.value)
+                                                        }))}
+                                                        disabled={isRunning}
+                                                    />
+                                                    <div className='auto-trades-l-digit-section__lookback-value'>
+                                                        <span>{lDigitStrategy.lookbackTicks}</span>
+                                                        <span>ticks</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            
+                                            {(lDigitStrategy.patternType === 'over_to_under' || lDigitStrategy.patternType === 'under_to_over') && (
+                                                <div className='auto-trades-l-digit-section__field'>
+                                                    <label>Threshold Digit</label>
+                                                    <select
+                                                        className='auto-trades-config__select'
+                                                        value={lDigitStrategy.thresholdDigit}
+                                                        onChange={e => setLDigitStrategy(prev => ({
+                                                            ...prev,
+                                                            thresholdDigit: parseInt(e.target.value)
+                                                        }))}
+                                                        disabled={isRunning}
+                                                    >
+                                                        {[0,1,2,3,4,5,6,7,8,9].map(d => (
+                                                            <option key={d} value={d}>{d}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                            
+                                            {(lDigitStrategy.patternType === 'match_to_diff' || lDigitStrategy.patternType === 'diff_to_match') && (
+                                                <div className='auto-trades-l-digit-section__field'>
+                                                    <label>Barrier Digit</label>
+                                                    <select
+                                                        className='auto-trades-config__select'
+                                                        value={lDigitStrategy.barrierDigit}
+                                                        onChange={e => setLDigitStrategy(prev => ({
+                                                            ...prev,
+                                                            barrierDigit: parseInt(e.target.value)
+                                                        }))}
+                                                        disabled={isRunning}
+                                                    >
+                                                        {[0,1,2,3,4,5,6,7,8,9].map(d => (
+                                                            <option key={d} value={d}>{d}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
+                                            
+                                            <p className='auto-trades-l-digit-section__hint'>
+                                                ⚡ <strong>Activates</strong> AFTER a loss when pattern matches<br />
+                                                🔄 <strong>Deactivates</strong> AFTER a win, restoring original strategy<br />
+                                                📊 Overrides current trade type with opposite pattern when active
+                                            </p>
+                                        </div>
+                                    )}
+                                </div>
 
                                 {/* Percentage Mode Configuration */}
                                 {strategyMode === 'PERCENTAGE' && (
@@ -3646,7 +3398,7 @@ const AutoTrades = observer(() => {
                                     </div>
                                 </div>
 
-                                {/* Martingale Strategy Selector - NOW AFTER L→DIGIT */}
+                                {/* Martingale Strategy Selector */}
                                 <div className='auto-trades-config__group'>
                                     <div className='auto-trades-martingale-selector'>
                                         <label>Martingale Strategy</label>
@@ -3699,26 +3451,6 @@ const AutoTrades = observer(() => {
                                 </div>
 
                                 <div className='auto-trades-controls'>
-                                    <button
-                                        className={classNames('auto-trades-controls__ai', {
-                                            'auto-trades-controls__ai--dragging': isAiFabDragging,
-                                        })}
-                                        onClick={handleAiFabClick}
-                                        onPointerDown={handleAiFabPointerDown}
-                                        onPointerMove={handleAiFabPointerMove}
-                                        onPointerUp={finishAiFabDrag}
-                                        onPointerCancel={finishAiFabDrag}
-                                        disabled={isRunning}
-                                        type='button'
-                                        title='AI strategy setup'
-                                        style={aiFabStyle}
-                                    >
-                                        <span className='auto-trades-controls__ai-orbit'>
-                                            <span className='auto-trades-controls__ai-text'>AI</span>
-                                            <span className='auto-trades-controls__ai-dot' />
-                                        </span>
-                                        <span className='auto-trades-controls__ai-label'>Ai</span>
-                                    </button>
                                     {!isRunning ? (
                                         <button
                                             className='auto-trades-controls__run'
@@ -4136,132 +3868,6 @@ const AutoTrades = observer(() => {
                                 onClick={() => setShowDisclaimer(false)}
                             >
                                 I Understand
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {showAiStrategy && (
-                <div className='auto-trades-ai-overlay' onClick={() => setShowAiStrategy(false)}>
-                    <div className='auto-trades-ai-modal' onClick={e => e.stopPropagation()}>
-                        <div className='auto-trades-ai-modal__header'>
-                            <div className='auto-trades-controls__ai-orbit auto-trades-controls__ai-orbit--small'>
-                                <span className='auto-trades-controls__ai-text'>AI</span>
-                                <span className='auto-trades-controls__ai-dot' />
-                            </div>
-                            <h3 className='auto-trades-ai-modal__title'>AI Strategy</h3>
-                            <button
-                                className='auto-trades-ai-modal__close'
-                                onClick={() => setShowAiStrategy(false)}
-                                disabled={aiStrategyLoading}
-                                type='button'
-                            >
-                                x
-                            </button>
-                        </div>
-                        <div className='auto-trades-ai-modal__preset'>
-                            <label htmlFor='auto-trades-ai-preset'>Strategy preset</label>
-                            <select
-                                id='auto-trades-ai-preset'
-                                className='auto-trades-ai-modal__preset-select'
-                                value={selectedAiPresetId}
-                                onChange={handleAiPresetChange}
-                                disabled={aiStrategyLoading}
-                            >
-                                <option value=''>Select one of {AUTO_TRADE_STRATEGY_PRESET_COUNT} settings</option>
-                                {aiPresetFamilies.map(family => (
-                                    <optgroup key={family.id} label={family.name}>
-                                        {family.presets.map(preset => (
-                                            <option key={preset.id} value={preset.id}>
-                                                {preset.name}
-                                            </option>
-                                        ))}
-                                    </optgroup>
-                                ))}
-                            </select>
-                        </div>
-                        <textarea
-                            className='auto-trades-ai-modal__textarea'
-                            disabled={aiStrategyLoading}
-                            value={aiStrategyText}
-                            onChange={e => {
-                                setAiStrategyText(e.target.value);
-                                setAiStrategyResult(null);
-                                setSelectedAiPresetId('');
-                            }}
-                            placeholder='Trade Over 1. In case of a loss trade Over 3. Use 1 tick. Only trade V25 index.'
-                        />
-                        {aiStrategyResult && (
-                            <div className='auto-trades-ai-modal__result'>
-                                <div className='auto-trades-ai-modal__source'>
-                                    {aiStrategyResult.source === 'openai'
-                                        ? 'OpenAI reasoning'
-                                        : aiStrategyResult.source === 'preset'
-                                          ? 'Preset library'
-                                          : 'Local fallback'}
-                                    {typeof aiStrategyResult.confidence === 'number'
-                                        ? ` - ${Math.round(aiStrategyResult.confidence * 100)}% confidence`
-                                        : ''}
-                                </div>
-                                {aiStrategyResult.summary.length > 0 && (
-                                    <ul>
-                                        {aiStrategyResult.summary.map(item => (
-                                            <li key={item}>{item}</li>
-                                        ))}
-                                    </ul>
-                                )}
-                                {aiStrategyResult.unsupportedCapabilities &&
-                                    aiStrategyResult.unsupportedCapabilities.length > 0 && (
-                                        <div className='auto-trades-ai-modal__unsupported'>
-                                            <strong>Needs new bot logic</strong>
-                                            <ul>
-                                                {aiStrategyResult.unsupportedCapabilities.map(item => (
-                                                    <li key={item}>{item}</li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
-                                {aiStrategyResult.customStrategy?.entryRules &&
-                                    aiStrategyResult.customStrategy.entryRules.length > 0 && (
-                                        <div className='auto-trades-ai-modal__custom'>
-                                            <strong>Understood strategy rules</strong>
-                                            <ul>
-                                                {aiStrategyResult.customStrategy.entryRules.map(item => (
-                                                    <li key={item}>{item}</li>
-                                                ))}
-                                                {aiStrategyResult.customStrategy.exitRules?.map(item => (
-                                                    <li key={item}>{item}</li>
-                                                ))}
-                                                {aiStrategyResult.customStrategy.riskRules?.map(item => (
-                                                    <li key={item}>{item}</li>
-                                                ))}
-                                            </ul>
-                                        </div>
-                                    )}
-                                {aiStrategyResult.warnings.map(item => (
-                                    <p key={item} className='auto-trades-ai-modal__warning'>
-                                        {item}
-                                    </p>
-                                ))}
-                            </div>
-                        )}
-                        <div className='auto-trades-ai-modal__footer'>
-                            <button
-                                className='auto-trades-ai-modal__secondary'
-                                onClick={() => setShowAiStrategy(false)}
-                                disabled={aiStrategyLoading}
-                                type='button'
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                className='auto-trades-ai-modal__primary'
-                                onClick={applyAiStrategy}
-                                disabled={aiStrategyLoading}
-                                type='button'
-                            >
-                                {aiStrategyLoading ? 'Thinking...' : 'Apply Settings'}
                             </button>
                         </div>
                     </div>
