@@ -3052,7 +3052,7 @@ const AutoTrades = observer(() => {
                                                             border: '1px solid #d6d6d6',
                                                             fontSize: '0.9rem',
                                                             width: '100%',
-                                                            background: isRunning ? '#f5f5f5' : 'white',
+                                                            background: isRunning ? '#e8f0fe' : '#f0f7ff',
                                                             cursor: isRunning ? 'not-allowed' : 'pointer'
                                                         }}
                                                     >
