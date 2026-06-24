@@ -175,14 +175,22 @@ $at-text-faint: #2c4060;
         }
     }
 }
-// L→Digit Strategy Section Styles
+
+// ── L→Digit Strategy Section Styles ────────────────────────────────────────
+
 .auto-trades-l-digit-section {
     background: linear-gradient(135deg, rgba(33, 33, 33, 0.95) 0%, rgba(25, 25, 25, 0.98) 100%);
     border-radius: 16px;
     padding: 1.25rem;
     margin-bottom: 1.5rem;
-    border: 1px solid rgba(255, 152, 0, 0.2);
+    border: 2px solid rgba(255, 152, 0, 0.2);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    transition: all 0.3s ease;
+
+    &:hover {
+        border-color: rgba(255, 152, 0, 0.4);
+        box-shadow: 0 4px 20px rgba(255, 152, 0, 0.15);
+    }
 
     &__header {
         display: flex;
@@ -263,34 +271,52 @@ $at-text-faint: #2c4060;
         width: 100%;
         height: 6px;
         -webkit-appearance: none;
+        appearance: none;
         background: linear-gradient(90deg, #ff9800 0%, #ff9800 var(--fill-percent, 0%), #444 var(--fill-percent, 0%), #444 100%);
         border-radius: 3px;
         outline: none;
         cursor: pointer;
+        transition: all 0.2s;
+
+        &:hover {
+            height: 8px;
+        }
 
         &::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 20px;
-            height: 20px;
+            appearance: none;
+            width: 22px;
+            height: 22px;
             border-radius: 50%;
-            background: #ff9800;
-            border: 2px solid white;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+            background: linear-gradient(135deg, #ff9800, #ff6b00);
+            border: 3px solid white;
+            box-shadow: 0 2px 12px rgba(255, 152, 0, 0.4);
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: transform 0.2s, box-shadow 0.2s;
             
             &:hover {
                 transform: scale(1.2);
+                box-shadow: 0 2px 16px rgba(255, 152, 0, 0.6);
             }
         }
 
         &::-moz-range-thumb {
-            width: 20px;
-            height: 20px;
+            width: 22px;
+            height: 22px;
             border-radius: 50%;
-            background: #ff9800;
-            border: 2px solid white;
+            background: linear-gradient(135deg, #ff9800, #ff6b00);
+            border: 3px solid white;
             cursor: pointer;
+        }
+
+        &:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+
+            &::-webkit-slider-thumb {
+                cursor: not-allowed;
+                transform: none !important;
+            }
         }
     }
 
@@ -304,11 +330,15 @@ $at-text-faint: #2c4060;
     &__lookback-marker {
         font-size: 0.7rem;
         color: #666;
-        transition: color 0.2s;
+        transition: color 0.2s, transform 0.2s;
+        padding: 0.1rem 0.3rem;
+        border-radius: 4px;
         
         &--active {
             color: #ff9800;
             font-weight: 600;
+            background: rgba(255, 152, 0, 0.15);
+            transform: scale(1.1);
         }
     }
 
@@ -318,17 +348,21 @@ $at-text-faint: #2c4060;
         justify-content: center;
         gap: 0.25rem;
         margin-top: 0.75rem;
-        padding: 0.5rem;
-        background: rgba(0, 0, 0, 0.3);
+        padding: 0.5rem 1rem;
+        background: rgba(0, 0, 0, 0.4);
         border-radius: 8px;
+        border: 1px solid rgba(255, 152, 0, 0.1);
     }
 
     &__lookback-number {
-        font-size: 1.8rem;
+        font-size: 2rem;
         font-weight: 700;
         color: #ff9800;
         line-height: 1;
-        text-shadow: 0 0 4px rgba(255, 152, 0, 0.5);
+        text-shadow: 0 0 12px rgba(255, 152, 0, 0.3);
+        font-variant-numeric: tabular-nums;
+        min-width: 2.4rem;
+        text-align: center;
     }
 
     &__lookback-unit {
@@ -338,13 +372,21 @@ $at-text-faint: #2c4060;
         letter-spacing: 0.5px;
     }
 
-    &__field-hint {
-        font-size: 0.7rem;
-        color: #888;
-        margin-top: 0.5rem;
+    &__hint {
+        font-size: 0.85rem;
+        color: #ff9800;
+        margin-top: 0.8rem;
+        padding: 0.8rem 1rem;
+        background: rgba(255, 152, 0, 0.08);
+        border-radius: 0.6rem;
+        border-left: 3px solid #ff9800;
+        line-height: 1.5;
         font-style: italic;
-        padding-left: 0.25rem;
-        border-left: 2px solid #ff9800;
+
+        strong {
+            color: #ffab40;
+            font-weight: 700;
+        }
     }
 }
 
@@ -357,27 +399,31 @@ $at-text-faint: #2c4060;
     font-weight: 600;
     background: linear-gradient(135deg, #666, #444);
     color: #ccc;
+    transition: all 0.3s ease;
     
     &--active {
         background: linear-gradient(135deg, #ff9800, #ff6b00);
         color: white;
-        animation: pulse 1.5s infinite;
+        animation: badgePulse 1.5s infinite;
+        box-shadow: 0 0 12px rgba(255, 152, 0, 0.4);
     }
 }
 
 // Market card L→Digit active state
 .auto-trades-market--l-digit-active {
     border: 2px solid #ff9800 !important;
-    box-shadow: 0 0 12px rgba(255, 152, 0, 0.3);
-    background: linear-gradient(135deg, rgba(255, 152, 0, 0.05), rgba(255, 107, 0, 0.02));
+    box-shadow: 0 0 20px rgba(255, 152, 0, 0.25);
+    background: linear-gradient(135deg, rgba(255, 152, 0, 0.08), rgba(255, 107, 0, 0.03));
     
     .auto-trades-market__badge--l-digit {
         background: linear-gradient(135deg, #ff9800, #ff6b00);
         animation: badgePulse 1s infinite;
+        box-shadow: 0 0 8px rgba(255, 152, 0, 0.4);
     }
 }
 
-// Animations
+// ── Animations ───────────────────────────────────────────────────────────────
+
 @keyframes pulse {
     0%, 100% {
         opacity: 1;
@@ -385,16 +431,18 @@ $at-text-faint: #2c4060;
     }
     50% {
         opacity: 0.9;
-        box-shadow: 0 0 16px rgba(255, 152, 0, 0.9);
+        box-shadow: 0 0 20px rgba(255, 152, 0, 0.9);
     }
 }
 
 @keyframes badgePulse {
     0%, 100% {
         transform: scale(1);
+        box-shadow: 0 0 8px rgba(255, 152, 0, 0.4);
     }
     50% {
-        transform: scale(1.05);
+        transform: scale(1.08);
+        box-shadow: 0 0 16px rgba(255, 152, 0, 0.7);
     }
 }
 
@@ -408,6 +456,7 @@ $at-text-faint: #2c4060;
         transform: translateY(0);
     }
 }
+
 // ── Floating Alert ───────────────────────────────────────────────────────────
 
 .auto-trades-floating-alert {
@@ -522,84 +571,6 @@ $at-text-faint: #2c4060;
             height: 1px;
             background: $at-border;
         }
-    }
-}
-
-// ── L→Digit Strategy Section (NEW) ───────────────────────────────────────────
-
-.auto-trades-l-digit-section {
-    background: linear-gradient(135deg, rgba(255, 152, 0, 0.12), rgba(196, 32, 56, 0.08));
-    border: 2px solid $at-amber;
-    border-radius: 1.2rem;
-    padding: 1.6rem;
-    margin-bottom: 1.6rem;
-    position: relative;
-    transition: all 0.2s;
-
-    &:hover {
-        border-color: lighten($at-amber, 10%);
-        box-shadow: 0 0 20px rgba(217, 146, 26, 0.2);
-    }
-
-    &__header {
-        display: flex;
-        align-items: center;
-        gap: 0.8rem;
-        margin-bottom: 1.2rem;
-    }
-
-    &__icon {
-        font-size: 2rem;
-    }
-
-    &__title {
-        font-size: 1.4rem;
-        font-weight: 700;
-        color: $at-amber;
-        margin: 0;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    &__badge {
-        background: $at-amber;
-        color: #fff;
-        font-size: 0.9rem;
-        font-weight: 700;
-        padding: 0.3rem 0.8rem;
-        border-radius: 1rem;
-        margin-left: auto;
-
-        &--active {
-            background: $at-crimson;
-            animation: pulse 1s infinite;
-        }
-    }
-
-    &__selector {
-        margin-bottom: 1rem;
-        
-        .l-digit-select {
-            font-size: 1.35rem !important;
-            font-weight: 600 !important;
-            padding: 1rem !important;
-        }
-    }
-
-    &__config {
-        margin-top: 1.2rem;
-        padding-top: 1.2rem;
-        border-top: 1px dashed rgba(217, 146, 26, 0.4);
-    }
-
-    &__hint {
-        font-size: 1.2rem;
-        color: $at-text-muted;
-        margin-top: 1rem;
-        padding: 0.8rem;
-        background: rgba(0, 0, 0, 0.2);
-        border-radius: 0.6rem;
-        line-height: 1.4;
     }
 }
 
@@ -1283,19 +1254,6 @@ $at-text-faint: #2c4060;
         animation: at-pulse 0.6s infinite;
     }
 
-    &__l-digit-badge {
-        font-size: 1.1rem;
-        font-weight: 700;
-        background: linear-gradient(135deg, $at-amber, $at-crimson);
-        color: #fff;
-        padding: 0.2rem 0.8rem;
-        border-radius: 2rem;
-
-        &--active {
-            animation: pulse 1s infinite;
-        }
-    }
-
     &__actions {
         display: flex;
         gap: 0.6rem;
@@ -1809,11 +1767,6 @@ $at-text-faint: #2c4060;
 @keyframes at-trade-pulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(46, 127, 216, 0.2); }
     50% { box-shadow: 0 0 0 6px rgba(46, 127, 216, 0); }
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.6; }
 }
 
 // ── Mobile overrides ─────────────────────────────────────────────────────────
