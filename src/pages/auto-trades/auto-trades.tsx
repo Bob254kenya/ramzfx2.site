@@ -1605,6 +1605,8 @@ const AutoTrades = observer(() => {
                 state.lDigitActiveSince = null;
                 state.lDigitPatternMatched = false;
                 state.lDigitWaitingForPattern = true;
+                // Reset streak so stale ticks accumulated during wait don't trigger a trade
+                state.consecutive = 0;
                 // Restore original trade type so it is ready when pattern fires
                 tradeTypeRef.current = originalTradeTypeRef.current;
                 state.lDigitOriginalTradeType = null;
@@ -1905,6 +1907,9 @@ const AutoTrades = observer(() => {
                         state.lDigitActiveSince = Date.now();
                         state.lDigitPatternMatched = true;
                         state.lDigitWaitingForPattern = false; // Stop waiting
+                        // Reset streak — L strategy trade must be earned with fresh ticks,
+                        // not from streak data that built up during the waiting period
+                        state.consecutive = 0;
                         
                         // Switch the trade type
                         tradeTypeRef.current = newTradeType;
