@@ -1,4 +1,10 @@
-// auto-trades.tsx - FIXED: L→Digit strategy prevents original trades during loss
+// auto-trades.tsx - COMPLETE FIXED VERSION
+// Features:
+// 1. L→Digit strategy properly blocks trading while waiting for pattern
+// 2. NO trading with original contract type during waiting period
+// 3. Black background styling for all L→Digit inputs
+// 4. Proper activation/deactivation on win/loss
+
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
@@ -717,8 +723,7 @@ interface MarketState {
     lDigitOriginalTradeType: TradeType | null;
     lDigitActiveSince: number | null;
     lDigitPatternMatched: boolean;
-    // NEW: Flag to prevent trading while waiting for L→Digit pattern
-    lDigitWaitingForPattern: boolean;
+    lDigitWaitingForPattern: boolean;  // NEW: Blocks trading while waiting for pattern
 }
 
 interface MarketDisplay extends MarketState {
@@ -1652,11 +1657,10 @@ const AutoTrades = observer(() => {
         [getActiveDigitBarrier]
     );
 
+    // FIXED: tryExecuteSignal - Blocks trading while waiting for L→Digit pattern
     const tryExecuteSignal = useCallback(
         (symbol: string, state: MarketState, signalReady: boolean) => {
-            // ============================================================
-            // FIXED: BLOCK TRADING if L→Digit is waiting for pattern
-            // ============================================================
+            // BLOCK TRADING if L→Digit is waiting for pattern
             if (lDigitStrategyRef.current.enabled && state.lDigitWaitingForPattern) {
                 // Do NOT execute any trades while waiting for L→Digit pattern
                 // This prevents the original contract type from trading during the delay
@@ -1712,9 +1716,7 @@ const AutoTrades = observer(() => {
 
             const ct = tradeTypeRef.current;
             
-            // ============================================================
-            // FIXED: Check if we should block signal due to L→Digit waiting
-            // ============================================================
+            // Check if we should block signal due to L→Digit waiting
             const isWaitingForPattern = lDigitStrategyRef.current.enabled && state.lDigitWaitingForPattern;
             
             let signalReady = false;
@@ -2978,7 +2980,7 @@ const AutoTrades = observer(() => {
                                     </div>
                                 )}
 
-                                {/* L→Digit Strategy Section - FIXED */}
+                                {/* L→Digit Strategy Section - FIXED with BLACK background */}
                                 <div className='auto-trades-l-digit-section'>
                                     <div className='auto-trades-l-digit-section__header'>
                                         <span className='auto-trades-l-digit-section__icon'>🎯</span>
@@ -3097,21 +3099,32 @@ const AutoTrades = observer(() => {
                                                             cursor: isRunning ? 'not-allowed' : 'pointer'
                                                         }}
                                                     />
-                                                    <div className='auto-trades-l-digit-section__lookback-value'>
+                                                    {/* FIXED: Black background for lookback value */}
+                                                    <div className='auto-trades-l-digit-section__lookback-value' style={{
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        gap: '6px',
+                                                        marginTop: '4px'
+                                                    }}>
                                                         <span style={{ 
-                                                            fontSize: '1.2rem', 
-                                                            fontWeight: 'bold',
-                                                            color: '#2a7de1',
-                                                            minWidth: '24px',
+                                                            fontSize: '1.4rem',
+                                                            fontWeight: '700',
+                                                            color: '#ffffff',
+                                                            backgroundColor: '#1a1a1a',  // ← BLACK background
+                                                            padding: '2px 14px',
+                                                            borderRadius: '6px',
+                                                            border: '2px solid #2a7de1',
+                                                            minWidth: '36px',
+                                                            textAlign: 'center',
                                                             display: 'inline-block',
-                                                            textAlign: 'center'
+                                                            boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
                                                         }}>
                                                             {lDigitStrategy.lookbackTicks}
                                                         </span>
                                                         <span style={{ 
-                                                            fontSize: '0.75rem', 
-                                                            color: '#666',
-                                                            marginLeft: '4px'
+                                                            fontSize: '0.8rem', 
+                                                            color: '#888',
+                                                            fontWeight: '500'
                                                         }}>
                                                             ticks
                                                         </span>
@@ -3119,11 +3132,12 @@ const AutoTrades = observer(() => {
                                                 </div>
                                             </div>
                                             
+                                            {/* FIXED: Black background for Threshold Digit select */}
                                             {(lDigitStrategy.patternType === 'over_to_under' || lDigitStrategy.patternType === 'under_to_over') && (
                                                 <div className='auto-trades-l-digit-section__field'>
                                                     <label className='auto-trades-l-digit-section__label'>Threshold Digit</label>
                                                     <select
-                                                        className='auto-trades-config__select auto-trades-l-digit-section__select'
+                                                        className='auto-trades-config__select'
                                                         value={lDigitStrategy.thresholdDigit}
                                                         onChange={e => setLDigitStrategy(prev => ({
                                                             ...prev,
@@ -3131,27 +3145,41 @@ const AutoTrades = observer(() => {
                                                         }))}
                                                         disabled={isRunning}
                                                         style={{
-                                                            padding: '6px 8px',
-                                                            borderRadius: '4px',
-                                                            border: '1px solid #d6d6d6',
-                                                            fontSize: '0.9rem',
+                                                            padding: '8px 12px',
+                                                            borderRadius: '6px',
+                                                            border: '2px solid #2a7de1',
+                                                            fontSize: '1rem',
+                                                            fontWeight: '500',
                                                             width: '100%',
-                                                            background: isRunning ? '#e8f0fe' : '#f0f7ff',
-                                                            cursor: isRunning ? 'not-allowed' : 'pointer'
+                                                            backgroundColor: '#1a1a1a',  // ← BLACK background
+                                                            color: '#ffffff',  // ← White text
+                                                            cursor: isRunning ? 'not-allowed' : 'pointer',
+                                                            boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                                                            transition: 'all 0.2s ease',
+                                                            outline: 'none',
+                                                            appearance: 'auto'
                                                         }}
                                                     >
                                                         {[0,1,2,3,4,5,6,7,8,9].map(d => (
-                                                            <option key={d} value={d}>{d}</option>
+                                                            <option key={d} value={d} style={{ 
+                                                                padding: '6px',
+                                                                backgroundColor: d === 4 ? '#2a7de1' : '#1a1a1a',
+                                                                color: '#ffffff',
+                                                                fontWeight: d === 4 ? 'bold' : 'normal'
+                                                            }}>
+                                                                {d}
+                                                            </option>
                                                         ))}
                                                     </select>
                                                 </div>
                                             )}
                                             
+                                            {/* FIXED: Black background for Barrier Digit select */}
                                             {(lDigitStrategy.patternType === 'match_to_diff' || lDigitStrategy.patternType === 'diff_to_match') && (
                                                 <div className='auto-trades-l-digit-section__field'>
                                                     <label className='auto-trades-l-digit-section__label'>Barrier Digit</label>
                                                     <select
-                                                        className='auto-trades-config__select auto-trades-l-digit-section__select'
+                                                        className='auto-trades-config__select'
                                                         value={lDigitStrategy.barrierDigit}
                                                         onChange={e => setLDigitStrategy(prev => ({
                                                             ...prev,
@@ -3159,32 +3187,47 @@ const AutoTrades = observer(() => {
                                                         }))}
                                                         disabled={isRunning}
                                                         style={{
-                                                            padding: '6px 8px',
-                                                            borderRadius: '4px',
-                                                            border: '1px solid #d6d6d6',
-                                                            fontSize: '0.9rem',
+                                                            padding: '8px 12px',
+                                                            borderRadius: '6px',
+                                                            border: '2px solid #2a7de1',
+                                                            fontSize: '1rem',
+                                                            fontWeight: '500',
                                                             width: '100%',
-                                                            background: isRunning ? '#f5f5f5' : 'white',
-                                                            cursor: isRunning ? 'not-allowed' : 'pointer'
+                                                            backgroundColor: '#1a1a1a',  // ← BLACK background
+                                                            color: '#ffffff',  // ← White text
+                                                            cursor: isRunning ? 'not-allowed' : 'pointer',
+                                                            boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
+                                                            transition: 'all 0.2s ease',
+                                                            outline: 'none',
+                                                            appearance: 'auto'
                                                         }}
                                                     >
                                                         {[0,1,2,3,4,5,6,7,8,9].map(d => (
-                                                            <option key={d} value={d}>{d}</option>
+                                                            <option key={d} value={d} style={{ 
+                                                                padding: '6px',
+                                                                backgroundColor: d === 4 ? '#2a7de1' : '#1a1a1a',
+                                                                color: '#ffffff',
+                                                                fontWeight: d === 4 ? 'bold' : 'normal'
+                                                            }}>
+                                                                {d}
+                                                            </option>
                                                         ))}
                                                     </select>
                                                 </div>
                                             )}
                                             
+                                            {/* FIXED: Black background for hint */}
                                             <p className='auto-trades-l-digit-section__hint' style={{
                                                 fontSize: '0.8rem',
-                                                color: '#666',
-                                                marginTop: '8px',
-                                                padding: '8px',
-                                                background: '#f8f9fa',
-                                                borderRadius: '4px',
-                                                borderLeft: '3px solid #2a7de1'
+                                                marginTop: '10px',
+                                                padding: '10px',
+                                                background: '#1a1a1a',  // ← BLACK background
+                                                borderRadius: '6px',
+                                                borderLeft: '3px solid #2a7de1',
+                                                lineHeight: '1.5',
+                                                color: '#e0e0e0'
                                             }}>
-                                                ⚡ <strong>NO TRADING</strong> while waiting for pattern after loss<br />
+                                                ⚡ <strong style={{ color: '#ffffff' }}>NO TRADING</strong> while waiting for pattern after loss<br />
                                                 🔄 Activates AFTER pattern matches, then trades with new type<br />
                                                 ✅ Resets to original contract type AFTER a win<br />
                                                 📊 Overrides current trade type with opposite pattern when active
@@ -3404,7 +3447,7 @@ const AutoTrades = observer(() => {
                                             ? isInverseCandleMatch(tradeType, m.candleDirection)
                                             : isCandleMatch(tradeType, m.candleDirection));
                                     
-                                    // FIXED: Don't show READY if waiting for L→Digit pattern
+                                    // Don't show READY if waiting for L→Digit pattern
                                     const isWaiting = lDigitStrategyRef.current.enabled && m.lDigitWaitingForPattern;
                                     const isReady = !isWaiting &&
                                         (((usingSpecialStrategy ? m.specialEntryReady : m.consecutive >= streakNum) &&
