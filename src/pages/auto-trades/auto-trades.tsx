@@ -1571,8 +1571,8 @@ const AutoTrades = observer(() => {
             state.trading = false;
             globalTradingRef.current = false;
 
-            // FIXED: L→Digit strategy - Reset on win, restore original trade type
-            if (profit > 0 && state.lDigitActive) {
+            // FIXED: L→Digit strategy - Reset on win (profit >= 0), restore original trade type
+            if (profit >= 0 && state.lDigitActive) {
                 // Deactivate L→Digit
                 state.lDigitActive = false;
                 state.lDigitActiveSince = null;
@@ -1583,8 +1583,8 @@ const AutoTrades = observer(() => {
                 if (state.lDigitOriginalTradeType) {
                     tradeTypeRef.current = state.lDigitOriginalTradeType;
                     state.lDigitOriginalTradeType = null;
-                    // Update originalTradeTypeRef to match
-                    originalTradeTypeRef.current = tradeTypeRef.current;
+                    // NOTE: Do NOT overwrite originalTradeTypeRef here — it must always
+                    // reflect the user's configured trade type, not the L→Digit type.
                 }
                 
                 // Log the reset
@@ -1598,11 +1598,17 @@ const AutoTrades = observer(() => {
                 });
             }
 
-            // If it's a loss, set waiting flag to true so we pause trading
+            // If it's a loss, reset any active L→Digit state and start waiting for pattern
             if (profit < 0 && lDigitStrategyRef.current.enabled) {
-                state.lDigitWaitingForPattern = true;
+                // Fully reset L→Digit so we start fresh waiting for the pattern
+                state.lDigitActive = false;
+                state.lDigitActiveSince = null;
                 state.lDigitPatternMatched = false;
-                
+                state.lDigitWaitingForPattern = true;
+                // Restore original trade type so it is ready when pattern fires
+                tradeTypeRef.current = originalTradeTypeRef.current;
+                state.lDigitOriginalTradeType = null;
+
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
                     condition: `🔴 L→Digit: LOSS OCCURRED - Waiting for pattern: ${lDigitStrategyRef.current.patternType}`,
@@ -1941,17 +1947,18 @@ const AutoTrades = observer(() => {
                 );
                 
                 // If pattern no longer matches, deactivate L→Digit and restore original
-                if (!patternStillMatches && state.lDigitOriginalTradeType) {
+                if (!patternStillMatches) {
+                    const savedOriginal = state.lDigitOriginalTradeType ?? originalTradeTypeRef.current;
                     // Deactivate L→Digit
                     state.lDigitActive = false;
                     state.lDigitActiveSince = null;
                     state.lDigitPatternMatched = false;
                     state.lDigitWaitingForPattern = true; // Wait for pattern again
+                    state.lDigitOriginalTradeType = null;
                     
                     // Restore original trade type
-                    tradeTypeRef.current = state.lDigitOriginalTradeType;
+                    tradeTypeRef.current = savedOriginal;
                     ct = tradeTypeRef.current;
-                    state.lDigitOriginalTradeType = null;
                     
                     // Log the deactivation
                     conditionNotifierStore.setCondition({
