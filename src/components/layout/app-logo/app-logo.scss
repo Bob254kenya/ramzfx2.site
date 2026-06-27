@@ -1,23 +1,36 @@
 .app-header {
     &__logo {
-        padding-inline-start: 1.6rem;
-        padding-inline-end: 1.6rem;
-        height: 40px;
+        padding-inline-start: 2rem;
+        padding-inline-end: 2rem;
+        height: 56px;
         display: flex;
         align-items: center;
         text-decoration: none;
-        transition: all 0.3s ease;
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        position: relative;
+        background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.02) 100%);
+        border-radius: 8px;
+        border: 1px solid rgba(255, 255, 255, 0.08);
 
         &:hover {
-            opacity: 0.8;
+            opacity: 1;
+            transform: translateY(-2px);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15), 0 4px 16px rgba(255, 215, 0, 0.1);
+        }
+
+        &:active {
+            transform: translateY(0px);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
         }
 
         img {
-            height: 30px;
+            height: 32px;
             width: auto;
             object-fit: contain;
             object-position: center left;
-            max-width: 180px;
+            max-width: 200px;
         }
 
         &-text {
@@ -27,26 +40,138 @@
 }
 
 .powered-by-text {
-    font-size: 1.25rem;
-    letter-spacing: 0.4px;
-    color: var(--text-prominent);
-    font-style: italic;
-    font-weight: 900;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1rem;
+    letter-spacing: 0.3px;
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 300;
     white-space: nowrap;
-    padding: 0.4rem 1.2rem;
-    border-radius: 4px;
-    background: transparent;
-    border: 0;
-    box-shadow: none;
-    display: inline-block;
-    transition: all 0.3s ease;
+    padding: 0.6rem 1.5rem;
+    border-radius: 8px;
+    background: linear-gradient(135deg, rgba(255, 215, 0, 0.1) 0%, rgba(255, 215, 0, 0.02) 100%);
+    border: 1px solid rgba(255, 215, 0, 0.15);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+    display: inline-flex;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     text-transform: none;
+    position: relative;
+    overflow: hidden;
+
+    // Shimmer animation effect
+    &::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        left: -50%;
+        width: 200%;
+        height: 200%;
+        background: linear-gradient(
+            45deg,
+            transparent 30%,
+            rgba(255, 215, 0, 0.05) 40%,
+            rgba(255, 215, 0, 0.1) 50%,
+            rgba(255, 215, 0, 0.05) 60%,
+            transparent 70%
+        );
+        animation: shimmer 3s ease-in-out infinite;
+        transform: rotate(-45deg);
+    }
 
     &:hover {
-        background: transparent;
-        border-color: transparent;
-        color: var(--text-prominent);
-        transform: translateY(-1px);
-        box-shadow: none;
+        background: linear-gradient(135deg, rgba(255, 215, 0, 0.15) 0%, rgba(255, 215, 0, 0.05) 100%);
+        border-color: rgba(255, 215, 0, 0.25);
+        color: rgba(255, 255, 255, 0.9);
+        transform: translateY(-2px) scale(1.02);
+        box-shadow: 0 8px 32px rgba(255, 215, 0, 0.15), 0 4px 16px rgba(0, 0, 0, 0.2);
+    }
+
+    .logo-prefix {
+        font-size: 0.85rem;
+        font-weight: 400;
+        opacity: 0.7;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.6);
+    }
+
+    .logo-main {
+        font-size: 1.35rem;
+        font-weight: 900;
+        background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        letter-spacing: 1.5px;
+        text-shadow: 0 2px 8px rgba(255, 215, 0, 0.2);
+        animation: pulseText 2s ease-in-out infinite;
+        position: relative;
+
+        &::after {
+            content: '●';
+            font-size: 6px;
+            position: absolute;
+            top: -4px;
+            right: -14px;
+            color: #FFD700;
+            -webkit-text-fill-color: #FFD700;
+            animation: blinkDot 1.5s ease-in-out infinite;
+        }
+    }
+
+    // Responsive adjustments
+    @media (max-width: 768px) {
+        padding: 0.4rem 1rem;
+        font-size: 0.9rem;
+        gap: 0.5rem;
+
+        .logo-prefix {
+            font-size: 0.7rem;
+        }
+
+        .logo-main {
+            font-size: 1.1rem;
+        }
+    }
+}
+
+// Animations
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%) rotate(-45deg);
+    }
+    100% {
+        transform: translateX(100%) rotate(-45deg);
+    }
+}
+
+@keyframes pulseText {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.9;
+        transform: scale(1.02);
+    }
+}
+
+@keyframes blinkDot {
+    0%, 100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.3;
+        transform: scale(0.8);
+    }
+}
+
+// Dark theme support (if needed)
+@media (prefers-color-scheme: dark) {
+    .powered-by-text {
+        background: linear-gradient(135deg, rgba(255, 215, 0, 0.08) 0%, rgba(255, 215, 0, 0.01) 100%);
+        border-color: rgba(255, 215, 0, 0.1);
     }
 }
