@@ -173,349 +173,6 @@ $at-text-faint: #2c4060;
     }
 }
 
-// ── L→Digit Recovery Section Styles ────────────────────────────────────────
-
-.auto-trades-l-digit-section {
-    background: linear-gradient(135deg, rgba(33, 33, 33, 0.95) 0%, rgba(25, 25, 25, 0.98) 100%);
-    border-radius: 16px;
-    padding: 1.25rem;
-    margin-bottom: 1.5rem;
-    border: 2px solid rgba(255, 152, 0, 0.2);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-    transition: all 0.3s ease;
-
-    &:hover {
-        border-color: rgba(255, 152, 0, 0.4);
-        box-shadow: 0 4px 20px rgba(255, 152, 0, 0.15);
-    }
-
-    &__header {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin-bottom: 1rem;
-        padding-bottom: 0.75rem;
-        border-bottom: 2px solid rgba(255, 152, 0, 0.3);
-    }
-
-    &__icon {
-        font-size: 1.5rem;
-    }
-
-    &__title {
-        font-size: 1.1rem;
-        font-weight: 600;
-        color: #ff9800;
-        letter-spacing: 0.5px;
-    }
-
-    &__badge {
-        margin-left: auto;
-        padding: 0.25rem 0.75rem;
-        border-radius: 20px;
-        font-size: 0.7rem;
-        font-weight: 600;
-        background: rgba(100, 100, 100, 0.3);
-        color: #aaa;
-        
-        &--active {
-            background: linear-gradient(135deg, #ff9800, #ff6b00);
-            color: white;
-            animation: pulse 1.5s infinite;
-            box-shadow: 0 0 8px rgba(255, 152, 0, 0.6);
-        }
-
-        &--waiting {
-            background: #f5b342;
-            color: #1a1a1a;
-            animation: pulse 0.8s infinite;
-        }
-
-        &--ready {
-            background: #4caf84;
-            color: white;
-        }
-    }
-
-    &__config {
-        margin-top: 1rem;
-        animation: slideDown 0.3s ease-out;
-    }
-
-    &__field {
-        margin-bottom: 1.25rem;
-    }
-
-    &__label {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        font-size: 0.85rem;
-        font-weight: 500;
-        color: #ddd;
-        margin-bottom: 0.5rem;
-    }
-
-    &__lookback {
-        position: relative;
-        padding: 0.5rem 0;
-    }
-
-    &__range {
-        width: 100%;
-        height: 6px;
-        -webkit-appearance: none;
-        appearance: none;
-        background: linear-gradient(90deg, #ff9800 0%, #ff9800 var(--fill-percent, 0%), #444 var(--fill-percent, 0%), #444 100%);
-        border-radius: 3px;
-        outline: none;
-        cursor: pointer;
-        transition: all 0.2s;
-
-        &:hover {
-            height: 8px;
-        }
-
-        &::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            appearance: none;
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #ff9800, #ff6b00);
-            border: 3px solid white;
-            box-shadow: 0 2px 12px rgba(255, 152, 0, 0.4);
-            cursor: pointer;
-            transition: transform 0.2s, box-shadow 0.2s;
-            
-            &:hover {
-                transform: scale(1.2);
-                box-shadow: 0 2px 16px rgba(255, 152, 0, 0.6);
-            }
-        }
-
-        &::-moz-range-thumb {
-            width: 22px;
-            height: 22px;
-            border-radius: 50%;
-            background: linear-gradient(135deg, #ff9800, #ff6b00);
-            border: 3px solid white;
-            cursor: pointer;
-        }
-
-        &:disabled {
-            opacity: 0.4;
-            cursor: not-allowed;
-
-            &::-webkit-slider-thumb {
-                cursor: not-allowed;
-                transform: none !important;
-            }
-        }
-    }
-
-    &__lookback-value {
-        display: flex;
-        align-items: baseline;
-        justify-content: center;
-        gap: 0.25rem;
-        margin-top: 0.75rem;
-        padding: 0.5rem 1rem;
-        background: rgba(0, 0, 0, 0.4);
-        border-radius: 8px;
-        border: 1px solid rgba(255, 152, 0, 0.1);
-    }
-
-    &__lookback-number {
-        font-size: 2rem;
-        font-weight: 700;
-        color: #ff9800;
-        line-height: 1;
-        text-shadow: 0 0 12px rgba(255, 152, 0, 0.3);
-        font-variant-numeric: tabular-nums;
-        min-width: 2.4rem;
-        text-align: center;
-    }
-
-    &__lookback-unit {
-        font-size: 0.8rem;
-        color: #aaa;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    &__hint {
-        font-size: 0.85rem;
-        color: #ff9800;
-        margin-top: 0.8rem;
-        padding: 0.8rem 1rem;
-        background: rgba(255, 152, 0, 0.08);
-        border-radius: 0.6rem;
-        border-left: 3px solid #ff9800;
-        line-height: 1.6;
-
-        strong {
-            color: #ffab40;
-            font-weight: 700;
-        }
-    }
-}
-
-// Markets badge for L→Digit
-.auto-trades-markets__l-digit-badge {
-    margin-left: 0.75rem;
-    padding: 0.25rem 0.6rem;
-    border-radius: 20px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    background: linear-gradient(135deg, #666, #444);
-    color: #ccc;
-    transition: all 0.3s ease;
-    
-    &--active {
-        background: linear-gradient(135deg, #ff9800, #ff6b00);
-        color: white;
-        animation: badgePulse 1.5s infinite;
-        box-shadow: 0 0 12px rgba(255, 152, 0, 0.4);
-    }
-
-    &--waiting {
-        background: #f5b342;
-        color: #1a1a1a;
-        animation: badgePulse 0.8s infinite;
-    }
-}
-
-// Market card L→Digit active state
-.auto-trades-market--l-digit-active {
-    border: 2px solid #ff9800 !important;
-    box-shadow: 0 0 20px rgba(255, 152, 0, 0.25);
-    background: linear-gradient(135deg, rgba(255, 152, 0, 0.08), rgba(255, 107, 0, 0.03));
-    
-    .auto-trades-market__badge--l-digit {
-        background: linear-gradient(135deg, #ff9800, #ff6b00);
-        animation: badgePulse 1s infinite;
-        box-shadow: 0 0 8px rgba(255, 152, 0, 0.4);
-    }
-}
-
-.auto-trades-market--l-digit-waiting {
-    border: 2px solid #f5b342 !important;
-    box-shadow: 0 0 20px rgba(245, 179, 66, 0.15);
-    background: linear-gradient(135deg, rgba(245, 179, 66, 0.06), rgba(245, 179, 66, 0.01));
-}
-
-// ── Animations ───────────────────────────────────────────────────────────────
-
-@keyframes pulse {
-    0%, 100% {
-        opacity: 1;
-        box-shadow: 0 0 8px rgba(255, 152, 0, 0.6);
-    }
-    50% {
-        opacity: 0.9;
-        box-shadow: 0 0 20px rgba(255, 152, 0, 0.9);
-    }
-}
-
-@keyframes badgePulse {
-    0%, 100% {
-        transform: scale(1);
-        box-shadow: 0 0 8px rgba(255, 152, 0, 0.4);
-    }
-    50% {
-        transform: scale(1.08);
-        box-shadow: 0 0 16px rgba(255, 152, 0, 0.7);
-    }
-}
-
-@keyframes slideDown {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-// ── Floating Alert ───────────────────────────────────────────────────────────
-
-.auto-trades-floating-alert {
-    position: fixed;
-    right: 2rem;
-    bottom: 2rem;
-    z-index: 30;
-    width: min(38rem, calc(100vw - 2.4rem));
-    padding: 1.8rem;
-    border-radius: 1.6rem;
-    border: 1px solid rgba(0, 204, 122, 0.3);
-    background: linear-gradient(180deg, rgba(0, 204, 122, 0.18), rgba(8, 14, 29, 0.96)),
-                linear-gradient(135deg, rgba(46, 127, 216, 0.1), transparent 55%);
-    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
-    color: $at-text;
-
-    &__eyebrow {
-        margin-bottom: 0.6rem;
-        font-size: 1.2rem;
-        font-weight: 700;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-        color: #7bf0b4;
-    }
-
-    strong {
-        display: block;
-        margin-bottom: 0.6rem;
-        font-size: 2rem;
-    }
-
-    p {
-        margin: 0;
-        font-size: 1.4rem;
-        line-height: 1.5;
-        color: $at-text-dim;
-    }
-
-    &__actions {
-        display: flex;
-        gap: 0.8rem;
-        margin-top: 1.2rem;
-
-        button {
-            border: 0;
-            border-radius: 999px;
-            padding: 0.9rem 1.5rem;
-            font-size: 1.3rem;
-            font-weight: 700;
-            cursor: pointer;
-            transition: transform 0.18s ease, opacity 0.18s ease;
-
-            &:hover {
-                transform: translateY(-1px);
-            }
-        }
-
-        button:first-child {
-            background: linear-gradient(135deg, #0bb86a, #1e5aa8);
-            color: #fff;
-        }
-
-        button:last-child {
-            background: rgba(255, 255, 255, 0.08);
-            color: $at-text;
-        }
-    }
-
-    @include mobile-or-tablet-screen {
-        right: 1.2rem;
-        bottom: 7.6rem;
-        left: 1.2rem;
-        width: auto;
-    }
-}
-
 // ── Card ─────────────────────────────────────────────────────────────────────
 
 .auto-trades-card {
@@ -538,6 +195,14 @@ $at-text-faint: #2c4060;
         opacity: 0.6;
     }
 
+    &--m1::before {
+        background: linear-gradient(90deg, $at-navy, $at-navy-bright, $at-navy);
+    }
+
+    &--m2::before {
+        background: linear-gradient(90deg, $at-amber, #f0a030, $at-amber);
+    }
+
     &__title {
         font-size: 1.6rem;
         font-weight: 700;
@@ -554,6 +219,92 @@ $at-text-faint: #2c4060;
             height: 1px;
             background: $at-border;
         }
+    }
+}
+
+// ── Mode Selector ──────────────────────────────────────────────────────────
+
+.auto-trades-mode-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.auto-trades-mode-btn {
+    all: unset;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.2rem;
+    background: $at-bg-deep;
+    border: 1px solid $at-border;
+    border-radius: 0.8rem;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover:not(&--disabled) {
+        border-color: $at-border-glow;
+        background: $at-bg-card-2;
+    }
+
+    &--active {
+        border-color: $at-crimson;
+        background: $at-crimson-faint;
+        box-shadow: 0 0 0 1px rgba(196, 32, 56, 0.15);
+    }
+
+    &--disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+    }
+
+    &__icon {
+        font-size: 1.6rem;
+        flex-shrink: 0;
+    }
+
+    &__label {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: $at-text;
+    }
+
+    &__desc {
+        font-size: 1.1rem;
+        color: $at-text-muted;
+        margin-left: auto;
+    }
+}
+
+.auto-trades-mode-hint {
+    font-size: 1.2rem;
+    color: $at-text-muted;
+    margin-top: 0.8rem;
+    text-align: center;
+}
+
+// ── Toggle Switch ──────────────────────────────────────────────────────────
+
+.auto-trades-toggle {
+    all: unset;
+    padding: 0.2rem 0.8rem;
+    border-radius: 1.2rem;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    background: $at-text-faint;
+    color: $at-text-muted;
+    margin-left: auto;
+
+    &--active {
+        background: $at-amber;
+        color: #fff;
+        box-shadow: 0 0 12px rgba(217, 146, 26, 0.3);
+    }
+
+    &:hover {
+        transform: scale(1.05);
     }
 }
 
@@ -602,11 +353,8 @@ $at-text-faint: #2c4060;
             letter-spacing: 0.01em;
         }
 
-        &--martingale-threshold {
-            max-width: 20rem;
-        }
-        
-        input, select {
+        input,
+        select {
             font-size: 1.4rem !important;
         }
     }
@@ -713,7 +461,6 @@ $at-text-faint: #2c4060;
         }
     }
 
-    // Prediction pair selector
     &__prediction-pair {
         margin-top: 0.4rem;
         min-width: 0;
@@ -806,11 +553,6 @@ $at-text-faint: #2c4060;
     &--running {
         background: $at-win;
         animation: at-pulse 1s infinite;
-    }
-
-    &--waiting {
-        background: #f5b342;
-        animation: at-pulse 0.6s infinite;
     }
 
     &--loading {
@@ -934,7 +676,7 @@ $at-text-faint: #2c4060;
     }
 }
 
-// ── Strategy button (Direct/Inverse toggle) ──────────────────────────────────
+// ── Strategy button ──────────────────────────────────────────────────────────
 
 .auto-trades-strategy-btn {
     width: 100%;
@@ -1093,8 +835,7 @@ $at-text-faint: #2c4060;
 
 // ── Hint text ────────────────────────────────────────────────────────────────
 
-.auto-trades-inverse__hint,
-.auto-trades-martingale__hint {
+.auto-trades-inverse__hint {
     font-size: 1.2rem;
     color: $at-text-muted;
     margin-top: 0.5rem;
@@ -1136,16 +877,14 @@ $at-text-faint: #2c4060;
         animation: at-pulse 2s infinite;
     }
 
-    &__waiting-badge {
-        background: #f5b342;
-        color: #1a1a1a;
-        font-size: 10px;
+    &__mode-badge {
+        font-size: 1.1rem;
         font-weight: 700;
-        padding: 2px 10px;
-        border-radius: 20px;
-        margin-left: 8px;
-        letter-spacing: 0.3px;
-        text-transform: uppercase;
+        background: $at-crimson-faint;
+        border: 1px solid rgba(196, 32, 56, 0.2);
+        padding: 0.2rem 0.8rem;
+        border-radius: 2rem;
+        color: $at-crimson-light;
     }
 
     &__actions {
@@ -1228,15 +967,16 @@ $at-text-faint: #2c4060;
         animation: at-trade-pulse 1s ease-in-out infinite;
     }
 
-    &--l-digit-active {
+    &--m2-active {
         border-color: $at-amber;
         background: $at-amber-glow;
         box-shadow: 0 0 0 1px rgba(217, 146, 26, 0.2);
     }
 
-    &--l-digit-waiting {
-        border-color: #f5b342;
-        box-shadow: 0 0 20px rgba(245, 179, 66, 0.1);
+    &--recovery-active {
+        border-color: #ff6b35;
+        background: rgba(255, 107, 53, 0.08);
+        box-shadow: 0 0 0 1px rgba(255, 107, 53, 0.15);
     }
 
     &--win {
@@ -1266,6 +1006,13 @@ $at-text-faint: #2c4060;
         font-size: 1.2rem;
         color: $at-text-muted;
         margin: 0;
+    }
+
+    &__mode-label {
+        font-size: 1.1rem;
+        color: $at-text-dim;
+        margin: 0.2rem 0 0;
+        font-weight: 500;
     }
 
     &__quote {
@@ -1299,15 +1046,16 @@ $at-text-faint: #2c4060;
             border-color: rgba(46, 127, 216, 0.25);
         }
 
-        &--l-digit {
+        &--m2 {
             background: $at-amber-glow;
             color: $at-amber;
             border-color: rgba(217, 146, 26, 0.25);
         }
 
-        &--waiting {
-            background: #f5b342;
-            color: #1a1a1a;
+        &--recovery {
+            background: rgba(255, 107, 53, 0.15);
+            color: #ff6b35;
+            border-color: rgba(255, 107, 53, 0.25);
         }
     }
 
@@ -1316,6 +1064,7 @@ $at-text-faint: #2c4060;
         align-items: center;
         gap: 0.5rem;
         margin-bottom: 0.9rem;
+        flex-wrap: wrap;
     }
 
     &__dot {
@@ -1333,6 +1082,16 @@ $at-text-faint: #2c4060;
         &--ready {
             background: $at-win;
             box-shadow: 0 0 4px $at-win-glow;
+        }
+
+        &--m2 {
+            background: $at-amber;
+            box-shadow: 0 0 4px $at-amber-glow;
+        }
+
+        &--recovery {
+            background: #ff6b35;
+            box-shadow: 0 0 4px rgba(255, 107, 53, 0.3);
         }
     }
 
@@ -1371,6 +1130,29 @@ $at-text-faint: #2c4060;
         }
     }
 
+    &__candle {
+        font-size: 1.2rem;
+        font-weight: 600;
+        padding: 0.3rem 0.6rem;
+        border-radius: 0.4rem;
+        margin-bottom: 0.8rem;
+
+        &--bullish {
+            color: $at-win;
+            background: $at-win-glow;
+        }
+
+        &--bearish {
+            color: $at-crimson;
+            background: $at-crimson-faint;
+        }
+
+        &--waiting {
+            color: $at-text-muted;
+            background: $at-bg-card-2;
+        }
+    }
+
     &__footer {
         display: flex;
         justify-content: space-between;
@@ -1393,18 +1175,19 @@ $at-text-faint: #2c4060;
         font-weight: 700;
     }
 
-    &__waiting-status {
-        background: #1a1a1a;
-        border-left: 3px solid #f5b342;
-        padding: 8px 12px;
-        margin-top: 8px;
-        border-radius: 4px;
-        font-size: 11px;
-        color: #e0e0e0;
-        line-height: 1.4;
+    &__recovery-status {
+        background: rgba(255, 107, 53, 0.1);
+        border-left: 3px solid #ff6b35;
+        padding: 0.6rem 0.8rem;
+        margin: 0.4rem 0 0.8rem;
+        border-radius: 0.4rem;
+        font-size: 1.1rem;
+        color: #ff6b35;
+        font-weight: 600;
 
         small {
-            color: #8fa0b5;
+            font-weight: 400;
+            color: $at-text-dim;
         }
     }
 
@@ -1494,6 +1277,82 @@ $at-text-faint: #2c4060;
     color: $at-text-muted;
     text-align: center;
     line-height: 1.6;
+}
+
+// ── Floating Alert ───────────────────────────────────────────────────────────
+
+.auto-trades-floating-alert {
+    position: fixed;
+    right: 2rem;
+    bottom: 2rem;
+    z-index: 30;
+    width: min(38rem, calc(100vw - 2.4rem));
+    padding: 1.8rem;
+    border-radius: 1.6rem;
+    border: 1px solid rgba(0, 204, 122, 0.3);
+    background: linear-gradient(180deg, rgba(0, 204, 122, 0.18), rgba(8, 14, 29, 0.96)),
+                linear-gradient(135deg, rgba(46, 127, 216, 0.1), transparent 55%);
+    box-shadow: 0 18px 40px rgba(0, 0, 0, 0.35);
+    color: $at-text;
+
+    &__eyebrow {
+        margin-bottom: 0.6rem;
+        font-size: 1.2rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #7bf0b4;
+    }
+
+    strong {
+        display: block;
+        margin-bottom: 0.6rem;
+        font-size: 2rem;
+    }
+
+    p {
+        margin: 0;
+        font-size: 1.4rem;
+        line-height: 1.5;
+        color: $at-text-dim;
+    }
+
+    &__actions {
+        display: flex;
+        gap: 0.8rem;
+        margin-top: 1.2rem;
+
+        button {
+            border: 0;
+            border-radius: 999px;
+            padding: 0.9rem 1.5rem;
+            font-size: 1.3rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.18s ease, opacity 0.18s ease;
+
+            &:hover {
+                transform: translateY(-1px);
+            }
+        }
+
+        button:first-child {
+            background: linear-gradient(135deg, #0bb86a, #1e5aa8);
+            color: #fff;
+        }
+
+        button:last-child {
+            background: rgba(255, 255, 255, 0.08);
+            color: $at-text;
+        }
+    }
+
+    @include mobile-or-tablet-screen {
+        right: 1.2rem;
+        bottom: 7.6rem;
+        left: 1.2rem;
+        width: auto;
+    }
 }
 
 // ── Risk disclaimer button ───────────────────────────────────────────────────
@@ -1597,22 +1456,6 @@ $at-text-faint: #2c4060;
         font-weight: 700;
         cursor: pointer;
     }
-}
-
-// ── Animations ───────────────────────────────────────────────────────────────
-
-@keyframes at-pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.3; }
-}
-
-@keyframes at-spin {
-    to { transform: rotate(360deg); }
-}
-
-@keyframes at-trade-pulse {
-    0%, 100% { box-shadow: 0 0 0 0 rgba(46, 127, 216, 0.2); }
-    50% { box-shadow: 0 0 0 6px rgba(46, 127, 216, 0); }
 }
 
 // ── TP/SL Notification Styles ───────────────────────────────────────────────
@@ -1845,31 +1688,6 @@ $at-text-faint: #2c4060;
         color: #7f8fa3;
     }
 
-    &__sl-reference {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        font-size: 9px;
-        color: #5f7289;
-        margin-top: 4px;
-        padding: 4px 8px;
-        background: rgba(255, 255, 255, 0.03);
-        border-radius: 6px;
-        border: 1px solid rgba(255, 255, 255, 0.04);
-    }
-
-    &__sl-status {
-        font-weight: 600;
-        padding: 1px 6px;
-        border-radius: 10px;
-        background: rgba(255, 255, 255, 0.04);
-
-        &--active {
-            color: #e35f5f;
-            background: rgba(227, 95, 95, 0.12);
-        }
-    }
-
     &__footer {
         display: flex;
         gap: 6px;
@@ -1911,46 +1729,30 @@ $at-text-faint: #2c4060;
     }
 }
 
+// ── Animations ───────────────────────────────────────────────────────────────
+
+@keyframes at-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+}
+
+@keyframes at-spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes at-trade-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(46, 127, 216, 0.2); }
+    50% { box-shadow: 0 0 0 6px rgba(46, 127, 216, 0); }
+}
+
 @keyframes tpSlFadeIn {
-    from {
-        opacity: 0;
-    }
-    to {
-        opacity: 1;
-    }
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 @keyframes tpSlSlideUp {
-    from {
-        opacity: 0;
-        transform: translateY(16px) scale(0.96);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0) scale(1);
-    }
-}
-
-// ── L→Digit Recovery Waiting Banner ─────────────────────────────────────────
-
-.auto-trades-l-digit-waiting {
-    background: #1a1a1a;
-    border: 2px solid #f5b342;
-    border-radius: 8px;
-    padding: 12px 16px;
-    margin: 12px 0;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: #e0e0e0;
-
-    &__icon {
-        font-size: 20px;
-    }
-
-    strong {
-        color: #ffffff;
-    }
+    from { opacity: 0; transform: translateY(16px) scale(0.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 // ── Mobile overrides ─────────────────────────────────────────────────────────
@@ -2013,5 +1815,13 @@ $at-text-faint: #2c4060;
         width: 220px;
         height: 260px;
         padding: 14px 14px 16px;
+    }
+
+    .auto-trades-mode-btn {
+        padding: 0.8rem 1rem;
+
+        &__desc {
+            display: none;
+        }
     }
 }
