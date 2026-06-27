@@ -37,25 +37,6 @@ type FloatingStrategyAlert = {
     symbol: string;
 };
 
-// L→Digit Strategy Types
-type LDigitPatternType = 
-    | 'odd_to_even'
-    | 'even_to_odd'
-    | 'over_to_under'
-    | 'under_to_over'
-    | 'match_to_diff'
-    | 'diff_to_match'
-    | 'rise_to_fall'
-    | 'fall_to_rise';
-
-type LDigitAnalysis = {
-    enabled: boolean;
-    patternType: LDigitPatternType;
-    lookbackTicks: number;
-    thresholdDigit?: number;
-    barrierDigit?: number;
-};
-
 const FIVE_MINUTE_GRANULARITY = 300;
 const STRATEGY_ALERT_SOUND_ID = 'announcement';
 
@@ -248,10 +229,8 @@ const getTemplateTradeConfig = (template: StrategyTemplate) => {
 
 const playStrategyAlertSound = () => {
     if (typeof document === 'undefined') return;
-
     const audio = document.getElementById(STRATEGY_ALERT_SOUND_ID) as HTMLAudioElement | null;
     if (!audio) return;
-
     audio.currentTime = 0;
     audio.play().catch(() => {});
 };
@@ -301,7 +280,6 @@ export const getPredictionForLastOutcome = ({
     fallback_barrier: number;
 }) => {
     if (!usesLossPrediction(trade_type)) return fallback_barrier;
-
     return consecutive_losses > 0 || last_result === 'loss' ? prediction_after_loss : prediction_before_loss;
 };
 
@@ -399,98 +377,9 @@ export const hasRequiredDigitStreak = ({
     streak: number;
 }) => {
     if (digits.length < streak) return false;
-
     return digits
         .slice(-streak)
         .every(digit => isDigitSignalMatch({ trade_type, digit, barrier, inverse }));
-};
-
-// Evaluate L→digit strategy condition
-const evaluateLDigitCondition = (
-    lDigitStrategy: LDigitAnalysis | null,
-    digits: number[],
-    directions: Direction[],
-    currentBarrier: number
-): boolean => {
-    if (!lDigitStrategy?.enabled) return false;
-    
-    if (digits.length < lDigitStrategy.lookbackTicks && directions.length < lDigitStrategy.lookbackTicks) {
-        return false;
-    }
-
-    const recentDigits = digits.slice(-lDigitStrategy.lookbackTicks);
-    const recentDirections = directions.slice(-lDigitStrategy.lookbackTicks);
-
-    switch (lDigitStrategy.patternType) {
-        case 'odd_to_even':
-            return recentDigits.length >= lDigitStrategy.lookbackTicks && 
-                   recentDigits.every(d => d % 2 !== 0);
-        
-        case 'even_to_odd':
-            return recentDigits.length >= lDigitStrategy.lookbackTicks && 
-                   recentDigits.every(d => d % 2 === 0);
-        
-        case 'over_to_under':
-            if (lDigitStrategy.thresholdDigit === undefined) return false;
-            return recentDigits.length >= lDigitStrategy.lookbackTicks && 
-                   recentDigits.every(d => d > lDigitStrategy.thresholdDigit!);
-        
-        case 'under_to_over':
-            if (lDigitStrategy.thresholdDigit === undefined) return false;
-            return recentDigits.length >= lDigitStrategy.lookbackTicks && 
-                   recentDigits.every(d => d < lDigitStrategy.thresholdDigit!);
-        
-        case 'match_to_diff':
-            if (lDigitStrategy.barrierDigit === undefined) return false;
-            return recentDigits.length >= lDigitStrategy.lookbackTicks && 
-                   recentDigits.every(d => d === lDigitStrategy.barrierDigit);
-        
-        case 'diff_to_match':
-            if (lDigitStrategy.barrierDigit === undefined) return false;
-            return recentDigits.length >= lDigitStrategy.lookbackTicks && 
-                   recentDigits.every(d => d !== lDigitStrategy.barrierDigit);
-        
-        case 'rise_to_fall':
-            return recentDirections.length >= lDigitStrategy.lookbackTicks && 
-                   recentDirections.every(d => d === 1);
-        
-        case 'fall_to_rise':
-            return recentDirections.length >= lDigitStrategy.lookbackTicks && 
-                   recentDirections.every(d => d === -1);
-        
-        default:
-            return false;
-    }
-};
-
-// Get the trade type to use based on L→Digit strategy
-const getLDigitTradeType = (
-    lDigitStrategy: LDigitAnalysis | null,
-    originalTradeType: TradeType,
-    barrier: number
-): TradeType | null => {
-    if (!lDigitStrategy?.enabled) return null;
-
-    switch (lDigitStrategy.patternType) {
-        case 'odd_to_even':
-            return 'DIGITEVEN';
-        case 'even_to_odd':
-            return 'DIGITODD';
-        case 'over_to_under':
-            return 'DIGITUNDER';
-        case 'under_to_over':
-            return 'DIGITOVER';
-        case 'match_to_diff':
-            return 'DIGITDIFF';
-        case 'diff_to_match':
-            return 'DIGITMATCH';
-        case 'rise_to_fall':
-            return 'PUT';
-        case 'fall_to_rise':
-            return 'CALL';
-        default:
-            return null;
-    }
 };
 
 const isDirectionMatch = (trade_type: TradeType, direction: Direction) => {
@@ -681,9 +570,22 @@ export const isPercentageSignalReady = (trade_type: TradeType, state: MarketStat
     );
 };
 
+// ─── Market Configuration ────────────────────────────────────────────────────
+
+interface MarketConfig {
+    tradeType: TradeType;
+    barrier: number;
+    predictionBeforeLoss: number;
+    predictionAfterLoss: number;
+    streak: number;
+    analysisTicks: number;
+    inverseMode: boolean;
+    strategyMode: StrategyMode;
+    strategyTemplate: StrategyTemplate;
+}
+
 interface MarketState {
-    alertActive: boolean;
-    alertMessage: string;
+    // Core state
     consecutive: number;
     trading: boolean;
     isRecovering: boolean;
@@ -710,12 +612,17 @@ interface MarketState {
     qualifyingWinningDigits: number[];
     specialEntryReady: boolean;
     trailingTriggerCount: number;
-    // L→Digit recovery state
-    lDigitRecoveryActive: boolean;
-    lDigitWaitingForPattern: boolean;
-    lDigitPatternMatched: boolean;
-    lDigitOriginalTradeType: TradeType | null;
-    lDigitRecoveryStartTime: number | null;
+    alertActive: boolean;
+    alertMessage: string;
+    // Market mode state
+    activeMarket: 'market1' | 'market2' | 'recovery' | 'idle';
+    recoveryActive: boolean;
+    recoveryPatternMatched: boolean;
+    recoveryStartTime: number | null;
+    // Market 2 specific
+    market2Consecutive: number;
+    market2LastResult: 'win' | 'loss' | null;
+    market2ConsecutiveLosses: number;
 }
 
 interface MarketDisplay extends MarketState {
@@ -725,17 +632,15 @@ interface MarketDisplay extends MarketState {
 }
 
 const createMarketState = (prev?: Partial<MarketState>): MarketState => ({
-    alertActive: prev?.alertActive ?? false,
-    alertMessage: prev?.alertMessage ?? '',
     consecutive: 0,
     trading: false,
     isRecovering: false,
     lastDigits: prev?.lastDigits ?? [],
     directionHistory: prev?.directionHistory ?? [],
     prevQuote: prev?.prevQuote ?? null,
-    candleDirection: prev?.candleDirection ?? 0,
-    candleOpen: prev?.candleOpen ?? null,
-    candleClose: prev?.candleClose ?? null,
+    candleDirection: 0,
+    candleOpen: null,
+    candleClose: null,
     directionSampleHistory: prev?.directionSampleHistory ?? [],
     tradeCount: 0,
     lastResult: null,
@@ -753,11 +658,15 @@ const createMarketState = (prev?: Partial<MarketState>): MarketState => ({
     qualifyingWinningDigits: prev?.qualifyingWinningDigits ?? [],
     specialEntryReady: prev?.specialEntryReady ?? false,
     trailingTriggerCount: prev?.trailingTriggerCount ?? 0,
-    lDigitRecoveryActive: prev?.lDigitRecoveryActive ?? false,
-    lDigitWaitingForPattern: prev?.lDigitWaitingForPattern ?? false,
-    lDigitPatternMatched: prev?.lDigitPatternMatched ?? false,
-    lDigitOriginalTradeType: prev?.lDigitOriginalTradeType ?? null,
-    lDigitRecoveryStartTime: prev?.lDigitRecoveryStartTime ?? null,
+    alertActive: prev?.alertActive ?? false,
+    alertMessage: prev?.alertMessage ?? '',
+    activeMarket: prev?.activeMarket ?? 'idle',
+    recoveryActive: prev?.recoveryActive ?? false,
+    recoveryPatternMatched: prev?.recoveryPatternMatched ?? false,
+    recoveryStartTime: prev?.recoveryStartTime ?? null,
+    market2Consecutive: prev?.market2Consecutive ?? 0,
+    market2LastResult: prev?.market2LastResult ?? null,
+    market2ConsecutiveLosses: prev?.market2ConsecutiveLosses ?? 0,
 });
 
 const getDirectionSamplesFromQuotes = (quotes: number[]): Direction[] =>
@@ -817,7 +726,8 @@ const appendPercentageQuote = (
     rebuildPercentageAnalytics(symbol, state, trade_type);
 };
 
-// TP/SL Notification Component
+// ─── TP/SL Notification Component ──────────────────────────────────────────
+
 const TPSLNotification: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -940,6 +850,8 @@ const TPSLNotification: React.FC<{
     );
 };
 
+// ─── Main Component ──────────────────────────────────────────────────────────
+
 const AutoTrades = observer(() => {
     const { dashboard, client, run_panel, summary_card, transactions } = useStore();
     const { currency } = client;
@@ -957,19 +869,118 @@ const AutoTrades = observer(() => {
         'RUNHIGH',
         'RUNLOW',
     ];
-    const loadSaved = (key: string, fallback: string) => {
-        try {
-            return localStorage.getItem(`auto_trades_${key}`) || fallback;
-        } catch {
-            return fallback;
-        }
-    };
-    const loadSavedNum = (key: string, fallback: string, min: number, max: number) => {
-        const v = loadSaved(key, fallback);
-        const n = Number(v);
-        return !isNaN(n) && n >= min && n <= max ? v : fallback;
-    };
-    const loadSavedMarkets = () => {
+
+    // ─── Market Config State ────────────────────────────────────────────────
+
+    // Market 1 Config
+    const [m1Stake, setM1Stake] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m1_stake') || '1'; } catch { return '1'; }
+    });
+    const [m1Martingale, setM1Martingale] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m1_martingale') || '2'; } catch { return '2'; }
+    });
+    const [m1TakeProfit, setM1TakeProfit] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m1_takeProfit') || '100'; } catch { return '100'; }
+    });
+    const [m1StopLoss, setM1StopLoss] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m1_stopLoss') || '100'; } catch { return '100'; }
+    });
+    const [m1TradeType, setM1TradeType] = useState<TradeType>(() => {
+        const v = localStorage.getItem('auto_trades_m1_tradeType');
+        return VALID_TRADE_TYPES.includes(v as TradeType) ? (v as TradeType) : 'DIGITOVER';
+    });
+    const [m1Barrier, setM1Barrier] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m1_barrier') || '4'; } catch { return '4'; }
+    });
+    const [m1PredictionBeforeLoss, setM1PredictionBeforeLoss] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m1_predictionBeforeLoss') || '4'; } catch { return '4'; }
+    });
+    const [m1PredictionAfterLoss, setM1PredictionAfterLoss] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m1_predictionAfterLoss') || '5'; } catch { return '5'; }
+    });
+    const [m1Streak, setM1Streak] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m1_streak') || '4'; } catch { return '4'; }
+    });
+    const [m1AnalysisTicks, setM1AnalysisTicks] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m1_analysisTicks') || '1'; } catch { return '1'; }
+    });
+    const [m1InverseMode, setM1InverseMode] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m1_inverseMode') === 'true'; } catch { return false; }
+    });
+    const [m1StrategyMode, setM1StrategyMode] = useState<StrategyMode>(() => {
+        try { return (localStorage.getItem('auto_trades_m1_strategyMode') as StrategyMode) || 'STANDARD'; } catch { return 'STANDARD'; }
+    });
+    const [m1StrategyTemplate, setM1StrategyTemplate] = useState<StrategyTemplate>(() => {
+        const saved = localStorage.getItem('auto_trades_m1_strategyTemplate');
+        return STRATEGY_TEMPLATE_IDS.includes(saved as StrategyTemplate) ? (saved as StrategyTemplate) : 'STANDARD';
+    });
+    const [m1MartingaleMode, setM1MartingaleMode] = useState<MartingaleModeType>(() => {
+        try { return normalizeMartingaleMode(localStorage.getItem('auto_trades_m1_martingaleMode')); } catch { return 'after_one_loss'; }
+    });
+    const [m1ConsecutiveLossCount, setM1ConsecutiveLossCount] = useState(getInitialConsecutiveLossThreshold);
+    const [m1ConsecutiveLossCountInput, setM1ConsecutiveLossCountInput] = useState(() =>
+        String(getInitialConsecutiveLossThreshold())
+    );
+
+    // Market 2 Config
+    const [m2Enabled, setM2Enabled] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m2_enabled') === 'true'; } catch { return false; }
+    });
+    const [m2Stake, setM2Stake] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m2_stake') || '1'; } catch { return '1'; }
+    });
+    const [m2Martingale, setM2Martingale] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m2_martingale') || '2'; } catch { return '2'; }
+    });
+    const [m2TakeProfit, setM2TakeProfit] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m2_takeProfit') || '100'; } catch { return '100'; }
+    });
+    const [m2StopLoss, setM2StopLoss] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m2_stopLoss') || '100'; } catch { return '100'; }
+    });
+    const [m2TradeType, setM2TradeType] = useState<TradeType>(() => {
+        const v = localStorage.getItem('auto_trades_m2_tradeType');
+        return VALID_TRADE_TYPES.includes(v as TradeType) ? (v as TradeType) : 'DIGITUNDER';
+    });
+    const [m2Barrier, setM2Barrier] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m2_barrier') || '5'; } catch { return '5'; }
+    });
+    const [m2PredictionBeforeLoss, setM2PredictionBeforeLoss] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m2_predictionBeforeLoss') || '4'; } catch { return '4'; }
+    });
+    const [m2PredictionAfterLoss, setM2PredictionAfterLoss] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m2_predictionAfterLoss') || '5'; } catch { return '5'; }
+    });
+    const [m2Streak, setM2Streak] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m2_streak') || '4'; } catch { return '4'; }
+    });
+    const [m2AnalysisTicks, setM2AnalysisTicks] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m2_analysisTicks') || '1'; } catch { return '1'; }
+    });
+    const [m2InverseMode, setM2InverseMode] = useState(() => {
+        try { return localStorage.getItem('auto_trades_m2_inverseMode') === 'true'; } catch { return false; }
+    });
+    const [m2StrategyMode, setM2StrategyMode] = useState<StrategyMode>(() => {
+        try { return (localStorage.getItem('auto_trades_m2_strategyMode') as StrategyMode) || 'STANDARD'; } catch { return 'STANDARD'; }
+    });
+    const [m2MartingaleMode, setM2MartingaleMode] = useState<MartingaleModeType>(() => {
+        try { return normalizeMartingaleMode(localStorage.getItem('auto_trades_m2_martingaleMode')); } catch { return 'after_one_loss'; }
+    });
+    const [m2ConsecutiveLossCount, setM2ConsecutiveLossCount] = useState(getInitialConsecutiveLossThreshold);
+    const [m2ConsecutiveLossCountInput, setM2ConsecutiveLossCountInput] = useState(() =>
+        String(getInitialConsecutiveLossThreshold())
+    );
+
+    // ─── Market Mode ────────────────────────────────────────────────────────
+
+    type TradingMode = 'market1_only' | 'market2_only' | 'recovery_mode';
+    const [tradingMode, setTradingMode] = useState<TradingMode>(() => {
+        try { return (localStorage.getItem('auto_trades_trading_mode') as TradingMode) || 'market1_only'; } catch { return 'market1_only'; }
+    });
+
+    // ─── Shared State ──────────────────────────────────────────────────────
+
+    const [selectedMarketSymbols, setSelectedMarketSymbols] = useState<string[]>(() => {
         try {
             const raw = localStorage.getItem('auto_trades_markets');
             const parsed = raw ? JSON.parse(raw) : null;
@@ -983,55 +994,22 @@ const AutoTrades = observer(() => {
                 );
                 return symbols;
             }
-        } catch {
-            // Ignore invalid saved market settings.
-        }
+        } catch { /* Ignore */ }
         return AUTO_MARKET_SYMBOLS;
-    };
+    });
 
-    const [stake, setStake] = useState(() => loadSavedNum('stake', '1', 0.01, 100000));
-    const [martingale, setMartingale] = useState(() => loadSavedNum('martingale', '2', 1.01, 100));
-    const [takeProfit, setTakeProfit] = useState(() => loadSavedNum('takeProfit', '100', 1, 1000000));
-    const [stopLoss, setStopLoss] = useState(() => loadSavedNum('stopLoss', '100', 1, 1000000));
-    const [tradeType, setTradeType] = useState<TradeType>(() => {
-        const v = loadSaved('tradeType', 'DIGITOVER');
-        return VALID_TRADE_TYPES.includes(v as TradeType) ? (v as TradeType) : 'DIGITOVER';
-    });
-    const [strategyTemplate, setStrategyTemplate] = useState<StrategyTemplate>(() => {
-        const saved = loadSaved('strategyTemplate', 'STANDARD');
-        return STRATEGY_TEMPLATE_IDS.includes(saved as StrategyTemplate) ? (saved as StrategyTemplate) : 'STANDARD';
-    });
-    const [barrier, setBarrier] = useState(() => loadSavedNum('barrier', '4', 0, 9));
-    const [predictionBeforeLoss, setPredictionBeforeLoss] = useState(() =>
-        loadSavedNum('predictionBeforeLoss', '4', 0, 9)
-    );
-    const [predictionAfterLoss, setPredictionAfterLoss] = useState(() =>
-        loadSavedNum('predictionAfterLoss', '5', 0, 9)
-    );
-    const [streak, setStreak] = useState(() => loadSavedNum('streak', '4', 1, 10));
-    const [analysisTicks, setAnalysisTicks] = useState(() => loadSavedNum('analysisTicks', '1', 1, 10));
-    const [selectedMarketSymbols, setSelectedMarketSymbols] = useState<string[]>(loadSavedMarkets);
-    
-    // L→Digit Strategy - RECOVERY MODE ONLY
-    const [lDigitStrategy, setLDigitStrategy] = useState<LDigitAnalysis>(() => {
-        try {
-            const saved = localStorage.getItem('auto_trades_lDigitStrategy');
-            if (saved) {
-                const parsed = JSON.parse(saved);
-                return {
-                    enabled: parsed.enabled ?? false,
-                    patternType: parsed.patternType ?? 'odd_to_even',
-                    lookbackTicks: parsed.lookbackTicks ?? 5,
-                    thresholdDigit: parsed.thresholdDigit,
-                    barrierDigit: parsed.barrierDigit,
-                };
-            }
-        } catch {
-            // Ignore parse errors
-        }
-        return { enabled: false, patternType: 'odd_to_even', lookbackTicks: 5 };
-    });
-    
+    const [totalPnl, setTotalPnl] = useState(0);
+    const [totalTrades, setTotalTrades] = useState(0);
+    const [error, setError] = useState<string | null>(null);
+    const [isRunning, setIsRunning] = useState(false);
+    const [isConnected, setIsConnected] = useState(false);
+    const [showDisclaimer, setShowDisclaimer] = useState(false);
+    const [currentStakeDisplay, setCurrentStakeDisplay] = useState(1);
+    const [dataStreamLoading, setDataStreamLoading] = useState(false);
+    const [dataStreamMessage, setDataStreamMessage] = useState('Loading selected market data...');
+    const [floatingStrategyAlert, setFloatingStrategyAlert] = useState<FloatingStrategyAlert | null>(null);
+    const [showTPSLNotification, setShowTPSLNotification] = useState(false);
+
     const selectedMarkets = useMemo(
         () => AUTO_MARKETS.filter(market => selectedMarketSymbols.includes(market.symbol)),
         [selectedMarketSymbols]
@@ -1041,56 +1019,7 @@ const AutoTrades = observer(() => {
         [selectedMarketSymbols]
     );
 
-    const [totalPnl, setTotalPnl] = useState(0);
-    const [totalTrades, setTotalTrades] = useState(0);
-    const [error, setError] = useState<string | null>(null);
-    const [isRunning, setIsRunning] = useState(false);
-    const [isConnected, setIsConnected] = useState(false);
-    const [inverseMode, setInverseMode] = useState(() => {
-        try {
-            return localStorage.getItem('auto_trades_inverseMode') === 'true';
-        } catch {
-            return false;
-        }
-    });
-    const inverseModeRef = useRef(false);
-    const [strategyMode, setStrategyMode] = useState<StrategyMode>(() => {
-        try {
-            return (localStorage.getItem('auto_trades_strategyMode') as StrategyMode) || 'STANDARD';
-        } catch {
-            return 'STANDARD';
-        }
-    });
-    const [martingaleMode, setMartingaleMode] = useState<MartingaleModeType>(() => {
-        try {
-            return normalizeMartingaleMode(localStorage.getItem('auto_trades_martingaleMode'));
-        } catch {
-            return 'after_one_loss';
-        }
-    });
-    const [consecutiveLossCount, setConsecutiveLossCount] = useState(getInitialConsecutiveLossThreshold);
-    const [consecutiveLossCountInput, setConsecutiveLossCountInput] = useState(() =>
-        String(getInitialConsecutiveLossThreshold())
-    );
-    const strategyModeRef = useRef(strategyMode);
-    const martingaleModeRef = useRef(martingaleMode);
-    const consecutiveLossCountRef = useRef(consecutiveLossCount);
-    const modeTransitionLockRef = useRef(false);
-    const isRecoveringDataRef = useRef(false);
-    const [showDisclaimer, setShowDisclaimer] = useState(false);
-    const [currentStakeDisplay, setCurrentStakeDisplay] = useState(1);
-    const [dataStreamLoading, setDataStreamLoading] = useState(false);
-    const [dataStreamMessage, setDataStreamMessage] = useState('Loading selected market data...');
-    const [floatingStrategyAlert, setFloatingStrategyAlert] = useState<FloatingStrategyAlert | null>(null);
-    const [showTPSLNotification, setShowTPSLNotification] = useState(false);
-
-    const [marketDisplays, setMarketDisplays] = useState<MarketDisplay[]>(
-        selectedMarkets.map(m => ({
-            ...m,
-            ...createMarketState(),
-            currentStake: 1,
-        }))
-    );
+    // ─── Refs ──────────────────────────────────────────────────────────────
 
     const subscriptionsRef = useRef<Record<string, any>>({});
     const candleSubscriptionsRef = useRef<Record<string, any>>({});
@@ -1103,22 +1032,6 @@ const AutoTrades = observer(() => {
     const totalPnlRef = useRef(0);
     const totalTradesRef = useRef(0);
     const runningRef = useRef(false);
-    const configRef = useRef({
-        stake: 1,
-        martingale: 2,
-        takeProfit: 100,
-        stopLoss: 100,
-        martingaleMode: 'after_one_loss' as MartingaleModeType,
-        consecutiveLossThreshold: 2,
-    });
-    const tradeTypeRef = useRef<TradeType>('DIGITOVER');
-    const originalTradeTypeRef = useRef<TradeType>('DIGITOVER');
-    const strategyTemplateRef = useRef<StrategyTemplate>('STANDARD');
-    const barrierRef = useRef(4);
-    const predictionBeforeLossRef = useRef(4);
-    const predictionAfterLossRef = useRef(5);
-    const streakRef = useRef(4);
-    const analysisTicksRef = useRef(1);
     const globalTradingRef = useRef(false);
     const nextStakeRef = useRef(1);
     const consecutiveLossRef = useRef(0);
@@ -1140,155 +1053,143 @@ const AutoTrades = observer(() => {
     const unmountedRef = useRef(false);
     const stopTradingRef = useRef<() => void>(() => {});
     const floatingStrategyAlertRef = useRef<FloatingStrategyAlert | null>(null);
-    const lDigitStrategyRef = useRef(lDigitStrategy);
+    const isRecoveringDataRef = useRef(false);
+    const tradingModeRef = useRef<TradingMode>('market1_only');
+    const m2EnabledRef = useRef(false);
 
-    // Save L→digit strategy to localStorage
-    useEffect(() => {
-        try {
-            localStorage.setItem('auto_trades_lDigitStrategy', JSON.stringify(lDigitStrategy));
-        } catch {
-            // Ignore localStorage write failures
-        }
-        lDigitStrategyRef.current = lDigitStrategy;
-    }, [lDigitStrategy]);
+    // ─── Market Config Refs ──────────────────────────────────────────────
+
+    // Market 1 Config Refs
+    const m1ConfigRef = useRef({
+        stake: 1,
+        martingale: 2,
+        takeProfit: 100,
+        stopLoss: 100,
+        tradeType: 'DIGITOVER' as TradeType,
+        barrier: 4,
+        predictionBeforeLoss: 4,
+        predictionAfterLoss: 5,
+        streak: 4,
+        analysisTicks: 1,
+        inverseMode: false,
+        strategyMode: 'STANDARD' as StrategyMode,
+        strategyTemplate: 'STANDARD' as StrategyTemplate,
+        martingaleMode: 'after_one_loss' as MartingaleModeType,
+        consecutiveLossThreshold: 2,
+    });
+
+    // Market 2 Config Refs
+    const m2ConfigRef = useRef({
+        enabled: false,
+        stake: 1,
+        martingale: 2,
+        takeProfit: 100,
+        stopLoss: 100,
+        tradeType: 'DIGITUNDER' as TradeType,
+        barrier: 5,
+        predictionBeforeLoss: 4,
+        predictionAfterLoss: 5,
+        streak: 4,
+        analysisTicks: 1,
+        inverseMode: false,
+        strategyMode: 'STANDARD' as StrategyMode,
+        martingaleMode: 'after_one_loss' as MartingaleModeType,
+        consecutiveLossThreshold: 2,
+    });
+
+    // ─── Effect: Sync configs to refs ────────────────────────────────────
 
     useEffect(() => {
-        configRef.current = {
-            stake: Number(stake) || 1,
-            martingale: Math.max(1.01, Number(martingale) || 2),
-            takeProfit: Number(takeProfit) || 100,
-            stopLoss: Number(stopLoss) || 100,
-            martingaleMode,
-            consecutiveLossThreshold: clampConsecutiveLossThreshold(consecutiveLossCount),
+        m1ConfigRef.current = {
+            stake: Number(m1Stake) || 1,
+            martingale: Math.max(1.01, Number(m1Martingale) || 2),
+            takeProfit: Number(m1TakeProfit) || 100,
+            stopLoss: Number(m1StopLoss) || 100,
+            tradeType: m1TradeType,
+            barrier: getDigitNumber(m1Barrier, 4),
+            predictionBeforeLoss: getDigitNumber(m1PredictionBeforeLoss, 4),
+            predictionAfterLoss: getDigitNumber(m1PredictionAfterLoss, 5),
+            streak: Math.min(10, Math.max(1, Number(m1Streak) || 4)),
+            analysisTicks: Math.min(10, Math.max(1, Number(m1AnalysisTicks) || 1)),
+            inverseMode: m1InverseMode,
+            strategyMode: m1StrategyMode,
+            strategyTemplate: m1StrategyTemplate,
+            martingaleMode: m1MartingaleMode,
+            consecutiveLossThreshold: clampConsecutiveLossThreshold(m1ConsecutiveLossCount),
         };
+    }, [m1Stake, m1Martingale, m1TakeProfit, m1StopLoss, m1TradeType, m1Barrier, m1PredictionBeforeLoss, m1PredictionAfterLoss, m1Streak, m1AnalysisTicks, m1InverseMode, m1StrategyMode, m1StrategyTemplate, m1MartingaleMode, m1ConsecutiveLossCount]);
+
+    useEffect(() => {
+        m2ConfigRef.current = {
+            enabled: m2Enabled,
+            stake: Number(m2Stake) || 1,
+            martingale: Math.max(1.01, Number(m2Martingale) || 2),
+            takeProfit: Number(m2TakeProfit) || 100,
+            stopLoss: Number(m2StopLoss) || 100,
+            tradeType: m2TradeType,
+            barrier: getDigitNumber(m2Barrier, 5),
+            predictionBeforeLoss: getDigitNumber(m2PredictionBeforeLoss, 4),
+            predictionAfterLoss: getDigitNumber(m2PredictionAfterLoss, 5),
+            streak: Math.min(10, Math.max(1, Number(m2Streak) || 4)),
+            analysisTicks: Math.min(10, Math.max(1, Number(m2AnalysisTicks) || 1)),
+            inverseMode: m2InverseMode,
+            strategyMode: m2StrategyMode,
+            martingaleMode: m2MartingaleMode,
+            consecutiveLossThreshold: clampConsecutiveLossThreshold(m2ConsecutiveLossCount),
+        };
+    }, [m2Enabled, m2Stake, m2Martingale, m2TakeProfit, m2StopLoss, m2TradeType, m2Barrier, m2PredictionBeforeLoss, m2PredictionAfterLoss, m2Streak, m2AnalysisTicks, m2InverseMode, m2StrategyMode, m2MartingaleMode, m2ConsecutiveLossCount]);
+
+    useEffect(() => {
+        tradingModeRef.current = tradingMode;
+        m2EnabledRef.current = m2Enabled;
         try {
-            localStorage.setItem('auto_trades_stake', stake);
-            localStorage.setItem('auto_trades_martingale', martingale);
-            localStorage.setItem('auto_trades_takeProfit', takeProfit);
-            localStorage.setItem('auto_trades_stopLoss', stopLoss);
-        } catch {
-            // Ignore localStorage write failures.
-        }
-    }, [stake, martingale, takeProfit, stopLoss, martingaleMode, consecutiveLossCount]);
+            localStorage.setItem('auto_trades_trading_mode', tradingMode);
+            localStorage.setItem('auto_trades_m2_enabled', String(m2Enabled));
+        } catch { /* Ignore */ }
+    }, [tradingMode, m2Enabled]);
+
+    // ─── Save Market 1 Config ─────────────────────────────────────────────
 
     useEffect(() => {
-        originalTradeTypeRef.current = tradeType;
         try {
-            localStorage.setItem('auto_trades_tradeType', tradeType);
-        } catch {
-            // Ignore localStorage write failures.
-        }
-    }, [tradeType]);
+            localStorage.setItem('auto_trades_m1_stake', m1Stake);
+            localStorage.setItem('auto_trades_m1_martingale', m1Martingale);
+            localStorage.setItem('auto_trades_m1_takeProfit', m1TakeProfit);
+            localStorage.setItem('auto_trades_m1_stopLoss', m1StopLoss);
+            localStorage.setItem('auto_trades_m1_tradeType', m1TradeType);
+            localStorage.setItem('auto_trades_m1_barrier', m1Barrier);
+            localStorage.setItem('auto_trades_m1_predictionBeforeLoss', m1PredictionBeforeLoss);
+            localStorage.setItem('auto_trades_m1_predictionAfterLoss', m1PredictionAfterLoss);
+            localStorage.setItem('auto_trades_m1_streak', m1Streak);
+            localStorage.setItem('auto_trades_m1_analysisTicks', m1AnalysisTicks);
+            localStorage.setItem('auto_trades_m1_inverseMode', String(m1InverseMode));
+            localStorage.setItem('auto_trades_m1_strategyMode', m1StrategyMode);
+            localStorage.setItem('auto_trades_m1_strategyTemplate', m1StrategyTemplate);
+            localStorage.setItem('auto_trades_m1_martingaleMode', m1MartingaleMode);
+            localStorage.setItem('auto_trades_m1_consecutiveLossCount', String(m1ConsecutiveLossCount));
+        } catch { /* Ignore */ }
+    }, [m1Stake, m1Martingale, m1TakeProfit, m1StopLoss, m1TradeType, m1Barrier, m1PredictionBeforeLoss, m1PredictionAfterLoss, m1Streak, m1AnalysisTicks, m1InverseMode, m1StrategyMode, m1StrategyTemplate, m1MartingaleMode, m1ConsecutiveLossCount]);
 
-    // Reset L→Digit recovery state when trade type changes
-    useEffect(() => {
-        Object.keys(marketStatesRef.current).forEach(symbol => {
-            const state = marketStatesRef.current[symbol];
-            state.lDigitRecoveryActive = false;
-            state.lDigitWaitingForPattern = false;
-            state.lDigitPatternMatched = false;
-            state.lDigitOriginalTradeType = null;
-            state.lDigitRecoveryStartTime = null;
-        });
-        tradeTypeRef.current = originalTradeTypeRef.current;
-    }, [tradeType]);
-
-    // Track if L→Digit recovery is active anywhere
-    const hasActiveLDigitRecovery = useMemo(() => {
-        return Object.values(marketStatesRef.current).some(state => state.lDigitRecoveryActive);
-    }, [marketDisplays]);
-
-    const hasWaitingLDigit = useMemo(() => {
-        return Object.values(marketStatesRef.current).some(state => state.lDigitWaitingForPattern);
-    }, [marketDisplays]);
+    // ─── Save Market 2 Config ─────────────────────────────────────────────
 
     useEffect(() => {
-        strategyTemplateRef.current = strategyTemplate;
         try {
-            localStorage.setItem('auto_trades_strategyTemplate', strategyTemplate);
-        } catch {
-            // Ignore localStorage write failures.
-        }
-        const templateConfig = getTemplateTradeConfig(strategyTemplate);
-        if (!templateConfig) return;
-
-        setTradeType(templateConfig.tradeType);
-        setBarrier(templateConfig.barrier);
-        setAnalysisTicks('1');
-        setInverseMode(false);
-    }, [strategyTemplate]);
-    
-    useEffect(() => {
-        barrierRef.current = getDigitNumber(barrier, 4);
-        try {
-            localStorage.setItem('auto_trades_barrier', barrier);
-        } catch {
-            // Ignore localStorage write failures.
-        }
-    }, [barrier]);
-    useEffect(() => {
-        predictionBeforeLossRef.current = getDigitNumber(predictionBeforeLoss, 0);
-        try {
-            localStorage.setItem('auto_trades_predictionBeforeLoss', predictionBeforeLoss);
-        } catch {
-            // Ignore localStorage write failures.
-        }
-    }, [predictionBeforeLoss]);
-    useEffect(() => {
-        predictionAfterLossRef.current = getDigitNumber(predictionAfterLoss, 0);
-        try {
-            localStorage.setItem('auto_trades_predictionAfterLoss', predictionAfterLoss);
-        } catch {
-            // Ignore localStorage write failures.
-        }
-    }, [predictionAfterLoss]);
-    useEffect(() => {
-        streakRef.current = Math.min(10, Math.max(1, Number(streak) || 4));
-        try {
-            localStorage.setItem('auto_trades_streak', streak);
-        } catch {
-            // Ignore localStorage write failures.
-        }
-    }, [streak]);
-    useEffect(() => {
-        analysisTicksRef.current = Math.min(10, Math.max(1, Number(analysisTicks) || 1));
-        try {
-            localStorage.setItem('auto_trades_analysisTicks', analysisTicks);
-        } catch {
-            // Ignore localStorage write failures.
-        }
-    }, [analysisTicks]);
-
-    useEffect(() => {
-        martingaleModeRef.current = martingaleMode;
-        try {
-            localStorage.setItem('auto_trades_martingaleMode', martingaleMode);
-        } catch {
-            // Ignore localStorage write failures.
-        }
-    }, [martingaleMode]);
-
-    useEffect(() => {
-        consecutiveLossCountRef.current = clampConsecutiveLossThreshold(consecutiveLossCount);
-        try {
-            localStorage.setItem('auto_trades_consecutiveLossCount', String(consecutiveLossCountRef.current));
-        } catch {
-            // Ignore localStorage write failures.
-        }
-    }, [consecutiveLossCount]);
-
-    useEffect(() => {
-        setConsecutiveLossCountInput(String(clampConsecutiveLossThreshold(consecutiveLossCount)));
-    }, [consecutiveLossCount]);
-
-    const handleConsecutiveLossCountInputChange = useCallback((value: string) => {
-        const digits_only = value.replace(/[^\d]/g, '').slice(0, 2);
-        setConsecutiveLossCountInput(digits_only);
-    }, []);
-
-    const commitConsecutiveLossCountInput = useCallback(() => {
-        setConsecutiveLossCount(clampConsecutiveLossThreshold(consecutiveLossCountInput || 2));
-    }, [consecutiveLossCountInput]);
+            localStorage.setItem('auto_trades_m2_stake', m2Stake);
+            localStorage.setItem('auto_trades_m2_martingale', m2Martingale);
+            localStorage.setItem('auto_trades_m2_takeProfit', m2TakeProfit);
+            localStorage.setItem('auto_trades_m2_stopLoss', m2StopLoss);
+            localStorage.setItem('auto_trades_m2_tradeType', m2TradeType);
+            localStorage.setItem('auto_trades_m2_barrier', m2Barrier);
+            localStorage.setItem('auto_trades_m2_predictionBeforeLoss', m2PredictionBeforeLoss);
+            localStorage.setItem('auto_trades_m2_predictionAfterLoss', m2PredictionAfterLoss);
+            localStorage.setItem('auto_trades_m2_streak', m2Streak);
+            localStorage.setItem('auto_trades_m2_analysisTicks', m2AnalysisTicks);
+            localStorage.setItem('auto_trades_m2_inverseMode', String(m2InverseMode));
+            localStorage.setItem('auto_trades_m2_strategyMode', m2StrategyMode);
+            localStorage.setItem('auto_trades_m2_martingaleMode', m2MartingaleMode);
+            localStorage.setItem('auto_trades_m2_consecutiveLossCount', String(m2ConsecutiveLossCount));
+        } catch { /* Ignore */ }
+    }, [m2Stake, m2Martingale, m2TakeProfit, m2StopLoss, m2TradeType, m2Barrier, m2PredictionBeforeLoss, m2PredictionAfterLoss, m2Streak, m2AnalysisTicks, m2InverseMode, m2StrategyMode, m2MartingaleMode, m2ConsecutiveLossCount]);
 
     useEffect(() => {
         selectedMarketsRef.current = selectedMarkets;
@@ -1298,74 +1199,20 @@ const AutoTrades = observer(() => {
         });
         try {
             localStorage.setItem('auto_trades_markets', JSON.stringify(selectedMarketSymbols));
-        } catch {
-            // Ignore localStorage write failures.
-        }
+        } catch { /* Ignore */ }
     }, [selectedMarketSymbols, selectedMarkets]);
 
     useEffect(() => {
         monitoredMarketSymbolsRef.current = new Set(
-            strategyTemplate === 'STANDARD' ? selectedMarketSymbols : AUTO_MARKET_SYMBOLS
+            m1StrategyTemplate === 'STANDARD' ? selectedMarketSymbols : AUTO_MARKET_SYMBOLS
         );
-    }, [selectedMarketSymbols, strategyTemplate]);
+    }, [selectedMarketSymbols, m1StrategyTemplate]);
 
     useEffect(() => {
         floatingStrategyAlertRef.current = floatingStrategyAlert;
     }, [floatingStrategyAlert]);
 
-    useEffect(() => {
-        inverseModeRef.current = inverseMode;
-        try {
-            localStorage.setItem('auto_trades_inverseMode', String(inverseMode));
-        } catch {
-            // Ignore localStorage write failures.
-        }
-    }, [inverseMode]);
-
-    useEffect(() => {
-        modeTransitionLockRef.current = true;
-        strategyModeRef.current = strategyMode;
-        try {
-            localStorage.setItem('auto_trades_strategyMode', strategyMode);
-        } catch {
-            // Ignore localStorage write failures.
-        }
-        if (strategyMode === 'INVERSE') {
-            setInverseMode(true);
-        } else if (strategyMode === 'STANDARD' || strategyMode === 'PERCENTAGE') {
-            setInverseMode(false);
-        }
-        if (strategyMode === 'PERCENTAGE') {
-            Object.keys(marketStatesRef.current).forEach(symbol => {
-                const state = marketStatesRef.current[symbol];
-                state.digitHistory = [];
-                state.digitPercentages = {};
-                state.directionSampleHistory = [];
-                state.confidenceScore = 0;
-                state.momentumCount = 0;
-                state.percentageQuoteHistory = [];
-                state.percentageEpochHistory = [];
-                state.percentageBackfilled = false;
-                state.percentageBackfillInFlight = false;
-            });
-        }
-        if (modeTransitionTimerRef.current !== null) {
-            window.clearTimeout(modeTransitionTimerRef.current);
-        }
-        modeTransitionTimerRef.current = window.setTimeout(() => {
-            modeTransitionTimerRef.current = null;
-            modeTransitionLockRef.current = false;
-        }, 100);
-    }, [strategyMode]);
-
-    const handleTradeTypeChange = useCallback((t: TradeType) => {
-        setTradeType(t);
-        setBarrier(DEFAULT_BARRIER[t]);
-        if (usesLossPrediction(t)) {
-            setPredictionBeforeLoss(DEFAULT_BARRIER[t]);
-            setPredictionAfterLoss(t === 'DIGITOVER' ? '5' : '4');
-        }
-    }, []);
+    // ─── UI Helpers ────────────────────────────────────────────────────────
 
     const setDataRecoveryLoading = useCallback((message: string) => {
         if (unmountedRef.current || !show_auto_ref.current) return;
@@ -1389,10 +1236,6 @@ const AutoTrades = observer(() => {
             running: runningRef.current,
         });
     }, []);
-
-    useEffect(() => {
-        updateSubscriptionDiagnostics();
-    }, [selectedMarketSymbols.length, updateSubscriptionDiagnostics]);
 
     const flushDisplays = useCallback(() => {
         if (unmountedRef.current || !show_auto_ref.current) return;
@@ -1429,96 +1272,136 @@ const AutoTrades = observer(() => {
         }, UI_REFRESH_THROTTLE_MS - elapsed);
     }, [flushDisplays]);
 
-    const markMarketRecovering = useCallback(
-        (symbol: string, is_recovering: boolean) => {
-            const state = marketStatesRef.current[symbol];
-            if (!state) return;
-            state.isRecovering = is_recovering;
-            refreshDisplays();
-        },
-        [refreshDisplays]
+    const [marketDisplays, setMarketDisplays] = useState<MarketDisplay[]>(
+        selectedMarkets.map(m => ({
+            ...m,
+            ...createMarketState(),
+            currentStake: 1,
+        }))
     );
 
     useEffect(() => {
         refreshDisplays();
     }, [refreshDisplays, selectedMarketSymbols]);
 
-    useEffect(() => {
-        if (!show_auto) return;
-        if (strategyTemplate !== 'STANDARD' || selectedMarketSymbols.length > 0) {
-            setDataRecoveryLoading(
-                strategyTemplate === 'STANDARD' ? 'Loading selected market data...' : 'Loading strategy scanner data...'
-            );
-            return;
-        }
-        if (selectedMarketSymbols.length === 0) {
-            clearDataRecoveryLoading();
-            return;
-        }
-    }, [clearDataRecoveryLoading, selectedMarketSymbols.length, setDataRecoveryLoading, show_auto, strategyTemplate]);
+    // ─── Market Helpers ────────────────────────────────────────────────────
 
-    const handleAddMarket = useCallback((symbol: string) => {
-        if (!AUTO_MARKET_LOOKUP.has(symbol) || runningRef.current) return;
-        setSelectedMarketSymbols(current => (current.includes(symbol) ? current : [...current, symbol]));
-    }, []);
+    const getActiveConfig = useCallback((symbol: string): {
+        config: typeof m1ConfigRef.current;
+        isMarket2: boolean;
+        isRecovery: boolean;
+    } => {
+        const state = marketStatesRef.current[symbol];
+        if (!state) return { config: m1ConfigRef.current, isMarket2: false, isRecovery: false };
 
-    const handleRemoveMarket = useCallback((symbol: string) => {
-        if (!AUTO_MARKET_LOOKUP.has(symbol) || runningRef.current) return;
-        setSelectedMarketSymbols(current => current.filter(item => item !== symbol));
-    }, []);
-
-    const handleSelectAllMarkets = useCallback(() => {
-        if (!runningRef.current) setSelectedMarketSymbols(AUTO_MARKET_SYMBOLS);
-    }, []);
-
-    const handleClearMarkets = useCallback(() => {
-        if (!runningRef.current) setSelectedMarketSymbols([]);
-    }, []);
-
-    const handleLoadAlertMarket = useCallback((symbol: string, strategyId: DigitStrategyId) => {
-        const market = AUTO_MARKET_LOOKUP.get(symbol);
-        const strategy = DIGIT_STRATEGIES[strategyId];
-        if (!market || !strategy) return;
-
-        setStrategyTemplate(strategyId);
-        setTradeType(strategy.contractType);
-        setBarrier(strategy.winBarrier);
-        setSelectedMarketSymbols([symbol]);
-        setFloatingStrategyAlert(null);
-        setError(null);
-        try {
-            localStorage.setItem('auto_trades_strategyTemplate', strategyId);
-            localStorage.setItem('auto_trades_tradeType', strategy.contractType);
-            localStorage.setItem('auto_trades_barrier', strategy.winBarrier);
-            localStorage.setItem('auto_trades_markets', JSON.stringify([symbol]));
-        } catch {
-            // Ignore localStorage write failures.
-        }
-    }, []);
-
-    const pushContract = useCallback(
-        (data: any) => {
-            try {
-                transactions.pushTransaction({ ...data, run_id: run_panel.run_id });
-                run_panel.onBotContractEvent(data);
-                summary_card.onBotContractEvent(data);
-            } catch {
-                // Ignore observer emit failures.
+        // Check if we're in recovery mode and M2 is enabled
+        if (tradingModeRef.current === 'recovery_mode' && m2EnabledRef.current) {
+            if (state.recoveryActive) {
+                return { config: m2ConfigRef.current, isMarket2: true, isRecovery: true };
             }
-        },
-        [run_panel, summary_card, transactions]
-    );
+            // If not in recovery, use M1
+            return { config: m1ConfigRef.current, isMarket2: false, isRecovery: false };
+        }
 
-    const getActiveDigitBarrier = useCallback((ct: TradeType, lastResult: 'win' | 'loss' | null, consecutiveLosses = 0) => {
+        if (tradingModeRef.current === 'market2_only' && m2EnabledRef.current) {
+            return { config: m2ConfigRef.current, isMarket2: true, isRecovery: false };
+        }
+
+        return { config: m1ConfigRef.current, isMarket2: false, isRecovery: false };
+    }, []);
+
+    const getActiveTradeType = useCallback((symbol: string): TradeType => {
+        const { config } = getActiveConfig(symbol);
+        return config.tradeType;
+    }, [getActiveConfig]);
+
+    const getActiveBarrier = useCallback((symbol: string, lastResult: 'win' | 'loss' | null, consecutiveLosses = 0) => {
+        const { config } = getActiveConfig(symbol);
         return getPredictionForLastOutcome({
-            trade_type: ct,
+            trade_type: config.tradeType,
             last_result: lastResult,
             consecutive_losses: consecutiveLosses,
-            prediction_before_loss: predictionBeforeLossRef.current,
-            prediction_after_loss: predictionAfterLossRef.current,
-            fallback_barrier: barrierRef.current,
+            prediction_before_loss: config.predictionBeforeLoss,
+            prediction_after_loss: config.predictionAfterLoss,
+            fallback_barrier: config.barrier,
+        });
+    }, [getActiveConfig]);
+
+    const getActiveStreak = useCallback((symbol: string): number => {
+        const { config } = getActiveConfig(symbol);
+        return getEffectiveSignalStreak({
+            trade_type: config.tradeType,
+            configured_streak: config.streak,
+        });
+    }, [getActiveConfig]);
+
+    const getActiveInverse = useCallback((symbol: string): boolean => {
+        const { config } = getActiveConfig(symbol);
+        return config.inverseMode;
+    }, [getActiveConfig]);
+
+    const getActiveStrategyMode = useCallback((symbol: string): StrategyMode => {
+        const { config } = getActiveConfig(symbol);
+        return config.strategyMode;
+    }, [getActiveConfig]);
+
+    // ─── Pattern Detection ─────────────────────────────────────────────────
+
+    const isPatternDigit = useCallback((
+        symbol: string,
+        digit: number,
+        tradeType: TradeType,
+        barrier: number,
+        inverse: boolean
+    ): boolean => {
+        return isDigitSignalMatch({
+            trade_type: tradeType,
+            digit,
+            barrier,
+            inverse,
         });
     }, []);
+
+    const isSignalReady = useCallback((
+        state: MarketState,
+        symbol: string,
+        tradeType: TradeType,
+        barrier: number,
+        inverse: boolean,
+        streak: number,
+        strategyMode: StrategyMode,
+        requiresCandle: boolean,
+        candleMatch: boolean
+    ): boolean => {
+        const targetLen = getEffectiveSignalStreak({
+            trade_type: tradeType,
+            configured_streak: streak,
+        });
+
+        if (IS_DIRECTION_TYPE[tradeType]) {
+            return state.consecutive >= targetLen && (!requiresCandle || candleMatch);
+        }
+
+        const riskFiltered = hasRequiredDigitStreak({
+            trade_type: tradeType,
+            digits: state.lastDigits,
+            barrier,
+            inverse,
+            streak: targetLen,
+        });
+
+        return state.consecutive >= targetLen && riskFiltered && (!requiresCandle || candleMatch);
+    }, []);
+
+    // ─── Trade Execution ──────────────────────────────────────────────────
+
+    const pushContract = useCallback((data: any) => {
+        try {
+            transactions.pushTransaction({ ...data, run_id: run_panel.run_id });
+            run_panel.onBotContractEvent(data);
+            summary_card.onBotContractEvent(data);
+        } catch { /* Ignore */ }
+    }, [run_panel, summary_card, transactions]);
 
     const completeRunPanelStop = useCallback(() => {
         try {
@@ -1527,16 +1410,12 @@ const AutoTrades = observer(() => {
             run_panel.setHasOpenContract?.(false);
             run_panel.setContractStage?.(contract_stages.NOT_RUNNING);
             run_panel.setShowBotStopMessage?.(false);
-        } catch {
-            // Ignore optional run-panel cleanup failures.
-        }
+        } catch { /* Ignore */ }
 
         try {
             api_base.is_stopping = false;
             api_base.setIsRunning?.(false);
-        } catch {
-            // Ignore optional bot-skeleton cleanup failures.
-        }
+        } catch { /* Ignore */ }
     }, [run_panel]);
 
     const clearDeferredWork = useCallback(() => {
@@ -1552,7 +1431,6 @@ const AutoTrades = observer(() => {
             window.clearTimeout(modeTransitionTimerRef.current);
             modeTransitionTimerRef.current = null;
         }
-        modeTransitionLockRef.current = false;
         contractStreamAbortControllersRef.current.forEach(controller => controller.abort());
         contractStreamAbortControllersRef.current.clear();
         restartInFlightRef.current = false;
@@ -1560,9 +1438,9 @@ const AutoTrades = observer(() => {
 
     const executeTrade = useCallback(
         async (symbol: string, stakeAmount: number, lastResult: 'win' | 'loss' | null): Promise<number> => {
-            const ct = tradeTypeRef.current;
-            
-            const bar = getActiveDigitBarrier(ct, lastResult, consecutiveLossRef.current);
+            const { config, isMarket2, isRecovery } = getActiveConfig(symbol);
+            const ct = config.tradeType;
+            const bar = getActiveBarrier(symbol, lastResult, isMarket2 ? 0 : consecutiveLossRef.current);
             const tradeStartTime = Math.floor(Date.now() / 1000);
             const verificationId = `${symbol}_${tradeStartTime}_${Math.random().toString(36).substring(2, 11)}`;
             const abortController = new AbortController();
@@ -1572,7 +1450,7 @@ const AutoTrades = observer(() => {
                 basis: 'stake',
                 contract_type: ct,
                 currency: currency || 'USD',
-                duration: analysisTicksRef.current,
+                duration: config.analysisTicks,
                 duration_unit: 't',
                 symbol,
             };
@@ -1626,645 +1504,517 @@ const AutoTrades = observer(() => {
                 contractStreamAbortControllersRef.current.delete(abortController);
             }
         },
-        [currency, getActiveDigitBarrier, pushContract, setError]
+        [currency, getActiveConfig, getActiveBarrier, pushContract, setError]
     );
 
-    // ── FIXED: L→Digit Recovery Logic ──────────────────────────────────────
-    const handleAfterTrade = useCallback(
-        (symbol: string, profit: number) => {
-            if (!runningRef.current) return;
-            const state = marketStatesRef.current[symbol];
-            if (!state) return;
+    // ─── After Trade Handler ──────────────────────────────────────────────
 
-            const { martingale: mult, takeProfit: tp, stopLoss: sl, stake: baseStake } = configRef.current;
+    const handleAfterTrade = useCallback((symbol: string, profit: number, isMarket2: boolean) => {
+        if (!runningRef.current) return;
+        const state = marketStatesRef.current[symbol];
+        if (!state) return;
 
-            totalPnlRef.current = parseFloat((totalPnlRef.current + profit).toFixed(2));
-            totalTradesRef.current++;
+        const { config, isRecovery } = getActiveConfig(symbol);
+        const { martingale: mult, takeProfit: tp, stopLoss: sl, stake: baseStake } = config;
 
-            const nextMartingaleState = getNextMartingaleState({
-                profit,
-                current_stake: nextStakeRef.current,
-                base_stake: baseStake,
-                multiplier: mult,
-                martingale_mode: martingaleModeRef.current,
-                consecutive_losses: consecutiveLossRef.current,
-                consecutive_loss_trigger: consecutiveLossCountRef.current,
-            });
+        totalPnlRef.current = parseFloat((totalPnlRef.current + profit).toFixed(2));
+        totalTradesRef.current++;
 
-            nextStakeRef.current = nextMartingaleState.nextStake;
+        const martingaleMode = isMarket2 ? m2ConfigRef.current.martingaleMode : m1ConfigRef.current.martingaleMode;
+        const consecutiveLossThreshold = isMarket2 ? m2ConfigRef.current.consecutiveLossThreshold : m1ConfigRef.current.consecutiveLossThreshold;
+        const currentConsecutiveLosses = isMarket2 ? state.market2ConsecutiveLosses : consecutiveLossRef.current;
+
+        const nextMartingaleState = getNextMartingaleState({
+            profit,
+            current_stake: nextStakeRef.current,
+            base_stake: baseStake,
+            multiplier: mult,
+            martingale_mode: martingaleMode,
+            consecutive_losses: currentConsecutiveLosses,
+            consecutive_loss_trigger: consecutiveLossThreshold,
+        });
+
+        if (isMarket2) {
+            state.market2ConsecutiveLosses = nextMartingaleState.consecutiveLosses;
+            state.market2LastResult = nextMartingaleState.lastResult;
+            state.market2Consecutive = profit >= 0 ? 0 : state.market2Consecutive + 1;
+        } else {
             consecutiveLossRef.current = nextMartingaleState.consecutiveLosses;
-            state.lastResult = nextMartingaleState.lastResult;
-            previousContractResultRef.current = state.lastResult;
-            state.tradeCount++;
-            state.trading = false;
-            globalTradingRef.current = false;
+            previousContractResultRef.current = nextMartingaleState.lastResult;
+            state.consecutive = profit >= 0 ? 0 : state.consecutive + 1;
+        }
 
-            // ── L→Digit RECOVERY LOGIC ──────────────────────────────────────
-            // RULE: After loss → activate Market 2 (L→Digit) EXCLUSIVELY
-            // RULE: After win on Market 2 → return to Market 1 (original strategy)
-            const lDigitEnabled = lDigitStrategyRef.current.enabled;
+        nextStakeRef.current = nextMartingaleState.nextStake;
+        state.lastResult = nextMartingaleState.lastResult;
+        state.tradeCount++;
+        state.trading = false;
+        globalTradingRef.current = false;
 
-            if (profit < 0 && lDigitEnabled) {
-                // ── LOSS → Activate Market 2 ──────────────────────────────
-                // Reset all market consecutive counters to prevent stale Market 1 signals
-                Object.keys(marketStatesRef.current).forEach(sym => {
-                    marketStatesRef.current[sym].consecutive = 0;
-                });
+        // ─── Recovery Mode Logic ──────────────────────────────────────────
 
-                state.lDigitRecoveryActive = true;
-                state.lDigitWaitingForPattern = true;
-                state.lDigitPatternMatched = false;
-                state.lDigitOriginalTradeType = originalTradeTypeRef.current;
-                state.lDigitRecoveryStartTime = Date.now();
-                // Keep trade type as original while waiting for pattern
-                tradeTypeRef.current = originalTradeTypeRef.current;
+        if (tradingModeRef.current === 'recovery_mode' && m2EnabledRef.current) {
+            if (profit < 0 && !isMarket2) {
+                // Loss on Market 1 → Activate recovery
+                state.recoveryActive = true;
+                state.activeMarket = 'recovery';
+                state.recoveryStartTime = Date.now();
+                state.market2Consecutive = 0;
+                state.market2ConsecutiveLosses = 0;
+                state.market2LastResult = null;
+                nextStakeRef.current = m2ConfigRef.current.stake;
 
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `🔴 LOSS — Switching to Market 2 (L→Digit RECOVERY): waiting for ${lDigitStrategyRef.current.patternType} pattern (${lDigitStrategyRef.current.lookbackTicks} ticks). Market 1 BLOCKED.`,
-                    digits: `[${state.lastDigits.slice(-lDigitStrategyRef.current.lookbackTicks).join(', ')}]`,
+                    condition: `🔴 LOSS on Market 1 — Switching to Market 2 (Recovery Mode)`,
+                    digits: '',
                     result: false,
-                    source: 'l-digit-recovery-waiting',
+                    source: 'recovery-activated',
                     timestamp: Date.now(),
                 });
-
-                refreshDisplays();
-                return; // EXIT — Market 1 is blocked, wait for pattern
-            }
-
-            // ── WIN on Market 2 ──────────────────────────────────────────────
-            if (profit >= 0 && (state.lDigitWaitingForPattern || state.lDigitPatternMatched || state.lDigitRecoveryActive)) {
-                // Reset recovery state
-                state.lDigitRecoveryActive = false;
-                state.lDigitWaitingForPattern = false;
-                state.lDigitPatternMatched = false;
-                state.lDigitOriginalTradeType = null;
-                state.lDigitRecoveryStartTime = null;
-                tradeTypeRef.current = originalTradeTypeRef.current;
-
-                // Reset consecutive losses so Market 1 starts fresh
+            } else if (profit >= 0 && isMarket2) {
+                // Win on Market 2 → Return to Market 1
+                state.recoveryActive = false;
+                state.activeMarket = 'idle';
+                state.recoveryStartTime = null;
+                state.market2Consecutive = 0;
+                state.market2ConsecutiveLosses = 0;
+                state.market2LastResult = null;
                 consecutiveLossRef.current = 0;
-                nextStakeRef.current = configRef.current.stake;
+                previousContractResultRef.current = null;
+                nextStakeRef.current = m1ConfigRef.current.stake;
 
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `✅ WIN on Market 2 — L→Digit RECOVERY COMPLETE. Returning to Market 1 (${originalTradeTypeRef.current}).`,
+                    condition: `✅ WIN on Market 2 — Recovery Complete. Returning to Market 1`,
                     digits: '',
                     result: true,
-                    source: 'l-digit-recovery-complete',
+                    source: 'recovery-complete',
                     timestamp: Date.now(),
                 });
-
-                refreshDisplays();
-                return;
-            }
-
-            // ── LOSS without L→Digit enabled — normal flow ─────────────────
-            if (profit < 0 && !lDigitEnabled) {
+            } else if (profit < 0 && isMarket2) {
+                // Loss on Market 2 → Stay on Market 2
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `🔴 LOSS — L→Digit recovery DISABLED, continuing with Market 1 (${originalTradeTypeRef.current})`,
+                    condition: `🔴 LOSS on Market 2 — Continuing recovery`,
                     digits: '',
                     result: false,
-                    source: 'l-digit-disabled',
+                    source: 'recovery-continue',
                     timestamp: Date.now(),
                 });
-            }
-
-            // ── WIN on Market 1 — reset everything ──────────────────────────
-            if (profit >= 0 && !state.lDigitRecoveryActive) {
+            } else if (profit >= 0 && !isMarket2) {
+                // Win on Market 1 → Reset everything
                 consecutiveLossRef.current = 0;
-                nextStakeRef.current = configRef.current.stake;
+                previousContractResultRef.current = null;
+                nextStakeRef.current = m1ConfigRef.current.stake;
+                state.recoveryActive = false;
+                state.activeMarket = 'idle';
+                state.market2Consecutive = 0;
+                state.market2ConsecutiveLosses = 0;
+                state.market2LastResult = null;
             }
-
-            refreshDisplays();
-
-            // ── TP/SL check ─────────────────────────────────────────────────
-            if ((totalPnlRef.current >= tp || totalPnlRef.current <= -sl) && runningRef.current) {
-                setShowTPSLNotification(true);
-                runningRef.current = false;
-                if (!unmountedRef.current) {
-                    setIsRunning(false);
+        } else {
+            // Normal mode: reset on win
+            if (profit >= 0) {
+                if (isMarket2) {
+                    state.market2ConsecutiveLosses = 0;
+                    state.market2LastResult = null;
+                } else {
+                    consecutiveLossRef.current = 0;
+                    previousContractResultRef.current = null;
                 }
-                completeRunPanelStop();
+                nextStakeRef.current = config.stake;
             }
-        },
-        [completeRunPanelStop, refreshDisplays]
-    );
+        }
 
-    const isPatternDigit = useCallback(
-        (symbol: string, digit: number): boolean => {
-            const ct = tradeTypeRef.current;
-            const lastResult = previousContractResultRef.current;
-            const consecutiveLosses = consecutiveLossRef.current;
+        refreshDisplays();
 
-            if (
-                (strategyModeRef.current === 'PERCENTAGE' || strategyTemplateRef.current !== 'STANDARD') &&
-                !modeTransitionLockRef.current
-            ) {
-                const state = marketStatesRef.current[symbol];
-                return state
-                    ? isPercentageSignalReady(ct, state, getActiveDigitBarrier(ct, lastResult, consecutiveLosses))
-                    : false;
+        // ─── TP/SL Check ──────────────────────────────────────────────────
+
+        const currentTP = isMarket2 ? m2ConfigRef.current.takeProfit : m1ConfigRef.current.takeProfit;
+        const currentSL = isMarket2 ? m2ConfigRef.current.stopLoss : m1ConfigRef.current.stopLoss;
+
+        if ((totalPnlRef.current >= currentTP || totalPnlRef.current <= -currentSL) && runningRef.current) {
+            setShowTPSLNotification(true);
+            runningRef.current = false;
+            if (!unmountedRef.current) {
+                setIsRunning(false);
             }
+            completeRunPanelStop();
+        }
+    }, [completeRunPanelStop, getActiveConfig, refreshDisplays]);
 
-            const bar = getActiveDigitBarrier(ct, lastResult, consecutiveLosses);
-            const inv = inverseModeRef.current;
+    // ─── Try Execute Signal ──────────────────────────────────────────────
 
-            return isDigitSignalMatch({
-                trade_type: ct,
-                digit,
-                barrier: bar,
-                inverse: inv,
-            });
-        },
-        [getActiveDigitBarrier]
-    );
+    const tryExecuteSignal = useCallback((
+        symbol: string,
+        state: MarketState,
+        signalReady: boolean,
+        isMarket2: boolean
+    ) => {
+        if (
+            runningRef.current &&
+            signalReady &&
+            !state.trading &&
+            !globalTradingRef.current
+        ) {
+            state.trading = true;
+            state.tradeStartTime = Math.floor(Date.now() / 1000);
+            state.verificationId = `${symbol}_${state.tradeStartTime}_${Math.random().toString(36).substring(2, 11)}`;
 
-    const tryExecuteSignal = useCallback(
-        (symbol: string, state: MarketState, signalReady: boolean) => {
-            // HARD GUARD: Block Market 1 trades while L→Digit recovery is active or waiting
-            if (lDigitStrategyRef.current.enabled) {
-                // If waiting for pattern → NO trades at all
-                if (state.lDigitWaitingForPattern && !state.lDigitPatternMatched) {
-                    return;
-                }
-                // If recovery is active → ONLY Market 2 trades (handled in handleTick)
-                // This prevents Market 1 from firing while in recovery mode
-                if (state.lDigitRecoveryActive && !state.lDigitPatternMatched) {
-                    return;
-                }
-            }
+            const stakeNow = nextStakeRef.current;
 
-            if (
-                runningRef.current &&
-                signalReady &&
-                !state.trading &&
-                !globalTradingRef.current
-            ) {
-                state.trading = true;
-                state.consecutive = 0;
-                globalTradingRef.current = true;
-                state.tradeStartTime = Math.floor(Date.now() / 1000);
-                state.verificationId = `${symbol}_${state.tradeStartTime}_${Math.random().toString(36).substring(2, 11)}`;
-
-                const stakeNow = nextStakeRef.current;
-
-                if (stakeNow <= 0 || isNaN(stakeNow)) {
-                    console.error(`[AutoTrades] Sanity check failed: Invalid stake amount ${stakeNow} for ${symbol}`);
-                    state.trading = false;
-                    globalTradingRef.current = false;
-                    setError('Auto Trades stopped because the stake amount is invalid.');
-                    refreshDisplays();
-                    return;
-                }
-
-                executeTrade(symbol, stakeNow, previousContractResultRef.current).then(profit =>
-                    handleAfterTrade(symbol, profit)
-                );
-            }
-        },
-        [executeTrade, handleAfterTrade, refreshDisplays]
-    );
-
-    const handleCandle = useCallback(
-        (symbol: string, candle: any) => {
-            if (!selectedMarketSymbolsRef.current.has(symbol)) return;
-
-            const state = marketStatesRef.current[symbol];
-            if (!state) return;
-
-            const open = Number(candle?.open);
-            const close = Number(candle?.close);
-            if (!Number.isFinite(open) || !Number.isFinite(close)) return;
-
-            state.candleOpen = open;
-            state.candleClose = close;
-            state.candleDirection = close > open ? 1 : close < open ? -1 : 0;
-
-            const ct = tradeTypeRef.current;
-
-            // Block candle-confirmed trades during L→Digit recovery
-            const recoveryBlocked =
-                lDigitStrategyRef.current.enabled &&
-                (state.lDigitWaitingForPattern ||
-                    state.lDigitRecoveryActive ||
-                    state.lDigitPatternMatched);
-
-            let signalReady = false;
-            if (!recoveryBlocked) {
-                signalReady =
-                    isCandleConfirmedTradeType(ct) &&
-                    state.consecutive >= streakRef.current &&
-                    (inverseModeRef.current
-                        ? isInverseCandleMatch(ct, state.candleDirection)
-                        : isCandleMatch(ct, state.candleDirection));
-            }
-            
-            tryExecuteSignal(symbol, state, signalReady);
-            refreshDisplays();
-        },
-        [refreshDisplays, tryExecuteSignal]
-    );
-
-    handleCandleRef.current = handleCandle;
-
-    const handleTick = useCallback(
-        (symbol: string, tick: any) => {
-            if (!monitoredMarketSymbolsRef.current.has(symbol)) return;
-
-            const state = marketStatesRef.current[symbol];
-            if (!state) return;
-
-            const pip = getMarketPipSize(symbol, AUTO_MARKET_LOOKUP.get(symbol)?.pip ?? 2);
-            const quote = tick.quote as number;
-            let ct = tradeTypeRef.current;
-
-            state.lastQuote = quote;
-            state.isRecovering = false;
-            lastTickAtRef.current = Date.now();
-            if (isRecoveringDataRef.current) {
-                clearDataRecoveryLoading();
-            }
-
-            const lDigitEnabled = lDigitStrategyRef.current.enabled;
-            const isRecoveryWaiting = lDigitEnabled && state.lDigitWaitingForPattern && !state.lDigitPatternMatched;
-            const isRecoveryActive = lDigitEnabled && state.lDigitPatternMatched;
-
-            // ── BRANCH 1: RECOVERY WAITING (Market 2 — pattern not yet confirmed) ──
-            if (isRecoveryWaiting) {
-                const lastDigit = getLastDigitFromQuote(quote, symbol, pip);
-                state.lastDigits = [...state.lastDigits.slice(-9), lastDigit];
-
-                const prev = state.prevQuote;
-                const dir: Direction = prev === null ? 0 : quote > prev ? 1 : quote < prev ? -1 : 0;
-                state.directionHistory = [...state.directionHistory.slice(-9), dir];
-                state.prevQuote = quote;
-
-                const lDigitConditionMet = evaluateLDigitCondition(
-                    lDigitStrategyRef.current,
-                    state.lastDigits,
-                    state.directionHistory,
-                    barrierRef.current
-                );
-
-                if (lDigitConditionMet) {
-                    const newTradeType = getLDigitTradeType(
-                        lDigitStrategyRef.current,
-                        originalTradeTypeRef.current,
-                        barrierRef.current
-                    );
-
-                    if (newTradeType) {
-                        // Pattern matched → switch to Market 2 trade type
-                        state.lDigitPatternMatched = true;
-                        state.lDigitWaitingForPattern = false;
-                        state.lDigitRecoveryActive = true;
-                        tradeTypeRef.current = newTradeType;
-                        ct = newTradeType;
-
-                        const targetLen = getEffectiveSignalStreak({
-                            trade_type: newTradeType,
-                            configured_streak: streakRef.current,
-                        });
-                        state.consecutive = Math.min(state.consecutive, targetLen);
-
-                        conditionNotifierStore.setCondition({
-                            market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                            condition: `🟢 Market 2 CONFIRMED: L→Digit pattern matched (${lDigitStrategyRef.current.patternType}) — now trading ${newTradeType}`,
-                            digits: `[${state.lastDigits.slice(-lDigitStrategyRef.current.lookbackTicks).join(', ')}]`,
-                            result: true,
-                            source: 'l-digit-recovery-matched',
-                            timestamp: Date.now(),
-                        });
-
-                        const signalReady = state.consecutive >= targetLen;
-                        tryExecuteSignal(symbol, state, signalReady);
-                        refreshDisplays();
-                        return;
-                    }
-                }
-
-                conditionNotifierStore.setCondition({
-                    market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `⏳ Market 2 WAITING: ${lDigitStrategyRef.current.patternType} — need ${lDigitStrategyRef.current.lookbackTicks} consecutive ticks. Market 1 BLOCKED.`,
-                    digits: `[${state.lastDigits.slice(-lDigitStrategyRef.current.lookbackTicks).join(', ')}]`,
-                    result: false,
-                    source: 'l-digit-recovery-waiting',
-                    timestamp: Date.now(),
-                });
+            if (stakeNow <= 0 || isNaN(stakeNow)) {
+                console.error(`[AutoTrades] Sanity check failed: Invalid stake amount ${stakeNow} for ${symbol}`);
+                state.trading = false;
+                globalTradingRef.current = false;
+                setError('Auto Trades stopped because the stake amount is invalid.');
                 refreshDisplays();
                 return;
             }
 
-            // ── BRANCH 2: RECOVERY ACTIVE (Market 2 — pattern confirmed) ──
-            if (isRecoveryActive) {
-                const targetLen = getEffectiveSignalStreak({
-                    trade_type: ct,
-                    configured_streak: streakRef.current,
-                });
+            const lastResult = isMarket2 ? state.market2LastResult : previousContractResultRef.current;
+            executeTrade(symbol, stakeNow, lastResult).then(profit =>
+                handleAfterTrade(symbol, profit, isMarket2)
+            );
+        }
+    }, [executeTrade, handleAfterTrade, refreshDisplays]);
 
-                if (IS_DIRECTION_TYPE[ct]) {
+    // ─── Tick Handler ─────────────────────────────────────────────────────
+
+    const handleTick = useCallback((symbol: string, tick: any) => {
+        if (!monitoredMarketSymbolsRef.current.has(symbol)) return;
+
+        const state = marketStatesRef.current[symbol];
+        if (!state) return;
+
+        const pip = getMarketPipSize(symbol, AUTO_MARKET_LOOKUP.get(symbol)?.pip ?? 2);
+        const quote = tick.quote as number;
+
+        state.lastQuote = quote;
+        state.isRecovering = false;
+        lastTickAtRef.current = Date.now();
+        if (isRecoveringDataRef.current) {
+            clearDataRecoveryLoading();
+        }
+
+        const { config: activeConfig, isMarket2, isRecovery } = getActiveConfig(symbol);
+        const ct = activeConfig.tradeType;
+        const barrier = getActiveBarrier(symbol, isMarket2 ? state.market2LastResult : previousContractResultRef.current, isMarket2 ? state.market2ConsecutiveLosses : consecutiveLossRef.current);
+        const inverse = activeConfig.inverseMode;
+        const streak = activeConfig.streak;
+        const strategyMode = activeConfig.strategyMode;
+        const targetLen = getEffectiveSignalStreak({ trade_type: ct, configured_streak: streak });
+
+        // ─── Recovery Mode: Check if we should use M2 ──────────────────
+
+        if (tradingModeRef.current === 'recovery_mode' && m2EnabledRef.current) {
+            // If we're in recovery and M2 is active, use M2 logic
+            if (state.recoveryActive && !isMarket2) {
+                // We should be using M2, but somehow we're on M1 - switch
+                const m2Config = m2ConfigRef.current;
+                const m2Barrier = getActiveBarrier(symbol, state.market2LastResult, state.market2ConsecutiveLosses);
+                const m2Inverse = m2Config.inverseMode;
+                const m2Streak = m2Config.streak;
+                const m2TargetLen = getEffectiveSignalStreak({ trade_type: m2Config.tradeType, configured_streak: m2Streak });
+                const m2RequiresCandle = isCandleConfirmedTradeType(m2Config.tradeType);
+                const m2CandleMatch = m2RequiresCandle ? (m2Inverse ? isInverseCandleMatch(m2Config.tradeType, state.candleDirection) : isCandleMatch(m2Config.tradeType, state.candleDirection)) : true;
+
+                // Update state for M2
+                if (IS_DIRECTION_TYPE[m2Config.tradeType]) {
                     const prev = state.prevQuote;
                     const dir: Direction = prev === null ? 0 : quote > prev ? 1 : quote < prev ? -1 : 0;
                     state.directionHistory = [...state.directionHistory.slice(-9), dir];
                     state.prevQuote = quote;
 
                     if (dir !== 0) {
-                        const match = inverseModeRef.current
-                            ? isInverseDirectionMatch(ct, dir)
-                            : isDirectionMatch(ct, dir);
-                        state.consecutive = match ? Math.min(state.consecutive + 1, 10) : 0;
+                        const match = m2Inverse ? isInverseDirectionMatch(m2Config.tradeType, dir) : isDirectionMatch(m2Config.tradeType, dir);
+                        state.market2Consecutive = match ? Math.min(state.market2Consecutive + 1, 10) : 0;
                     }
                 } else {
                     const lastDigit = getLastDigitFromQuote(quote, symbol, pip);
                     state.lastDigits = [...state.lastDigits.slice(-9), lastDigit];
                     state.prevQuote = quote;
 
-                    if (isPatternDigit(symbol, lastDigit)) {
-                        state.consecutive = Math.min(state.consecutive + 1, 10);
-                    } else {
-                        state.consecutive = 0;
-                    }
+                    const isMatch = isPatternDigit(symbol, lastDigit, m2Config.tradeType, m2Barrier, m2Inverse);
+                    state.market2Consecutive = isMatch ? Math.min(state.market2Consecutive + 1, 10) : 0;
                 }
 
-                const signalReady = state.consecutive >= targetLen;
-
-                conditionNotifierStore.setCondition({
-                    market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `🔴 Market 2 ACTIVE (${ct}): streak ${state.consecutive}/${targetLen}`,
-                    digits: IS_DIRECTION_TYPE[ct]
-                        ? `[${state.directionHistory.slice(-targetLen).map(d => (d === 1 ? '↑' : d === -1 ? '↓' : '—')).join(', ')}]`
-                        : `[${state.lastDigits.slice(-targetLen).join(', ')}]`,
-                    result: signalReady,
-                    source: 'l-digit-recovery-active',
-                    timestamp: Date.now(),
-                });
-
-                tryExecuteSignal(symbol, state, signalReady);
+                const signalReady = state.market2Consecutive >= m2TargetLen && (!m2RequiresCandle || m2CandleMatch);
+                tryExecuteSignal(symbol, state, signalReady, true);
                 refreshDisplays();
                 return;
             }
 
-            // ── BRANCH 3: NORMAL TRADING (Market 1) ──────────────────────────
-            const targetLen = getEffectiveSignalStreak({
-                trade_type: ct,
-                configured_streak: streakRef.current,
-            });
-
-            if (
-                (strategyModeRef.current === 'PERCENTAGE' || strategyTemplateRef.current !== 'STANDARD') &&
-                !modeTransitionLockRef.current
-            ) {
-                const epoch = Number(tick.epoch);
-                appendPercentageQuote(symbol, state, quote, Number.isFinite(epoch) ? epoch : null, ct);
+            // If we're not in recovery, use M1
+            if (!state.recoveryActive) {
+                // Use M1 logic below
+            } else {
+                // In recovery, M2 is active - handled above
+                return;
             }
+        }
 
-            if (IS_DIRECTION_TYPE[ct]) {
+        // ─── Market 2 Only Mode ──────────────────────────────────────────
+
+        if (tradingModeRef.current === 'market2_only' && m2EnabledRef.current) {
+            const m2Config = m2ConfigRef.current;
+            const m2Barrier = getActiveBarrier(symbol, state.market2LastResult, state.market2ConsecutiveLosses);
+            const m2Inverse = m2Config.inverseMode;
+            const m2Streak = m2Config.streak;
+            const m2TargetLen = getEffectiveSignalStreak({ trade_type: m2Config.tradeType, configured_streak: m2Streak });
+            const m2RequiresCandle = isCandleConfirmedTradeType(m2Config.tradeType);
+            const m2CandleMatch = m2RequiresCandle ? (m2Inverse ? isInverseCandleMatch(m2Config.tradeType, state.candleDirection) : isCandleMatch(m2Config.tradeType, state.candleDirection)) : true;
+
+            // Update M2 state
+            if (IS_DIRECTION_TYPE[m2Config.tradeType]) {
                 const prev = state.prevQuote;
                 const dir: Direction = prev === null ? 0 : quote > prev ? 1 : quote < prev ? -1 : 0;
                 state.directionHistory = [...state.directionHistory.slice(-9), dir];
                 state.prevQuote = quote;
 
                 if (dir !== 0) {
-                    const match = inverseModeRef.current ? isInverseDirectionMatch(ct, dir) : isDirectionMatch(ct, dir);
-                    state.consecutive = match ? Math.min(state.consecutive + 1, 10) : 0;
+                    const match = m2Inverse ? isInverseDirectionMatch(m2Config.tradeType, dir) : isDirectionMatch(m2Config.tradeType, dir);
+                    state.market2Consecutive = match ? Math.min(state.market2Consecutive + 1, 10) : 0;
                 }
             } else {
                 const lastDigit = getLastDigitFromQuote(quote, symbol, pip);
                 state.lastDigits = [...state.lastDigits.slice(-9), lastDigit];
                 state.prevQuote = quote;
 
-                state.consecutive = isPatternDigit(symbol, lastDigit)
-                    ? Math.min(state.consecutive + 1, 10)
-                    : 0;
+                const isMatch = isPatternDigit(symbol, lastDigit, m2Config.tradeType, m2Barrier, m2Inverse);
+                state.market2Consecutive = isMatch ? Math.min(state.market2Consecutive + 1, 10) : 0;
             }
 
-            const candleMatch = inverseModeRef.current
-                ? isInverseCandleMatch(ct, state.candleDirection)
-                : isCandleMatch(ct, state.candleDirection);
-            const requiresCandle = isCandleConfirmedTradeType(ct);
-            const lastPredictionResult = previousContractResultRef.current;
-            const activeBarrier = getActiveDigitBarrier(ct, lastPredictionResult, consecutiveLossRef.current);
-            const activeStrategyTemplate = strategyTemplateRef.current;
-            const specialStrategyEvaluation =
-                activeStrategyTemplate !== 'STANDARD'
-                    ? evaluateDigitStrategy(activeStrategyTemplate, state.digitPercentages, state.lastDigits)
-                    : null;
+            const signalReady = state.market2Consecutive >= m2TargetLen && (!m2RequiresCandle || m2CandleMatch);
+            tryExecuteSignal(symbol, state, signalReady, true);
+            refreshDisplays();
+            return;
+        }
 
-            if (specialStrategyEvaluation) {
-                const wasAlertActive = state.alertActive;
-                state.alertActive = specialStrategyEvaluation.isQualified;
-                state.specialEntryReady = specialStrategyEvaluation.entryReady;
-                state.trailingTriggerCount = specialStrategyEvaluation.trailingTriggerCount;
-                state.qualifyingWinningDigits = specialStrategyEvaluation.qualifyingWinningDigits;
-                state.alertMessage = specialStrategyEvaluation.isQualified
-                    ? `${specialStrategyEvaluation.alertLabel} ready to watch. Winning digits >= 10.5%: ${specialStrategyEvaluation.qualifyingWinningDigits.join(', ')}`
-                    : `${specialStrategyEvaluation.alertLabel} waiting for qualifying percentages.`;
+        // ─── Market 1 (Default) ──────────────────────────────────────────
 
-                if (!wasAlertActive && specialStrategyEvaluation.isQualified) {
+        // Update M1 state
+        if (IS_DIRECTION_TYPE[ct]) {
+            const prev = state.prevQuote;
+            const dir: Direction = prev === null ? 0 : quote > prev ? 1 : quote < prev ? -1 : 0;
+            state.directionHistory = [...state.directionHistory.slice(-9), dir];
+            state.prevQuote = quote;
+
+            if (dir !== 0) {
+                const match = inverse ? isInverseDirectionMatch(ct, dir) : isDirectionMatch(ct, dir);
+                state.consecutive = match ? Math.min(state.consecutive + 1, 10) : 0;
+            }
+        } else {
+            const lastDigit = getLastDigitFromQuote(quote, symbol, pip);
+            state.lastDigits = [...state.lastDigits.slice(-9), lastDigit];
+            state.prevQuote = quote;
+
+            const isMatch = isPatternDigit(symbol, lastDigit, ct, barrier, inverse);
+            state.consecutive = isMatch ? Math.min(state.consecutive + 1, 10) : 0;
+        }
+
+        // ─── Strategy Template Evaluation ──────────────────────────────
+
+        if (activeConfig.strategyTemplate !== 'STANDARD') {
+            const evaluation = evaluateDigitStrategy(
+                activeConfig.strategyTemplate as DigitStrategyId,
+                state.digitPercentages,
+                state.lastDigits
+            );
+
+            if (evaluation) {
+                state.alertActive = evaluation.isQualified;
+                state.specialEntryReady = evaluation.entryReady;
+                state.trailingTriggerCount = evaluation.trailingTriggerCount;
+                state.qualifyingWinningDigits = evaluation.qualifyingWinningDigits;
+                state.alertMessage = evaluation.isQualified
+                    ? `${evaluation.alertLabel} ready to watch. Winning digits >= 10.5%: ${evaluation.qualifyingWinningDigits.join(', ')}`
+                    : `${evaluation.alertLabel} waiting for qualifying percentages.`;
+
+                if (state.alertActive) {
                     const marketLabel = AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol;
                     playStrategyAlertSound();
                     setFloatingStrategyAlert({
                         marketLabel,
                         message: state.alertMessage,
-                        strategyId: activeStrategyTemplate,
+                        strategyId: activeConfig.strategyTemplate as DigitStrategyId,
                         symbol,
                     });
-                } else if (
-                    floatingStrategyAlertRef.current?.symbol === symbol &&
-                    floatingStrategyAlertRef.current?.strategyId === activeStrategyTemplate &&
-                    !specialStrategyEvaluation.isQualified
-                ) {
-                    setFloatingStrategyAlert(current =>
-                        current?.symbol === symbol && current.strategyId === activeStrategyTemplate ? null : current
-                    );
                 }
 
-                if (
-                    runningRef.current &&
-                    selectedMarketSymbolsRef.current.has(symbol) &&
-                    !specialStrategyEvaluation.isQualified
-                ) {
+                if (runningRef.current && selectedMarketSymbolsRef.current.has(symbol) && !evaluation.isQualified) {
                     stopTradingRef.current();
-                    setError(
-                        `${AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol} no longer matches ${specialStrategyEvaluation.alertLabel}. Auto Trades stopped.`
-                    );
+                    setError(`${AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol} no longer matches ${evaluation.alertLabel}. Auto Trades stopped.`);
                     return;
                 }
-            } else {
-                state.alertActive = false;
-                state.specialEntryReady = false;
-                state.trailingTriggerCount = 0;
-                state.qualifyingWinningDigits = [];
-                state.alertMessage = '';
+
+                const signalReady = evaluation.entryReady;
+                tryExecuteSignal(symbol, state, signalReady, false);
+                refreshDisplays();
+                return;
             }
+        }
 
-            const riskFilteredDigitStreakReady =
-                !usesLossPrediction(ct) ||
-                hasRequiredDigitStreak({
-                    trade_type: ct,
-                    digits: state.lastDigits,
-                    barrier: activeBarrier,
-                    inverse: inverseModeRef.current,
-                    streak: targetLen,
-                });
+        // ─── Percentage Mode ─────────────────────────────────────────────
 
-            const signalReady = specialStrategyEvaluation
-                ? specialStrategyEvaluation.entryReady
-                : strategyModeRef.current === 'PERCENTAGE' && !modeTransitionLockRef.current
-                  ? isPercentageSignalReady(ct, state, activeBarrier) && (!requiresCandle || candleMatch)
-                  : state.consecutive >= targetLen && riskFilteredDigitStreakReady && (!requiresCandle || candleMatch);
+        if (strategyMode === 'PERCENTAGE') {
+            const epoch = Number(tick.epoch);
+            appendPercentageQuote(symbol, state, quote, Number.isFinite(epoch) ? epoch : null, ct);
+        }
 
-            if (runningRef.current || specialStrategyEvaluation) {
-                const mkt = AUTO_MARKET_LOOKUP.get(symbol);
-                const inv = inverseModeRef.current;
-                let condStr = '';
-                let digitsStr = '';
+        // ─── Signal Check ────────────────────────────────────────────────
 
-                if (specialStrategyEvaluation) {
-                    digitsStr = `[${state.lastDigits.slice(-4).join(', ')}]`;
-                    condStr = state.alertMessage;
-                } else if (IS_DIRECTION_TYPE[ct]) {
-                    const dirs = state.directionHistory.slice(-targetLen);
-                    digitsStr = `[${dirs.map(d => (d === 1 ? '↑' : d === -1 ? '↓' : '—')).join(', ')}]`;
-                    if (inv) {
-                        if (ct === 'CALL') condStr = `5m candle bullish + consecutive rising ticks ≥ ${targetLen}`;
-                        else if (ct === 'PUT') condStr = `5m candle bearish + consecutive falling ticks ≥ ${targetLen}`;
-                        else if (ct === 'RUNHIGH') condStr = `5m candle bearish + consecutive rising ticks ≥ ${targetLen}`;
-                        else condStr = `5m candle bullish + consecutive falling ticks ≥ ${targetLen}`;
-                    } else {
-                        condStr = getDirectionCondition(ct, targetLen);
-                    }
+        const requiresCandle = isCandleConfirmedTradeType(ct);
+        const candleMatch = requiresCandle ? (inverse ? isInverseCandleMatch(ct, state.candleDirection) : isCandleMatch(ct, state.candleDirection)) : true;
+
+        let signalReady: boolean;
+
+        if (strategyMode === 'PERCENTAGE') {
+            signalReady = isPercentageSignalReady(ct, state, barrier) && (!requiresCandle || candleMatch);
+        } else {
+            signalReady = isSignalReady(state, symbol, ct, barrier, inverse, streak, strategyMode, requiresCandle, candleMatch);
+        }
+
+        // ─── Condition Notifier ──────────────────────────────────────────
+
+        if (runningRef.current) {
+            const mkt = AUTO_MARKET_LOOKUP.get(symbol);
+            let condStr = '';
+            let digitsStr = '';
+
+            if (IS_DIRECTION_TYPE[ct]) {
+                const dirs = state.directionHistory.slice(-targetLen);
+                digitsStr = `[${dirs.map(d => (d === 1 ? '↑' : d === -1 ? '↓' : '—')).join(', ')}]`;
+                if (inverse) {
+                    if (ct === 'CALL') condStr = `5m candle bullish + consecutive rising ticks ≥ ${targetLen}`;
+                    else if (ct === 'PUT') condStr = `5m candle bearish + consecutive falling ticks ≥ ${targetLen}`;
+                    else if (ct === 'RUNHIGH') condStr = `5m candle bearish + consecutive rising ticks ≥ ${targetLen}`;
+                    else condStr = `5m candle bullish + consecutive falling ticks ≥ ${targetLen}`;
                 } else {
-                    const recent = state.lastDigits.slice(-targetLen);
-                    digitsStr = `[${recent.join(', ')}]`;
-                    const bar = activeBarrier;
-                    if (inv) {
-                        if (ct === 'DIGITOVER') condStr = `digits > ${bar} streak ≥ ${targetLen}`;
-                        else if (ct === 'DIGITUNDER') condStr = `digits < ${bar} streak ≥ ${targetLen}`;
-                        else if (ct === 'DIGITEVEN') condStr = `consecutive even digits ≥ ${targetLen}`;
-                        else if (ct === 'DIGITODD') condStr = `consecutive odd digits ≥ ${targetLen}`;
-                        else if (ct === 'DIGITMATCH') condStr = `digits = ${bar} streak ≥ ${targetLen}`;
-                        else condStr = `digits ≠ ${bar} streak ≥ ${targetLen}`;
-                    } else {
-                        if (ct === 'DIGITOVER') condStr = `digits ≤ ${bar} streak ≥ ${targetLen}`;
-                        if (ct === 'DIGITUNDER') condStr = `digits ≥ ${bar} streak ≥ ${targetLen}`;
-                        if (ct === 'DIGITEVEN') condStr = `consecutive odd digits ≥ ${targetLen}`;
-                        if (ct === 'DIGITODD') condStr = `consecutive even digits ≥ ${targetLen}`;
-                        if (ct === 'DIGITMATCH') condStr = `digits ≠ ${bar} streak ≥ ${targetLen}`;
-                        if (ct === 'DIGITDIFF') condStr = `digits = ${bar} streak ≥ ${targetLen}`;
-                    }
+                    condStr = getDirectionCondition(ct, targetLen);
                 }
-                conditionNotifierStore.setCondition({
-                    market: mkt?.label ?? symbol,
-                    condition: condStr,
-                    digits: digitsStr,
-                    result: specialStrategyEvaluation ? specialStrategyEvaluation.isQualified : signalReady,
-                    source: specialStrategyEvaluation ? 'strategy-alert' : 'auto',
-                    timestamp: Date.now(),
-                });
+            } else {
+                const recent = state.lastDigits.slice(-targetLen);
+                digitsStr = `[${recent.join(', ')}]`;
+                const bar = barrier;
+                if (inverse) {
+                    if (ct === 'DIGITOVER') condStr = `digits > ${bar} streak ≥ ${targetLen}`;
+                    else if (ct === 'DIGITUNDER') condStr = `digits < ${bar} streak ≥ ${targetLen}`;
+                    else if (ct === 'DIGITEVEN') condStr = `consecutive even digits ≥ ${targetLen}`;
+                    else if (ct === 'DIGITODD') condStr = `consecutive odd digits ≥ ${targetLen}`;
+                    else if (ct === 'DIGITMATCH') condStr = `digits = ${bar} streak ≥ ${targetLen}`;
+                    else condStr = `digits ≠ ${bar} streak ≥ ${targetLen}`;
+                } else {
+                    if (ct === 'DIGITOVER') condStr = `digits ≤ ${bar} streak ≥ ${targetLen}`;
+                    if (ct === 'DIGITUNDER') condStr = `digits ≥ ${bar} streak ≥ ${targetLen}`;
+                    if (ct === 'DIGITEVEN') condStr = `consecutive odd digits ≥ ${targetLen}`;
+                    if (ct === 'DIGITODD') condStr = `consecutive even digits ≥ ${targetLen}`;
+                    if (ct === 'DIGITMATCH') condStr = `digits ≠ ${bar} streak ≥ ${targetLen}`;
+                    if (ct === 'DIGITDIFF') condStr = `digits = ${bar} streak ≥ ${targetLen}`;
+                }
             }
 
-            // Block Market 1 trades during L→Digit recovery
-            const lDigitBlocksNormalTrade =
-                lDigitStrategyRef.current.enabled &&
-                (state.lDigitWaitingForPattern || state.lDigitPatternMatched || state.lDigitRecoveryActive);
+            conditionNotifierStore.setCondition({
+                market: mkt?.label ?? symbol,
+                condition: condStr,
+                digits: digitsStr,
+                result: signalReady,
+                source: 'auto',
+                timestamp: Date.now(),
+            });
+        }
 
-            if (!lDigitBlocksNormalTrade) {
-                tryExecuteSignal(symbol, state, signalReady);
-            }
+        tryExecuteSignal(symbol, state, signalReady, false);
+        refreshDisplays();
 
-            refreshDisplays();
-        },
-        [clearDataRecoveryLoading, getActiveDigitBarrier, isPatternDigit, refreshDisplays, tryExecuteSignal]
-    );
+    }, [clearDataRecoveryLoading, getActiveConfig, getActiveBarrier, getActiveInverse, getActiveStrategyMode, isPatternDigit, isSignalReady, refreshDisplays, tryExecuteSignal]);
 
     handleTickRef.current = handleTick;
 
-    useEffect(() => {
-        unmountedRef.current = false;
-        return () => {
-            unmountedRef.current = true;
-        };
-    }, []);
+    const handleCandle = useCallback((symbol: string, candle: any) => {
+        if (!selectedMarketSymbolsRef.current.has(symbol)) return;
 
-    const backfillPercentageTicks = useCallback(
-        async (market: AutoMarket) => {
-            const state = marketStatesRef.current[market.symbol];
-            if (
-                !state ||
-                state.percentageBackfilled ||
-                state.percentageBackfillInFlight ||
-                (strategyModeRef.current !== 'PERCENTAGE' && strategyTemplateRef.current === 'STANDARD')
-            ) {
-                return;
+        const state = marketStatesRef.current[symbol];
+        if (!state) return;
+
+        const open = Number(candle?.open);
+        const close = Number(candle?.close);
+        if (!Number.isFinite(open) || !Number.isFinite(close)) return;
+
+        state.candleOpen = open;
+        state.candleClose = close;
+        state.candleDirection = close > open ? 1 : close < open ? -1 : 0;
+
+        // The tick handler will use this updated candle direction
+        refreshDisplays();
+    }, [refreshDisplays]);
+
+    handleCandleRef.current = handleCandle;
+
+    // ─── Subscription Management ─────────────────────────────────────────
+
+    const backfillPercentageTicks = useCallback(async (market: AutoMarket) => {
+        const state = marketStatesRef.current[market.symbol];
+        if (!state || state.percentageBackfilled || state.percentageBackfillInFlight) return;
+
+        state.percentageBackfillInFlight = true;
+
+        try {
+            const response = await (api_base.api as any).send({
+                ticks_history: market.symbol,
+                end: 'latest',
+                count: PERCENTAGE_BACKFILL_COUNT,
+                style: 'ticks',
+            });
+            const history = response?.history;
+            const prices = Array.isArray(history?.prices) ? history.prices : [];
+            const times = Array.isArray(history?.times) ? history.times : [];
+            const quotes: number[] = [];
+            const epochs: number[] = [];
+
+            prices.forEach((price: unknown, index: number) => {
+                const quote = Number(price);
+                if (!Number.isFinite(quote)) return;
+
+                const epoch = Number(times[index]);
+                quotes.push(quote);
+                epochs.push(Number.isFinite(epoch) ? epoch : Date.now() + index);
+            });
+
+            state.percentageQuoteHistory = quotes.slice(-PERCENTAGE_ANALYSIS_HISTORY_SIZE);
+            state.percentageEpochHistory = epochs.slice(-state.percentageQuoteHistory.length);
+            state.percentageBackfilled = state.percentageQuoteHistory.length > 0;
+
+            if (state.percentageQuoteHistory.length > 0) {
+                const latestQuote = state.percentageQuoteHistory[state.percentageQuoteHistory.length - 1];
+                rebuildPercentageAnalytics(market.symbol, state, m1TradeType);
+                state.lastQuote = latestQuote;
+                state.prevQuote = latestQuote;
+                state.lastDigits = state.digitHistory.slice(-10);
+                state.directionHistory = state.directionSampleHistory.slice(-10);
             }
 
-            state.percentageBackfillInFlight = true;
-
-            try {
-                const response = await (api_base.api as any).send({
-                    ticks_history: market.symbol,
-                    end: 'latest',
-                    count: PERCENTAGE_BACKFILL_COUNT,
-                    style: 'ticks',
-                });
-                const history = response?.history;
-                const prices = Array.isArray(history?.prices) ? history.prices : [];
-                const times = Array.isArray(history?.times) ? history.times : [];
-                const quotes: number[] = [];
-                const epochs: number[] = [];
-
-                prices.forEach((price: unknown, index: number) => {
-                    const quote = Number(price);
-                    if (!Number.isFinite(quote)) return;
-
-                    const epoch = Number(times[index]);
-                    quotes.push(quote);
-                    epochs.push(Number.isFinite(epoch) ? epoch : Date.now() + index);
-                });
-
-                state.percentageQuoteHistory = quotes.slice(-PERCENTAGE_ANALYSIS_HISTORY_SIZE);
-                state.percentageEpochHistory = epochs.slice(-state.percentageQuoteHistory.length);
-                state.percentageBackfilled = state.percentageQuoteHistory.length > 0;
-
-                if (state.percentageQuoteHistory.length > 0) {
-                    const latestQuote = state.percentageQuoteHistory[state.percentageQuoteHistory.length - 1];
-                    rebuildPercentageAnalytics(market.symbol, state, tradeTypeRef.current);
-                    state.lastQuote = latestQuote;
-                    state.prevQuote = latestQuote;
-                    state.lastDigits = state.digitHistory.slice(-10);
-                    state.directionHistory = state.directionSampleHistory.slice(-10);
-                }
-
-                refreshDisplays();
-            } catch (error) {
-                state.percentageBackfilled = false;
-                if (!isExpectedStreamInterruption(error)) {
-                    console.warn(`[AutoTrades] Percentage history backfill failed for ${market.symbol}:`, error);
-                }
-            } finally {
-                state.percentageBackfillInFlight = false;
+            refreshDisplays();
+        } catch (error) {
+            state.percentageBackfilled = false;
+            if (!isExpectedStreamInterruption(error)) {
+                console.warn(`[AutoTrades] Percentage history backfill failed for ${market.symbol}:`, error);
             }
-        },
-        [refreshDisplays]
-    );
+        } finally {
+            state.percentageBackfillInFlight = false;
+        }
+    }, [m1TradeType, refreshDisplays]);
 
     const startSubscriptions = useCallback(async () => {
         const subscriptionVersion = subscriptionVersionRef.current;
-        const monitorAllMarkets = strategyTemplateRef.current !== 'STANDARD';
+        const monitorAllMarkets = m1StrategyTemplate !== 'STANDARD';
         const marketsToMonitor = monitorAllMarkets ? AUTO_MARKETS : selectedMarketsRef.current;
         const monitoredSymbolSet = new Set(marketsToMonitor.map(({ symbol }) => symbol));
         const candleSymbolSet = monitorAllMarkets ? new Set<string>() : new Set(selectedMarketsRef.current.map(({ symbol }) => symbol));
 
         Object.entries(subscriptionsRef.current).forEach(([symbol, sub]) => {
             if (!monitoredSymbolSet.has(symbol)) {
-                try {
-                    sub?.unsubscribe?.();
-                } catch {
-                    // Ignore unsubscribe failures.
-                }
+                try { sub?.unsubscribe?.(); } catch { /* Ignore */ }
                 delete subscriptionsRef.current[symbol];
                 updateSubscriptionDiagnostics();
             }
@@ -2272,11 +2022,7 @@ const AutoTrades = observer(() => {
 
         Object.entries(candleSubscriptionsRef.current).forEach(([symbol, sub]) => {
             if (!candleSymbolSet.has(symbol)) {
-                try {
-                    sub?.unsubscribe?.();
-                } catch {
-                    // Ignore unsubscribe failures.
-                }
+                try { sub?.unsubscribe?.(); } catch { /* Ignore */ }
                 delete candleSubscriptionsRef.current[symbol];
                 updateSubscriptionDiagnostics();
             }
@@ -2292,7 +2038,7 @@ const AutoTrades = observer(() => {
         setDataRecoveryLoading(monitorAllMarkets ? 'Loading strategy scanner data...' : 'Loading selected market data...');
 
         for (const market of marketsToMonitor) {
-            if (strategyModeRef.current === 'PERCENTAGE' || strategyTemplateRef.current !== 'STANDARD') {
+            if (m1StrategyMode === 'PERCENTAGE' || m1StrategyTemplate !== 'STANDARD') {
                 backfillPercentageTicks(market);
             }
 
@@ -2308,7 +2054,6 @@ const AutoTrades = observer(() => {
                                 if (!isExpectedStreamInterruption(data.error)) {
                                     console.warn(`[AutoTrades] Tick stream error for ${market.symbol}:`, data.error);
                                 }
-                                markMarketRecovering(market.symbol, true);
                                 return;
                             }
                             if (data?.tick?.quote !== undefined) handleTickRef.current(market.symbol, data.tick);
@@ -2319,7 +2064,6 @@ const AutoTrades = observer(() => {
                             if (!isExpectedStreamInterruption(streamError)) {
                                 console.warn(`[AutoTrades] Tick stream error for ${market.symbol}:`, streamError);
                             }
-                            markMarketRecovering(market.symbol, true);
                         }
                     );
                     subscriptionsRef.current[market.symbol] = sub;
@@ -2350,12 +2094,9 @@ const AutoTrades = observer(() => {
                                 if (!isExpectedStreamInterruption(data.error)) {
                                     console.warn(`[AutoTrades] Candle stream error for ${market.symbol}:`, data.error);
                                 }
-                                markMarketRecovering(market.symbol, true);
                                 return;
                             }
-                            const candle =
-                                data?.ohlc ??
-                                (Array.isArray(data?.candles) ? data.candles[data.candles.length - 1] : null);
+                            const candle = data?.ohlc ?? (Array.isArray(data?.candles) ? data.candles[data.candles.length - 1] : null);
                             if (candle) handleCandleRef.current(market.symbol, candle);
                         },
                         (streamError: unknown) => {
@@ -2364,7 +2105,6 @@ const AutoTrades = observer(() => {
                             if (!isExpectedStreamInterruption(streamError)) {
                                 console.warn(`[AutoTrades] Candle stream error for ${market.symbol}:`, streamError);
                             }
-                            markMarketRecovering(market.symbol, true);
                         }
                     );
                     candleSubscriptionsRef.current[market.symbol] = sub;
@@ -2378,30 +2118,16 @@ const AutoTrades = observer(() => {
         }
         setIsConnected(Object.keys(subscriptionsRef.current).length > 0);
         updateSubscriptionDiagnostics();
-    }, [
-        backfillPercentageTicks,
-        clearDataRecoveryLoading,
-        markMarketRecovering,
-        setDataRecoveryLoading,
-        updateSubscriptionDiagnostics,
-    ]);
+    }, [backfillPercentageTicks, clearDataRecoveryLoading, m1StrategyMode, m1StrategyTemplate, setDataRecoveryLoading, updateSubscriptionDiagnostics]);
 
     const stopSubscriptions = useCallback(() => {
         subscriptionVersionRef.current++;
         Object.values(subscriptionsRef.current).forEach(sub => {
-            try {
-                sub?.unsubscribe?.();
-            } catch {
-                // Ignore unsubscribe failures.
-            }
+            try { sub?.unsubscribe?.(); } catch { /* Ignore */ }
         });
         subscriptionsRef.current = {};
         Object.values(candleSubscriptionsRef.current).forEach(sub => {
-            try {
-                sub?.unsubscribe?.();
-            } catch {
-                // Ignore unsubscribe failures.
-            }
+            try { sub?.unsubscribe?.(); } catch { /* Ignore */ }
         });
         candleSubscriptionsRef.current = {};
         setIsConnected(false);
@@ -2438,8 +2164,10 @@ const AutoTrades = observer(() => {
         }, 800);
     }, [setDataRecoveryLoading, startSubscriptions, stopSubscriptions]);
 
+    // ─── Session Management ──────────────────────────────────────────────
+
     const resetSession = useCallback(() => {
-        const baseStake = configRef.current.stake;
+        const baseStake = m1ConfigRef.current.stake;
         nextStakeRef.current = baseStake;
         globalTradingRef.current = false;
         previousContractResultRef.current = null;
@@ -2474,9 +2202,7 @@ const AutoTrades = observer(() => {
             run_panel.setRunId(`run-${Date.now()}`);
             run_panel.setContractStage?.(contract_stages.RUNNING);
             run_panel.toggleDrawer(true);
-        } catch {
-            // Ignore optional run-panel mount failures.
-        }
+        } catch { /* Ignore */ }
         dashboard.setActiveTradingModule('auto_trades');
         runningRef.current = true;
         setIsRunning(true);
@@ -2493,17 +2219,17 @@ const AutoTrades = observer(() => {
             state.consecutive = 0;
             state.tradeStartTime = null;
             state.verificationId = null;
-            state.lDigitRecoveryActive = false;
-            state.lDigitWaitingForPattern = false;
-            state.lDigitPatternMatched = false;
-            state.lDigitOriginalTradeType = null;
-            state.lDigitRecoveryStartTime = null;
+            state.recoveryActive = false;
+            state.activeMarket = 'idle';
+            state.recoveryStartTime = null;
+            state.market2Consecutive = 0;
+            state.market2ConsecutiveLosses = 0;
+            state.market2LastResult = null;
         });
-        tradeTypeRef.current = originalTradeTypeRef.current;
         setIsRunning(false);
         clearDataRecoveryLoading();
-        setCurrentStakeDisplay(configRef.current.stake);
-        nextStakeRef.current = configRef.current.stake;
+        setCurrentStakeDisplay(m1ConfigRef.current.stake);
+        nextStakeRef.current = m1ConfigRef.current.stake;
         dashboard.setActiveTradingModule(null);
         setShowTPSLNotification(false);
         recordDiagnosticEvent('auto_trades.stop_trading', {
@@ -2514,14 +2240,7 @@ const AutoTrades = observer(() => {
         updateSubscriptionDiagnostics();
         completeRunPanelStop();
         refreshDisplays();
-    }, [
-        clearDataRecoveryLoading,
-        clearDeferredWork,
-        completeRunPanelStop,
-        dashboard,
-        refreshDisplays,
-        updateSubscriptionDiagnostics,
-    ]);
+    }, [clearDataRecoveryLoading, clearDeferredWork, completeRunPanelStop, dashboard, refreshDisplays, updateSubscriptionDiagnostics]);
 
     const handleStop = useCallback(() => {
         stopTrading();
@@ -2530,6 +2249,15 @@ const AutoTrades = observer(() => {
     useEffect(() => {
         stopTradingRef.current = stopTrading;
     }, [stopTrading]);
+
+    // ─── Lifecycle Effects ───────────────────────────────────────────────
+
+    useEffect(() => {
+        unmountedRef.current = false;
+        return () => {
+            unmountedRef.current = true;
+        };
+    }, []);
 
     useEffect(() => {
         if (!show_auto) return undefined;
@@ -2568,11 +2296,7 @@ const AutoTrades = observer(() => {
             if (runningRef.current) {
                 runningRef.current = false;
                 setIsRunning(false);
-                try {
-                    run_panel.setIsRunning(false);
-                } catch {
-                    // Ignore optional run-panel stop failures.
-                }
+                try { run_panel.setIsRunning(false); } catch { /* Ignore */ }
             }
             clearDeferredWork();
             stopSubscriptions();
@@ -2583,7 +2307,7 @@ const AutoTrades = observer(() => {
     useEffect(() => {
         if (!show_auto || !api_base.api) return;
         startSubscriptions();
-    }, [selectedMarketSymbols, show_auto, startSubscriptions, strategyMode, strategyTemplate]);
+    }, [selectedMarketSymbols, show_auto, startSubscriptions, m1StrategyMode, m1StrategyTemplate]);
 
     const dataSilenceIntervalRef = useRef<number | null>(null);
 
@@ -2631,9 +2355,7 @@ const AutoTrades = observer(() => {
             try {
                 run_panel.setIsRunning(false);
                 run_panel.setHasOpenContract(false);
-            } catch {
-                // Ignore optional run-panel stop failures.
-            }
+            } catch { /* Ignore */ }
             stopSubscriptions();
             Object.values(marketStatesRef.current).forEach(state => {
                 state.digitHistory.length = 0;
@@ -2647,118 +2369,84 @@ const AutoTrades = observer(() => {
         [clearDeferredWork, run_panel, stopTrading, stopSubscriptions]
     );
 
+    // ─── Render Helpers ──────────────────────────────────────────────────
+
+    const getMarketStatus = (state: MarketState, symbol: string): {
+        label: string;
+        isReady: boolean;
+        isTrading: boolean;
+        isRecovery: boolean;
+        isMarket2: boolean;
+        streak: number;
+        target: number;
+    } => {
+        const { config: activeConfig, isMarket2, isRecovery } = getActiveConfig(symbol);
+        const targetLen = getEffectiveSignalStreak({ trade_type: activeConfig.tradeType, configured_streak: activeConfig.streak });
+        const currentStreak = isMarket2 ? state.market2Consecutive : state.consecutive;
+        const requiresCandle = isCandleConfirmedTradeType(activeConfig.tradeType);
+        const candleMatch = requiresCandle ? (activeConfig.inverseMode ? isInverseCandleMatch(activeConfig.tradeType, state.candleDirection) : isCandleMatch(activeConfig.tradeType, state.candleDirection)) : true;
+
+        let isReady = currentStreak >= targetLen && (!requiresCandle || candleMatch);
+
+        if (activeConfig.strategyMode === 'PERCENTAGE') {
+            const barrier = getActiveBarrier(symbol, isMarket2 ? state.market2LastResult : previousContractResultRef.current, isMarket2 ? state.market2ConsecutiveLosses : consecutiveLossRef.current);
+            isReady = isPercentageSignalReady(activeConfig.tradeType, state, barrier) && (!requiresCandle || candleMatch);
+        }
+
+        const label = isRecovery ? 'RECOVERY' : isMarket2 ? 'M2' : 'M1';
+
+        return {
+            label,
+            isReady,
+            isTrading: state.trading,
+            isRecovery,
+            isMarket2,
+            streak: currentStreak,
+            target: targetLen,
+        };
+    };
+
+    const getMarketSubtitle = (symbol: string): string => {
+        const { config, isMarket2, isRecovery } = getActiveConfig(symbol);
+        const ct = config.tradeType;
+        const inv = config.inverseMode;
+        const barrier = getActiveBarrier(symbol, isMarket2 ? null : previousContractResultRef.current, isMarket2 ? 0 : consecutiveLossRef.current);
+        const streak = config.streak;
+
+        const modeLabel = isRecovery ? '🔄 Recovery' : isMarket2 ? '📊 M2' : '📈 M1';
+        const label = inv ? INVERSE_LABELS[ct] : TRADE_TYPE_LABELS[ct];
+
+        if (ct === 'DIGITOVER') return `${modeLabel}: Streak ${streak}+ digits ${inv ? '>' : '≤'} ${barrier} → ${label}`;
+        if (ct === 'DIGITUNDER') return `${modeLabel}: Streak ${streak}+ digits ${inv ? '<' : '≥'} ${barrier} → ${label}`;
+        if (ct === 'CALL') return `${modeLabel}: 5m bullish + ${streak}+ ${inv ? 'rising' : 'falling'} ticks → ${label}`;
+        if (ct === 'PUT') return `${modeLabel}: 5m bearish + ${streak}+ ${inv ? 'falling' : 'rising'} ticks → ${label}`;
+        if (ct === 'RUNHIGH') return `${modeLabel}: ${inv ? 'bearish' : 'bullish'} 5m + ${streak}+ ${inv ? 'rising' : 'falling'} → ${label}`;
+        if (ct === 'RUNLOW') return `${modeLabel}: ${inv ? 'bullish' : 'bearish'} 5m + ${streak}+ ${inv ? 'falling' : 'rising'} → ${label}`;
+        if (ct === 'DIGITEVEN') return `${modeLabel}: ${streak}+ consecutive ${inv ? 'Even' : 'Odd'} → ${label}`;
+        if (ct === 'DIGITODD') return `${modeLabel}: ${streak}+ consecutive ${inv ? 'Odd' : 'Even'} → ${label}`;
+        if (ct === 'DIGITMATCH') return `${modeLabel}: ${streak}+ digits ${inv ? '=' : '≠'} ${barrier} → ${label}`;
+        if (ct === 'DIGITDIFF') return `${modeLabel}: ${streak}+ digits ${inv ? '≠' : '='} ${barrier} → ${label}`;
+        return `${modeLabel}: ${label}`;
+    };
+
+    // ─── Render ──────────────────────────────────────────────────────────
+
     if (!show_auto) return null;
 
     const pnlPositive = totalPnl > 0;
     const pnlNegative = totalPnl < 0;
-    const baseStakeNum = Number(stake) || 1;
+    const baseStakeNum = Number(m1Stake) || 1;
     const martingaleActive = currentStakeDisplay > baseStakeNum;
     const selectedMarketDisplayStates = selectedMarkets.map(
         market => marketDisplays.find(display => display.symbol === market.symbol) ?? marketStatesRef.current[market.symbol]
     );
-    const hasAnyLiveQuote =
-        selectedMarkets.length > 0 &&
-        selectedMarketDisplayStates.some(display => display?.lastQuote !== null);
-    const hasAllLiveQuotes =
-        selectedMarkets.length > 0 && selectedMarketDisplayStates.every(display => display?.lastQuote !== null);
-    const isDataLoading =
-        selectedMarketSymbols.length > 0 &&
-        ((!hasAnyLiveQuote && (dataStreamLoading || !isConnected || show_auto)) ||
-            (!hasAllLiveQuotes && !hasAnyLiveQuote));
-    const streakNum = getEffectiveSignalStreak({
-        trade_type: tradeType,
-        configured_streak: Number(streak) || 4,
-    });
-    const usingSpecialStrategy = strategyTemplate !== 'STANDARD';
-    const activeSpecialStrategy = usingSpecialStrategy ? DIGIT_STRATEGIES[strategyTemplate as DigitStrategyId] : null;
-    const isDirection = IS_DIRECTION_TYPE[tradeType];
-    const previousContractResult = previousContractResultRef.current;
-    const lossPredictionActive =
-        usesLossPrediction(tradeType) &&
-        (consecutiveLossRef.current > 0 || previousContractResultRef.current === 'loss');
-    const activeBarrier = getActiveDigitBarrier(tradeType, previousContractResult, consecutiveLossRef.current);
-    const isLossActive = previousContractResult === 'loss' || consecutiveLossRef.current > 0;
+    const hasAnyLiveQuote = selectedMarkets.length > 0 && selectedMarketDisplayStates.some(display => display?.lastQuote !== null);
+    const hasAllLiveQuotes = selectedMarkets.length > 0 && selectedMarketDisplayStates.every(display => display?.lastQuote !== null);
+    const isDataLoading = selectedMarketSymbols.length > 0 && ((!hasAnyLiveQuote && (dataStreamLoading || !isConnected || show_auto)) || (!hasAllLiveQuotes && !hasAnyLiveQuote));
 
-    const hasRecoveryWaiting = hasWaitingLDigit;
-    const hasRecoveryActive = hasActiveLDigitRecovery;
-
-    const getLDigitStrategyText = () => {
-        if (!lDigitStrategy.enabled) return null;
-        switch (lDigitStrategy.patternType) {
-            case 'odd_to_even':
-                return `After loss, wait for ${lDigitStrategy.lookbackTicks} consecutive ODD digits → trade EVEN`;
-            case 'even_to_odd':
-                return `After loss, wait for ${lDigitStrategy.lookbackTicks} consecutive EVEN digits → trade ODD`;
-            case 'over_to_under':
-                return `After loss, wait for ${lDigitStrategy.lookbackTicks} digits all > ${lDigitStrategy.thresholdDigit} → trade UNDER ${lDigitStrategy.thresholdDigit}`;
-            case 'under_to_over':
-                return `After loss, wait for ${lDigitStrategy.lookbackTicks} digits all < ${lDigitStrategy.thresholdDigit} → trade OVER ${lDigitStrategy.thresholdDigit}`;
-            case 'match_to_diff':
-                return `After loss, wait for ${lDigitStrategy.lookbackTicks} digits all = ${lDigitStrategy.barrierDigit} → trade DIFFERS`;
-            case 'diff_to_match':
-                return `After loss, wait for ${lDigitStrategy.lookbackTicks} digits all ≠ ${lDigitStrategy.barrierDigit} → trade MATCH`;
-            case 'rise_to_fall':
-                return `After loss, wait for ${lDigitStrategy.lookbackTicks} consecutive RISING ticks → trade FALL`;
-            case 'fall_to_rise':
-                return `After loss, wait for ${lDigitStrategy.lookbackTicks} consecutive FALLING ticks → trade RISE`;
-            default:
-                return null;
-        }
-    };
-
-    const subtitleTxt = (() => {
-        const lDigitText = getLDigitStrategyText();
-        const inv = inverseModeRef.current;
-        const label = inv ? INVERSE_LABELS[tradeType] : TRADE_TYPE_LABELS[tradeType];
-        
-        if (hasRecoveryWaiting && isRunning) {
-            return `⏳ Market 2 WAITING: ${lDigitText} | NO TRADING until pattern matches`;
-        } else if (hasRecoveryActive && isRunning) {
-            return `🔴 Market 2 ACTIVE: ${lDigitText} | Trading with ${label}`;
-        } else if (lDigitStrategy.enabled && isLossActive && !hasRecoveryActive && !hasRecoveryWaiting) {
-            return `⚡ L→Digit RECOVERY: ${lDigitText} | Ready to activate after next loss`;
-        } else if (lDigitStrategy.enabled && !isLossActive) {
-            return `⚡ L→Digit RECOVERY: ${lDigitText} | Market 1 active — will switch to Market 2 after loss`;
-        }
-        
-        if (tradeType === 'DIGITOVER')
-            return `Streak: ${streakNum}+ digits ${inv ? '>' : '≤'} ${activeBarrier} → ${label}`;
-        if (tradeType === 'DIGITUNDER')
-            return `Streak: ${streakNum}+ digits ${inv ? '<' : '≥'} ${activeBarrier} → ${label}`;
-        if (tradeType === 'CALL')
-            return `5m bullish candle + ${streakNum}+ consecutive ${inv ? 'rising' : 'falling'} ticks → ${label} (${analysisTicks} ticks)`;
-        if (tradeType === 'PUT')
-            return `5m bearish candle + ${streakNum}+ consecutive ${inv ? 'falling' : 'rising'} ticks → ${label} (${analysisTicks} ticks)`;
-        if (tradeType === 'RUNHIGH')
-            return `${inv ? '5m bearish' : '5m bullish'} candle + ${streakNum}+ ${inv ? 'rising' : 'falling'} ticks → ${label} (${analysisTicks} ticks)`;
-        if (tradeType === 'RUNLOW')
-            return `${inv ? '5m bullish' : '5m bearish'} candle + ${streakNum}+ ${inv ? 'falling' : 'rising'} ticks → ${label} (${analysisTicks} ticks)`;
-        if (tradeType === 'DIGITEVEN')
-            return `Streak: ${streakNum}+ consecutive ${inv ? 'Even' : 'Odd'} digits → ${label}`;
-        if (tradeType === 'DIGITODD')
-            return `Streak: ${streakNum}+ consecutive ${inv ? 'Odd' : 'Even'} digits → ${label}`;
-        if (tradeType === 'DIGITMATCH') return `Streak: ${streakNum}+ digits ${inv ? '=' : '≠'} ${barrier} → ${label}`;
-        if (tradeType === 'DIGITDIFF') return `Streak: ${streakNum}+ digits ${inv ? '≠' : '='} ${barrier} → ${label}`;
-        return '';
-    })();
-
-    const resolvedSubtitleTxt = (() => {
-        if (activeSpecialStrategy) {
-            return `${activeSpecialStrategy.alertLabel}: ${activeSpecialStrategy.triggerLabel}, then ${activeSpecialStrategy.entryLabel}`;
-        }
-        if (!usesLossPrediction(tradeType)) return subtitleTxt;
-
-        const inv = inverseModeRef.current;
-        const label = inv ? INVERSE_LABELS[tradeType] : TRADE_TYPE_LABELS[tradeType];
-        const lossPhaseText = lossPredictionActive ? 'after loss' : 'before loss';
-
-        if (tradeType === 'DIGITOVER')
-            return `Streak: ${streakNum}+ digits ${inv ? '>' : '≤'} ${activeBarrier} → ${label} (${lossPhaseText})`;
-        if (tradeType === 'DIGITUNDER')
-            return `Streak: ${streakNum}+ digits ${inv ? '<' : '≥'} ${activeBarrier} → ${label} (${lossPhaseText})`;
-
-        return subtitleTxt;
-    })();
+    const isM2Available = m2Enabled;
+    const isRecoveryMode = tradingMode === 'recovery_mode' && isM2Available;
+    const isM2Only = tradingMode === 'market2_only' && isM2Available;
 
     return (
         <div className='auto-trades-page'>
@@ -2768,53 +2456,23 @@ const AutoTrades = observer(() => {
                     <div className='auto-trades-page__header'>
                         <div>
                             <h1 className='auto-trades-page__title'>Auto Trades</h1>
-                            <p className='auto-trades-page__subtitle'>{resolvedSubtitleTxt}</p>
+                            <p className='auto-trades-page__subtitle'>
+                                {isM2Only ? 'Market 2 Only' : isRecoveryMode ? 'Recovery Mode (M1 → M2 on loss)' : 'Market 1 Only'}
+                            </p>
                         </div>
                         <div className='auto-trades-page__status-dot'>
                             <span
                                 className={classNames('auto-trades-status', {
                                     'auto-trades-status--connected': isConnected,
-                                    'auto-trades-status--running': isRunning && !hasRecoveryWaiting,
-                                    'auto-trades-status--waiting': hasRecoveryWaiting && isRunning,
+                                    'auto-trades-status--running': isRunning,
                                     'auto-trades-status--loading': isDataLoading,
                                 })}
                             />
                             <span className='auto-trades-status__label'>
-                                {hasRecoveryWaiting && isRunning
-                                    ? '⏳ Market 2 Waiting'
-                                    : isDataLoading
-                                      ? 'Loading data'
-                                      : isRunning
-                                        ? hasRecoveryActive ? '🔴 Market 2 Active' : 'Trading'
-                                        : isConnected
-                                          ? 'Live data'
-                                          : selectedMarketSymbols.length === 0
-                                            ? 'No markets'
-                                            : 'Connecting…'}
+                                {isDataLoading ? 'Loading data' : isRunning ? 'Trading' : isConnected ? 'Live data' : selectedMarketSymbols.length === 0 ? 'No markets' : 'Connecting…'}
                             </span>
                         </div>
                     </div>
-
-                    {/* L→Digit Recovery Waiting Banner */}
-                    {hasRecoveryWaiting && isRunning && (
-                        <div className='auto-trades-l-digit-waiting'>
-                            <span className='auto-trades-l-digit-waiting__icon'>⏳</span>
-                            <span>
-                                <strong>Market 2 (L→Digit Recovery) Waiting:</strong> Scanning for pattern — 
-                                <strong> Market 1 BLOCKED.</strong> No trades until pattern confirmed.
-                            </span>
-                        </div>
-                    )}
-
-                    {hasRecoveryActive && isRunning && (
-                        <div className='auto-trades-l-digit-waiting' style={{ background: 'rgba(255,60,60,0.08)', borderColor: '#ff3c3c' }}>
-                            <span className='auto-trades-l-digit-waiting__icon'>🔴</span>
-                            <span>
-                                <strong>Market 2 (L→Digit Recovery) ACTIVE:</strong> Trading with L→Digit strategy — 
-                                <strong> Market 1 BLOCKED.</strong> Will return to Market 1 after win.
-                            </span>
-                        </div>
-                    )}
 
                     {!client.is_logged_in && (
                         <div className='auto-trades-page__notice'>
@@ -2832,15 +2490,16 @@ const AutoTrades = observer(() => {
                             <strong>{floatingStrategyAlert.marketLabel}</strong>
                             <p>{floatingStrategyAlert.message}</p>
                             <div className='auto-trades-floating-alert__actions'>
-                                <button
-                                    type='button'
-                                    onClick={() =>
-                                        handleLoadAlertMarket(
-                                            floatingStrategyAlert.symbol,
-                                            floatingStrategyAlert.strategyId
-                                        )
+                                <button type='button' onClick={() => {
+                                    const strategy = DIGIT_STRATEGIES[floatingStrategyAlert.strategyId];
+                                    if (strategy) {
+                                        setM1StrategyTemplate(floatingStrategyAlert.strategyId);
+                                        setM1TradeType(strategy.contractType);
+                                        setM1Barrier(strategy.winBarrier);
+                                        setSelectedMarketSymbols([floatingStrategyAlert.symbol]);
                                     }
-                                >
+                                    setFloatingStrategyAlert(null);
+                                }}>
                                     Load market
                                 </button>
                                 <button type='button' onClick={() => setFloatingStrategyAlert(null)}>
@@ -2862,491 +2521,509 @@ const AutoTrades = observer(() => {
                         </div>
                     )}
 
-                    <div
-                        className={classNames('auto-trades-page__body', {
-                            'auto-trades-page__body--loading': isDataLoading,
-                        })}
-                    >
+                    <div className={classNames('auto-trades-page__body', { 'auto-trades-page__body--loading': isDataLoading })}>
                         {/* Sidebar */}
                         <div className='auto-trades-page__sidebar'>
-                            {/* Settings card */}
+                            {/* Trading Mode Selector */}
                             <div className='auto-trades-card'>
-                                <h2 className='auto-trades-card__title'>Market 1 — Contract Type</h2>
-
-                                <div className='auto-trades-config__group'>
-                                    <div className='auto-trades-strategy-selector'>
-                                        <label>Strategy template</label>
-                                        <select
-                                            className='auto-trades-strategy-selector__select'
-                                            value={strategyTemplate}
-                                            onChange={e => setStrategyTemplate(e.target.value as StrategyTemplate)}
-                                            disabled={isRunning}
-                                        >
-                                            <option value='STANDARD'>Standard builder</option>
-                                            <option value='OVER_2_MARKET'>Over 2 Market</option>
-                                            <option value='UNDER_7_MARKET'>Under 7 Market</option>
-                                        </select>
-                                    </div>
-                                    <p className='auto-trades-inverse__hint'>
-                                        {usingSpecialStrategy
-                                            ? 'Scans every volatility and 1s market in the background. When one qualifies, load that market and click Start Trading to wait for the entry and buy automatically.'
-                                            : 'Use the standard contract builder to configure your own auto-trade rule.'}
-                                    </p>
+                                <h2 className='auto-trades-card__title'>Trading Mode</h2>
+                                <div className='auto-trades-mode-selector'>
+                                    <button
+                                        className={classNames('auto-trades-mode-btn', {
+                                            'auto-trades-mode-btn--active': tradingMode === 'market1_only',
+                                        })}
+                                        onClick={() => setTradingMode('market1_only')}
+                                        disabled={isRunning}
+                                    >
+                                        <span className='auto-trades-mode-btn__icon'>📈</span>
+                                        <span className='auto-trades-mode-btn__label'>Market 1 Only</span>
+                                        <span className='auto-trades-mode-btn__desc'>Trade only with M1 strategy</span>
+                                    </button>
+                                    <button
+                                        className={classNames('auto-trades-mode-btn', {
+                                            'auto-trades-mode-btn--active': tradingMode === 'market2_only',
+                                            'auto-trades-mode-btn--disabled': !m2Enabled,
+                                        })}
+                                        onClick={() => m2Enabled && setTradingMode('market2_only')}
+                                        disabled={isRunning || !m2Enabled}
+                                    >
+                                        <span className='auto-trades-mode-btn__icon'>📊</span>
+                                        <span className='auto-trades-mode-btn__label'>Market 2 Only</span>
+                                        <span className='auto-trades-mode-btn__desc'>
+                                            {m2Enabled ? 'Trade only with M2 strategy' : 'Enable M2 below'}
+                                        </span>
+                                    </button>
+                                    <button
+                                        className={classNames('auto-trades-mode-btn', {
+                                            'auto-trades-mode-btn--active': tradingMode === 'recovery_mode',
+                                            'auto-trades-mode-btn--disabled': !m2Enabled,
+                                        })}
+                                        onClick={() => m2Enabled && setTradingMode('recovery_mode')}
+                                        disabled={isRunning || !m2Enabled}
+                                    >
+                                        <span className='auto-trades-mode-btn__icon'>🔄</span>
+                                        <span className='auto-trades-mode-btn__label'>Recovery Mode</span>
+                                        <span className='auto-trades-mode-btn__desc'>
+                                            {m2Enabled ? 'M1 → M2 on loss' : 'Enable M2 below'}
+                                        </span>
+                                    </button>
                                 </div>
+                                {!m2Enabled && (
+                                    <p className='auto-trades-mode-hint'>Enable Market 2 below to use M2-only or Recovery mode</p>
+                                )}
+                            </div>
 
-                                {/* Contract Type + Barrier + Streak */}
-                                <div className='auto-trades-config__group'>
-                                    <p className='auto-trades-config__group-label'>Contract Type</p>
+                            {/* Market 1 Config */}
+                            <div className='auto-trades-card auto-trades-card--m1'>
+                                <h2 className='auto-trades-card__title'>📈 Market 1</h2>
+                                <div className='auto-trades-config'>
+                                    <div className='auto-trades-config__group'>
+                                        <div className='auto-trades-strategy-selector'>
+                                            <label>Strategy template</label>
+                                            <select
+                                                className='auto-trades-strategy-selector__select'
+                                                value={m1StrategyTemplate}
+                                                onChange={e => setM1StrategyTemplate(e.target.value as StrategyTemplate)}
+                                                disabled={isRunning}
+                                            >
+                                                <option value='STANDARD'>Standard builder</option>
+                                                <option value='OVER_2_MARKET'>Over 2 Market</option>
+                                                <option value='UNDER_7_MARKET'>Under 7 Market</option>
+                                            </select>
+                                        </div>
+                                        <p className='auto-trades-inverse__hint'>
+                                            {m1StrategyTemplate !== 'STANDARD'
+                                                ? 'Scans every volatility market. When one qualifies, load that market and click Start Trading.'
+                                                : 'Configure your own auto-trade rule.'}
+                                        </p>
+                                    </div>
 
-                                    {/* Trade type row */}
-                                    <div className='auto-trades-config__trade-row'>
-                                        <div className='auto-trades-config__field auto-trades-config__field--type'>
+                                    <div className='auto-trades-config__group'>
+                                        <p className='auto-trades-config__group-label'>Contract Type</p>
+                                        <div className='auto-trades-config__trade-row'>
+                                            <div className='auto-trades-config__field auto-trades-config__field--type'>
                                                 <label>Type</label>
                                                 <select
                                                     className='auto-trades-config__select'
-                                                    value={tradeType}
-                                                    onChange={e => handleTradeTypeChange(e.target.value as TradeType)}
-                                                    disabled={isRunning || usingSpecialStrategy}
+                                                    value={m1TradeType}
+                                                    onChange={e => setM1TradeType(e.target.value as TradeType)}
+                                                    disabled={isRunning || m1StrategyTemplate !== 'STANDARD'}
                                                 >
-                                                <optgroup label='Digits'>
-                                                    <option value='DIGITOVER'>Digit Over</option>
-                                                    <option value='DIGITUNDER'>Digit Under</option>
-                                                    <option value='DIGITEVEN'>Digit Even</option>
-                                                    <option value='DIGITODD'>Digit Odd</option>
-                                                    <option value='DIGITMATCH'>Matches</option>
-                                                    <option value='DIGITDIFF'>Differs</option>
-                                                </optgroup>
-                                                <optgroup label='Direction'>
-                                                    <option value='CALL'>Rise</option>
-                                                    <option value='PUT'>Fall</option>
-                                                    <option value='RUNHIGH'>Only Ups</option>
-                                                    <option value='RUNLOW'>Only Downs</option>
-                                                </optgroup>
-                                            </select>
-                                        </div>
-
-                                        {/* Prediction — adaptive digit selector */}
-                                        {usesLossPrediction(tradeType) && (
-                                            <div className='auto-trades-config__prediction-pair'>
-                                                <div className='auto-trades-config__prediction-label'>
-                                                    Prediction
-                                                    <span className='auto-trades-config__prediction-hint'>
-                                                        W→digit / L→digit
-                                                    </span>
-                                                </div>
-                                                <div className='auto-trades-config__prediction-controls'>
-                                                    <div className='auto-trades-config__prediction-item'>
-                                                        <span className='auto-trades-config__prediction-tag auto-trades-config__prediction-tag--win'>
-                                                            W
-                                                        </span>
-                                                        <select
-                                                            className='auto-trades-config__select auto-trades-config__select--compact'
-                                                            value={predictionBeforeLoss}
-                                                            onChange={e => setPredictionBeforeLoss(e.target.value)}
-                                                            disabled={isRunning || usingSpecialStrategy}
-                                                            title='Prediction used after a Win'
-                                                        >
-                                                            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
-                                                                <option key={d} value={String(d)}>
-                                                                    {d}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                    <span className='auto-trades-config__prediction-divider'>|</span>
-                                                    <div className='auto-trades-config__prediction-item'>
-                                                        <span className='auto-trades-config__prediction-tag auto-trades-config__prediction-tag--loss'>
-                                                            L
-                                                        </span>
-                                                        <select
-                                                            className='auto-trades-config__select auto-trades-config__select--compact'
-                                                            value={predictionAfterLoss}
-                                                            onChange={e => setPredictionAfterLoss(e.target.value)}
-                                                            disabled={isRunning || usingSpecialStrategy}
-                                                            title='Prediction used after a Loss'
-                                                        >
-                                                            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
-                                                                <option key={d} value={String(d)}>
-                                                                    {d}
-                                                                </option>
-                                                            ))}
-                                                        </select>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        {BARRIER_NEEDED[tradeType] && !usesLossPrediction(tradeType) && (
-                                            <div className='auto-trades-config__field auto-trades-config__field--narrow'>
-                                                <label>
-                                                    {tradeType === 'DIGITMATCH' || tradeType === 'DIGITDIFF'
-                                                        ? 'Prediction'
-                                                        : 'Digit'}
-                                                </label>
-                                                <select
-                                                    className='auto-trades-config__select'
-                                                    value={barrier}
-                                                    onChange={e => setBarrier(e.target.value)}
-                                                    disabled={isRunning || usingSpecialStrategy}
-                                                >
-                                                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(d => (
-                                                        <option key={d} value={String(d)}>
-                                                            {d}
-                                                        </option>
-                                                    ))}
+                                                    <optgroup label='Digits'>
+                                                        <option value='DIGITOVER'>Digit Over</option>
+                                                        <option value='DIGITUNDER'>Digit Under</option>
+                                                        <option value='DIGITEVEN'>Digit Even</option>
+                                                        <option value='DIGITODD'>Digit Odd</option>
+                                                        <option value='DIGITMATCH'>Matches</option>
+                                                        <option value='DIGITDIFF'>Differs</option>
+                                                    </optgroup>
+                                                    <optgroup label='Direction'>
+                                                        <option value='CALL'>Rise</option>
+                                                        <option value='PUT'>Fall</option>
+                                                        <option value='RUNHIGH'>Only Ups</option>
+                                                        <option value='RUNLOW'>Only Downs</option>
+                                                    </optgroup>
                                                 </select>
                                             </div>
-                                        )}
 
-                                        <div className='auto-trades-config__field auto-trades-config__field--analysis'>
-                                            <label>Analysis ticks</label>
-                                            <select
-                                                className='auto-trades-config__select'
-                                                value={analysisTicks}
-                                                onChange={e => setAnalysisTicks(e.target.value)}
-                                                disabled={isRunning || usingSpecialStrategy}
-                                            >
-                                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(d => (
-                                                    <option key={d} value={String(d)}>
-                                                        {d}
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                    </div>
-
-                                    {/* Streak length */}
-                                    <div className='auto-trades-config__field' style={{ marginTop: '0.8rem' }}>
-                                        <label>
-                                            Streak (
-                                            {isDirection ? getDirectionStreakLabel(tradeType) : 'matching digits'})
-                                        </label>
-                                        <div className='auto-trades-config__streak-row'>
-                                            <input
-                                                className='auto-trades-config__streak-slider'
-                                                type='range'
-                                                min='1'
-                                                max='10'
-                                                step='1'
-                                                value={streak}
-                                                onChange={e => setStreak(e.target.value)}
-                                                disabled={isRunning || usingSpecialStrategy}
-                                            />
-                                            <span className='auto-trades-config__streak-value'>{streak}</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Strategy Mode Selector */}
-                                <div className='auto-trades-config__group'>
-                                    <div className='auto-trades-strategy-selector'>
-                                        <label>Strategy Mode</label>
-                                        <select
-                                            className='auto-trades-strategy-selector__select'
-                                            value={strategyMode}
-                                            onChange={e => setStrategyMode(e.target.value as StrategyMode)}
-                                            disabled={isRunning || usingSpecialStrategy}
-                                        >
-                                            <option value='STANDARD'>Standard</option>
-                                            <option value='INVERSE'>Inverse</option>
-                                            <option value='PERCENTAGE'>Percentage Mode</option>
-                                        </select>
-                                    </div>
-                                    <p className='auto-trades-inverse__hint'>
-                                        {strategyMode === 'PERCENTAGE'
-                                            ? 'Auto-loads the latest 1,000 ticks and keeps a live rolling percentage window'
-                                            : strategyMode === 'INVERSE'
-                                              ? 'Detects opposite signals, executes contracts'
-                                              : 'Detects standard signals, executes contracts'}
-                                    </p>
-                                </div>
-
-                                {/* Signal Mode */}
-                                {strategyMode !== 'PERCENTAGE' && !usingSpecialStrategy && (
-                                    <div className='auto-trades-config__group'>
-                                        <button
-                                            type='button'
-                                            className={classNames(
-                                                'auto-trades-strategy-btn',
-                                                inverseMode && 'auto-trades-strategy-btn--active'
-                                            )}
-                                            onClick={() => setInverseMode(prev => !prev)}
-                                            disabled={isRunning || usingSpecialStrategy}
-                                        >
-                                            <span className='auto-trades-strategy-btn__badge'>
-                                                {inverseMode ? 'Inverse' : 'Direct'}
-                                            </span>
-                                            <span className='auto-trades-strategy-btn__label'>Signal Mode</span>
-                                            <span
-                                                className={classNames(
-                                                    'auto-trades-inverse__toggle-switch',
-                                                    'auto-trades-strategy-btn__switch'
-                                                )}
-                                            >
-                                                <span className='auto-trades-inverse__toggle-knob' />
-                                            </span>
-                                        </button>
-                                    </div>
-                                )}
-
-                                {/* Money settings */}
-                                <div className='auto-trades-config'>
-                                    <div className='auto-trades-config__field'>
-                                        <label>Stake ({currency || 'USD'})</label>
-                                        <Input
-                                            type='number'
-                                            min='0.35'
-                                            step='0.01'
-                                            value={stake}
-                                            onChange={e => setStake(e.target.value)}
-                                            disabled={isRunning}
-                                        />
-                                    </div>
-                                    <div className='auto-trades-config__field'>
-                                        <label>Martingale ×</label>
-                                        <Input
-                                            type='number'
-                                            min='1.01'
-                                            step='0.5'
-                                            value={martingale}
-                                            onChange={e => setMartingale(e.target.value)}
-                                            disabled={isRunning}
-                                        />
-                                    </div>
-                                    <div className='auto-trades-config__field'>
-                                        <label>Take Profit ({currency || 'USD'})</label>
-                                        <Input
-                                            type='number'
-                                            min='0'
-                                            step='1'
-                                            value={takeProfit}
-                                            onChange={e => setTakeProfit(e.target.value)}
-                                            disabled={isRunning}
-                                        />
-                                    </div>
-                                    <div className='auto-trades-config__field'>
-                                        <label>Stop Loss ({currency || 'USD'})</label>
-                                        <Input
-                                            type='number'
-                                            min='0'
-                                            step='1'
-                                            value={stopLoss}
-                                            onChange={e => setStopLoss(e.target.value)}
-                                            disabled={isRunning}
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Martingale Strategy Selector */}
-                                <div className='auto-trades-config__group'>
-                                    <div className='auto-trades-martingale-selector'>
-                                        <label>Martingale Strategy</label>
-                                        <select
-                                            className='auto-trades-martingale-selector__select'
-                                            value={martingaleMode}
-                                            onChange={e => setMartingaleMode(normalizeMartingaleMode(e.target.value))}
-                                            disabled={isRunning}
-                                        >
-                                            <option value='no_martingale'>No Martingale</option>
-                                            <option value='after_one_loss'>After 1 loss</option>
-                                            <option value='after_two_losses'>After 2 losses</option>
-                                            <option value='custom_consecutive_loss_trigger'>Custom loss count</option>
-                                        </select>
-                                    </div>
-                                    <p className='auto-trades-martingale__hint'>
-                                        {martingaleMode === 'no_martingale'
-                                            ? 'Martingale is disabled. Stake stays at the base amount.'
-                                            : martingaleMode === 'after_one_loss'
-                                              ? 'Martingale engages immediately after one loss.'
-                                              : martingaleMode === 'after_two_losses'
-                                                ? 'Martingale engages only after two consecutive losses.'
-                                                : `Martingale engages after ${clampConsecutiveLossThreshold(
-                                                      consecutiveLossCount
-                                                  )} consecutive losses.`}
-                                    </p>
-                                    {martingaleMode === 'custom_consecutive_loss_trigger' && (
-                                        <div
-                                            className='auto-trades-config__field auto-trades-config__field--martingale-threshold'
-                                            style={{ marginTop: '0.5rem' }}
-                                        >
-                                            <label>Consecutive losses before martingale</label>
-                                            <Input
-                                                type='number'
-                                                min='1'
-                                                max='10'
-                                                step='1'
-                                                value={consecutiveLossCountInput}
-                                                inputMode='numeric'
-                                                onChange={e =>
-                                                    handleConsecutiveLossCountInputChange(
-                                                        (e.target as HTMLInputElement).value
-                                                    )
-                                                }
-                                                onBlur={commitConsecutiveLossCountInput}
-                                                disabled={isRunning}
-                                            />
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* L→Digit Recovery Strategy Section - Market 2 */}
-                                <div className='auto-trades-l-digit-section'>
-                                    <div className='auto-trades-l-digit-section__header'>
-                                        <span className='auto-trades-l-digit-section__icon'>🔄</span>
-                                        <span className='auto-trades-l-digit-section__title'>Market 2 — L→Digit Recovery</span>
-                                        <span className={classNames('auto-trades-l-digit-section__badge', {
-                                            'auto-trades-l-digit-section__badge--active': lDigitStrategy.enabled && hasRecoveryActive && isRunning,
-                                            'auto-trades-l-digit-section__badge--waiting': lDigitStrategy.enabled && hasRecoveryWaiting && isRunning,
-                                            'auto-trades-l-digit-section__badge--ready': lDigitStrategy.enabled && isLossActive && !hasRecoveryActive && !hasRecoveryWaiting && isRunning,
-                                        })}>
-                                            {lDigitStrategy.enabled && isRunning 
-                                                ? (hasRecoveryActive ? 'M2 ACTIVE' : hasRecoveryWaiting ? 'M2 WAITING' : isLossActive ? 'READY' : 'ON') 
-                                                : 'OFF'}
-                                        </span>
-                                    </div>
-                                    
-                                    <div className='auto-trades-strategy-selector'>
-                                        <select
-                                            className='auto-trades-strategy-selector__select l-digit-select'
-                                            value={lDigitStrategy.enabled ? lDigitStrategy.patternType : 'disabled'}
-                                            onChange={e => {
-                                                const value = e.target.value;
-                                                if (value === 'disabled') {
-                                                    setLDigitStrategy({ enabled: false, patternType: 'odd_to_even', lookbackTicks: 5 });
-                                                } else if (value === 'odd_to_even') {
-                                                    setLDigitStrategy({ enabled: true, patternType: 'odd_to_even', lookbackTicks: 5 });
-                                                } else if (value === 'even_to_odd') {
-                                                    setLDigitStrategy({ enabled: true, patternType: 'even_to_odd', lookbackTicks: 5 });
-                                                } else if (value === 'over_to_under') {
-                                                    setLDigitStrategy({ enabled: true, patternType: 'over_to_under', lookbackTicks: 5, thresholdDigit: 4 });
-                                                } else if (value === 'under_to_over') {
-                                                    setLDigitStrategy({ enabled: true, patternType: 'under_to_over', lookbackTicks: 5, thresholdDigit: 4 });
-                                                } else if (value === 'match_to_diff') {
-                                                    setLDigitStrategy({ enabled: true, patternType: 'match_to_diff', lookbackTicks: 5, barrierDigit: 4 });
-                                                } else if (value === 'diff_to_match') {
-                                                    setLDigitStrategy({ enabled: true, patternType: 'diff_to_match', lookbackTicks: 5, barrierDigit: 4 });
-                                                } else if (value === 'rise_to_fall') {
-                                                    setLDigitStrategy({ enabled: true, patternType: 'rise_to_fall', lookbackTicks: 5 });
-                                                } else if (value === 'fall_to_rise') {
-                                                    setLDigitStrategy({ enabled: true, patternType: 'fall_to_rise', lookbackTicks: 5 });
-                                                }
-                                            }}
-                                            disabled={isRunning}
-                                        >
-                                            <option value='disabled'>⚫ Disabled</option>
-                                            <option value='odd_to_even'>🔴 Odd → Even</option>
-                                            <option value='even_to_odd'>🟢 Even → Odd</option>
-                                            <option value='over_to_under'>📉 Over → Under</option>
-                                            <option value='under_to_over'>📈 Under → Over</option>
-                                            <option value='match_to_diff'>🎯 Match → Differs</option>
-                                            <option value='diff_to_match'>🎯 Differs → Match</option>
-                                            <option value='rise_to_fall'>⬆️ Rise → Fall</option>
-                                            <option value='fall_to_rise'>⬇️ Fall → Rise</option>
-                                        </select>
-                                    </div>
-                                    
-                                    {lDigitStrategy.enabled && (
-                                        <div className='auto-trades-l-digit-section__config'>
-                                            <div className='auto-trades-l-digit-section__field'>
-                                                <label className='auto-trades-l-digit-section__label'>Lookback Ticks</label>
-                                                <div className='auto-trades-l-digit-section__lookback'>
-                                                    <input
-                                                        className='auto-trades-l-digit-section__range'
-                                                        type='range'
-                                                        min='1'
-                                                        max='20'
-                                                        step='1'
-                                                        value={lDigitStrategy.lookbackTicks}
-                                                        onChange={e => setLDigitStrategy(prev => ({
-                                                            ...prev,
-                                                            lookbackTicks: parseInt(e.target.value)
-                                                        }))}
-                                                        disabled={isRunning}
-                                                        style={{
-                                                            width: '100%',
-                                                            height: '6px',
-                                                            borderRadius: '3px',
-                                                            background: `linear-gradient(to right, #ff9800 0%, #ff9800 ${(lDigitStrategy.lookbackTicks / 20) * 100}%, #e0e0e0 ${(lDigitStrategy.lookbackTicks / 20) * 100}%, #e0e0e0 100%)`,
-                                                            outline: 'none',
-                                                            transition: 'background 0.2s ease',
-                                                            cursor: isRunning ? 'not-allowed' : 'pointer'
-                                                        }}
-                                                    />
-                                                    <div className='auto-trades-l-digit-section__lookback-value'>
-                                                        <span className='auto-trades-l-digit-section__lookback-number'>
-                                                            {lDigitStrategy.lookbackTicks}
-                                                        </span>
-                                                        <span className='auto-trades-l-digit-section__lookback-unit'>
-                                                            ticks
-                                                        </span>
+                                            {usesLossPrediction(m1TradeType) && (
+                                                <div className='auto-trades-config__prediction-pair'>
+                                                    <div className='auto-trades-config__prediction-label'>
+                                                        Prediction
+                                                        <span className='auto-trades-config__prediction-hint'>W→digit / L→digit</span>
+                                                    </div>
+                                                    <div className='auto-trades-config__prediction-controls'>
+                                                        <div className='auto-trades-config__prediction-item'>
+                                                            <span className='auto-trades-config__prediction-tag auto-trades-config__prediction-tag--win'>W</span>
+                                                            <select
+                                                                className='auto-trades-config__select auto-trades-config__select--compact'
+                                                                value={m1PredictionBeforeLoss}
+                                                                onChange={e => setM1PredictionBeforeLoss(e.target.value)}
+                                                                disabled={isRunning || m1StrategyTemplate !== 'STANDARD'}
+                                                            >
+                                                                {[0,1,2,3,4,5,6,7,8,9].map(d => <option key={d} value={String(d)}>{d}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <span className='auto-trades-config__prediction-divider'>|</span>
+                                                        <div className='auto-trades-config__prediction-item'>
+                                                            <span className='auto-trades-config__prediction-tag auto-trades-config__prediction-tag--loss'>L</span>
+                                                            <select
+                                                                className='auto-trades-config__select auto-trades-config__select--compact'
+                                                                value={m1PredictionAfterLoss}
+                                                                onChange={e => setM1PredictionAfterLoss(e.target.value)}
+                                                                disabled={isRunning || m1StrategyTemplate !== 'STANDARD'}
+                                                            >
+                                                                {[0,1,2,3,4,5,6,7,8,9].map(d => <option key={d} value={String(d)}>{d}</option>)}
+                                                            </select>
+                                                        </div>
                                                     </div>
                                                 </div>
+                                            )}
+
+                                            {BARRIER_NEEDED[m1TradeType] && !usesLossPrediction(m1TradeType) && (
+                                                <div className='auto-trades-config__field auto-trades-config__field--narrow'>
+                                                    <label>{m1TradeType === 'DIGITMATCH' || m1TradeType === 'DIGITDIFF' ? 'Prediction' : 'Digit'}</label>
+                                                    <select
+                                                        className='auto-trades-config__select'
+                                                        value={m1Barrier}
+                                                        onChange={e => setM1Barrier(e.target.value)}
+                                                        disabled={isRunning || m1StrategyTemplate !== 'STANDARD'}
+                                                    >
+                                                        {[0,1,2,3,4,5,6,7,8,9].map(d => <option key={d} value={String(d)}>{d}</option>)}
+                                                    </select>
+                                                </div>
+                                            )}
+
+                                            <div className='auto-trades-config__field auto-trades-config__field--analysis'>
+                                                <label>Analysis ticks</label>
+                                                <select
+                                                    className='auto-trades-config__select'
+                                                    value={m1AnalysisTicks}
+                                                    onChange={e => setM1AnalysisTicks(e.target.value)}
+                                                    disabled={isRunning || m1StrategyTemplate !== 'STANDARD'}
+                                                >
+                                                    {[1,2,3,4,5,6,7,8,9,10].map(d => <option key={d} value={String(d)}>{d}</option>)}
+                                                </select>
                                             </div>
-                                            
-                                            {(lDigitStrategy.patternType === 'over_to_under' || lDigitStrategy.patternType === 'under_to_over') && (
-                                                <div className='auto-trades-l-digit-section__field'>
-                                                    <label className='auto-trades-l-digit-section__label'>Threshold Digit</label>
-                                                    <select
-                                                        className='auto-trades-config__select'
-                                                        value={lDigitStrategy.thresholdDigit}
-                                                        onChange={e => setLDigitStrategy(prev => ({
-                                                            ...prev,
-                                                            thresholdDigit: parseInt(e.target.value)
-                                                        }))}
-                                                        disabled={isRunning}
-                                                    >
-                                                        {[0,1,2,3,4,5,6,7,8,9].map(d => (
-                                                            <option key={d} value={d}>{d}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            )}
-                                            
-                                            {(lDigitStrategy.patternType === 'match_to_diff' || lDigitStrategy.patternType === 'diff_to_match') && (
-                                                <div className='auto-trades-l-digit-section__field'>
-                                                    <label className='auto-trades-l-digit-section__label'>Barrier Digit</label>
-                                                    <select
-                                                        className='auto-trades-config__select'
-                                                        value={lDigitStrategy.barrierDigit}
-                                                        onChange={e => setLDigitStrategy(prev => ({
-                                                            ...prev,
-                                                            barrierDigit: parseInt(e.target.value)
-                                                        }))}
-                                                        disabled={isRunning}
-                                                    >
-                                                        {[0,1,2,3,4,5,6,7,8,9].map(d => (
-                                                            <option key={d} value={d}>{d}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            )}
-                                            
-                                            <p className='auto-trades-l-digit-section__hint'>
-                                                📌 <strong>Market 1</strong> = your configured strategy (trades normally)<br />
-                                                📌 <strong>Market 2</strong> = L→Digit Recovery (activates AFTER a loss)<br />
-                                                ⏳ After loss: Market 1 BLOCKED, Market 2 waits for pattern<br />
-                                                🎯 Pattern matched: Market 2 trades with opposite contract type<br />
-                                                ✅ Win on Market 2: Returns to Market 1
-                                            </p>
+                                        </div>
+
+                                        <div className='auto-trades-config__field' style={{ marginTop: '0.8rem' }}>
+                                            <label>Streak</label>
+                                            <div className='auto-trades-config__streak-row'>
+                                                <input
+                                                    className='auto-trades-config__streak-slider'
+                                                    type='range'
+                                                    min='1'
+                                                    max='10'
+                                                    step='1'
+                                                    value={m1Streak}
+                                                    onChange={e => setM1Streak(e.target.value)}
+                                                    disabled={isRunning || m1StrategyTemplate !== 'STANDARD'}
+                                                />
+                                                <span className='auto-trades-config__streak-value'>{m1Streak}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className='auto-trades-config__group'>
+                                        <div className='auto-trades-strategy-selector'>
+                                            <label>Strategy Mode</label>
+                                            <select
+                                                className='auto-trades-strategy-selector__select'
+                                                value={m1StrategyMode}
+                                                onChange={e => setM1StrategyMode(e.target.value as StrategyMode)}
+                                                disabled={isRunning || m1StrategyTemplate !== 'STANDARD'}
+                                            >
+                                                <option value='STANDARD'>Standard</option>
+                                                <option value='INVERSE'>Inverse</option>
+                                                <option value='PERCENTAGE'>Percentage Mode</option>
+                                            </select>
+                                        </div>
+                                        <p className='auto-trades-inverse__hint'>
+                                            {m1StrategyMode === 'PERCENTAGE' ? 'Uses rolling percentage window for signals' :
+                                             m1StrategyMode === 'INVERSE' ? 'Detects opposite signals' :
+                                             'Detects standard signals'}
+                                        </p>
+                                    </div>
+
+                                    {m1StrategyMode !== 'PERCENTAGE' && m1StrategyTemplate === 'STANDARD' && (
+                                        <div className='auto-trades-config__group'>
+                                            <button
+                                                type='button'
+                                                className={classNames('auto-trades-strategy-btn', m1InverseMode && 'auto-trades-strategy-btn--active')}
+                                                onClick={() => setM1InverseMode(prev => !prev)}
+                                                disabled={isRunning || m1StrategyTemplate !== 'STANDARD'}
+                                            >
+                                                <span className='auto-trades-strategy-btn__badge'>{m1InverseMode ? 'Inverse' : 'Direct'}</span>
+                                                <span className='auto-trades-strategy-btn__label'>Signal Mode</span>
+                                                <span className='auto-trades-strategy-btn__switch'>
+                                                    <span className='auto-trades-inverse__toggle-knob' />
+                                                </span>
+                                            </button>
                                         </div>
                                     )}
-                                </div>
 
-                                <div className='auto-trades-controls'>
-                                    {!isRunning ? (
-                                        <button
-                                            className='auto-trades-controls__run'
-                                            onClick={handleRun}
-                                            disabled={!client.is_logged_in || selectedMarketSymbols.length === 0}
-                                        >
-                                            ▶ Start Trading
-                                        </button>
-                                    ) : (
-                                        <button className='auto-trades-controls__stop' onClick={handleStop}>
-                                            ■ Stop Trading
-                                        </button>
-                                    )}
+                                    <div className='auto-trades-config__group'>
+                                        <div className='auto-trades-config__field'>
+                                            <label>Stake ({currency || 'USD'})</label>
+                                            <Input type='number' min='0.35' step='0.01' value={m1Stake} onChange={e => setM1Stake(e.target.value)} disabled={isRunning} />
+                                        </div>
+                                        <div className='auto-trades-config__field'>
+                                            <label>Martingale ×</label>
+                                            <Input type='number' min='1.01' step='0.5' value={m1Martingale} onChange={e => setM1Martingale(e.target.value)} disabled={isRunning} />
+                                        </div>
+                                        <div className='auto-trades-config__field'>
+                                            <label>Take Profit ({currency || 'USD'})</label>
+                                            <Input type='number' min='0' step='1' value={m1TakeProfit} onChange={e => setM1TakeProfit(e.target.value)} disabled={isRunning} />
+                                        </div>
+                                        <div className='auto-trades-config__field'>
+                                            <label>Stop Loss ({currency || 'USD'})</label>
+                                            <Input type='number' min='0' step='1' value={m1StopLoss} onChange={e => setM1StopLoss(e.target.value)} disabled={isRunning} />
+                                        </div>
+                                    </div>
+
+                                    <div className='auto-trades-config__group'>
+                                        <div className='auto-trades-martingale-selector'>
+                                            <label>Martingale Strategy</label>
+                                            <select
+                                                className='auto-trades-martingale-selector__select'
+                                                value={m1MartingaleMode}
+                                                onChange={e => setM1MartingaleMode(normalizeMartingaleMode(e.target.value))}
+                                                disabled={isRunning}
+                                            >
+                                                <option value='no_martingale'>No Martingale</option>
+                                                <option value='after_one_loss'>After 1 loss</option>
+                                                <option value='after_two_losses'>After 2 losses</option>
+                                                <option value='custom_consecutive_loss_trigger'>Custom loss count</option>
+                                            </select>
+                                        </div>
+                                        {m1MartingaleMode === 'custom_consecutive_loss_trigger' && (
+                                            <div className='auto-trades-config__field' style={{ marginTop: '0.5rem' }}>
+                                                <label>Consecutive losses before martingale</label>
+                                                <Input
+                                                    type='number'
+                                                    min='1'
+                                                    max='10'
+                                                    step='1'
+                                                    value={m1ConsecutiveLossCountInput}
+                                                    onChange={e => {
+                                                        const val = e.target.value.replace(/[^\d]/g, '').slice(0, 2);
+                                                        setM1ConsecutiveLossCountInput(val);
+                                                    }}
+                                                    onBlur={() => setM1ConsecutiveLossCount(clampConsecutiveLossThreshold(m1ConsecutiveLossCountInput || 2))}
+                                                    disabled={isRunning}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
+                            </div>
+
+                            {/* Market 2 Config */}
+                            <div className='auto-trades-card auto-trades-card--m2'>
+                                <h2 className='auto-trades-card__title'>
+                                    📊 Market 2
+                                    <button
+                                        className={classNames('auto-trades-toggle', m2Enabled && 'auto-trades-toggle--active')}
+                                        onClick={() => setM2Enabled(prev => !prev)}
+                                        disabled={isRunning}
+                                    >
+                                        {m2Enabled ? 'ON' : 'OFF'}
+                                    </button>
+                                </h2>
+                                {m2Enabled && (
+                                    <div className='auto-trades-config'>
+                                        <div className='auto-trades-config__group'>
+                                            <p className='auto-trades-config__group-label'>Contract Type</p>
+                                            <div className='auto-trades-config__trade-row'>
+                                                <div className='auto-trades-config__field auto-trades-config__field--type'>
+                                                    <label>Type</label>
+                                                    <select
+                                                        className='auto-trades-config__select'
+                                                        value={m2TradeType}
+                                                        onChange={e => setM2TradeType(e.target.value as TradeType)}
+                                                        disabled={isRunning}
+                                                    >
+                                                        <optgroup label='Digits'>
+                                                            <option value='DIGITOVER'>Digit Over</option>
+                                                            <option value='DIGITUNDER'>Digit Under</option>
+                                                            <option value='DIGITEVEN'>Digit Even</option>
+                                                            <option value='DIGITODD'>Digit Odd</option>
+                                                            <option value='DIGITMATCH'>Matches</option>
+                                                            <option value='DIGITDIFF'>Differs</option>
+                                                        </optgroup>
+                                                        <optgroup label='Direction'>
+                                                            <option value='CALL'>Rise</option>
+                                                            <option value='PUT'>Fall</option>
+                                                            <option value='RUNHIGH'>Only Ups</option>
+                                                            <option value='RUNLOW'>Only Downs</option>
+                                                        </optgroup>
+                                                    </select>
+                                                </div>
+
+                                                {usesLossPrediction(m2TradeType) && (
+                                                    <div className='auto-trades-config__prediction-pair'>
+                                                        <div className='auto-trades-config__prediction-label'>
+                                                            Prediction
+                                                            <span className='auto-trades-config__prediction-hint'>W→digit / L→digit</span>
+                                                        </div>
+                                                        <div className='auto-trades-config__prediction-controls'>
+                                                            <div className='auto-trades-config__prediction-item'>
+                                                                <span className='auto-trades-config__prediction-tag auto-trades-config__prediction-tag--win'>W</span>
+                                                                <select
+                                                                    className='auto-trades-config__select auto-trades-config__select--compact'
+                                                                    value={m2PredictionBeforeLoss}
+                                                                    onChange={e => setM2PredictionBeforeLoss(e.target.value)}
+                                                                    disabled={isRunning}
+                                                                >
+                                                                    {[0,1,2,3,4,5,6,7,8,9].map(d => <option key={d} value={String(d)}>{d}</option>)}
+                                                                </select>
+                                                            </div>
+                                                            <span className='auto-trades-config__prediction-divider'>|</span>
+                                                            <div className='auto-trades-config__prediction-item'>
+                                                                <span className='auto-trades-config__prediction-tag auto-trades-config__prediction-tag--loss'>L</span>
+                                                                <select
+                                                                    className='auto-trades-config__select auto-trades-config__select--compact'
+                                                                    value={m2PredictionAfterLoss}
+                                                                    onChange={e => setM2PredictionAfterLoss(e.target.value)}
+                                                                    disabled={isRunning}
+                                                                >
+                                                                    {[0,1,2,3,4,5,6,7,8,9].map(d => <option key={d} value={String(d)}>{d}</option>)}
+                                                                </select>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                )}
+
+                                                {BARRIER_NEEDED[m2TradeType] && !usesLossPrediction(m2TradeType) && (
+                                                    <div className='auto-trades-config__field auto-trades-config__field--narrow'>
+                                                        <label>{m2TradeType === 'DIGITMATCH' || m2TradeType === 'DIGITDIFF' ? 'Prediction' : 'Digit'}</label>
+                                                        <select
+                                                            className='auto-trades-config__select'
+                                                            value={m2Barrier}
+                                                            onChange={e => setM2Barrier(e.target.value)}
+                                                            disabled={isRunning}
+                                                        >
+                                                            {[0,1,2,3,4,5,6,7,8,9].map(d => <option key={d} value={String(d)}>{d}</option>)}
+                                                        </select>
+                                                    </div>
+                                                )}
+
+                                                <div className='auto-trades-config__field auto-trades-config__field--analysis'>
+                                                    <label>Analysis ticks</label>
+                                                    <select
+                                                        className='auto-trades-config__select'
+                                                        value={m2AnalysisTicks}
+                                                        onChange={e => setM2AnalysisTicks(e.target.value)}
+                                                        disabled={isRunning}
+                                                    >
+                                                        {[1,2,3,4,5,6,7,8,9,10].map(d => <option key={d} value={String(d)}>{d}</option>)}
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div className='auto-trades-config__field' style={{ marginTop: '0.8rem' }}>
+                                                <label>Streak</label>
+                                                <div className='auto-trades-config__streak-row'>
+                                                    <input
+                                                        className='auto-trades-config__streak-slider'
+                                                        type='range'
+                                                        min='1'
+                                                        max='10'
+                                                        step='1'
+                                                        value={m2Streak}
+                                                        onChange={e => setM2Streak(e.target.value)}
+                                                        disabled={isRunning}
+                                                    />
+                                                    <span className='auto-trades-config__streak-value'>{m2Streak}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className='auto-trades-config__group'>
+                                            <div className='auto-trades-strategy-selector'>
+                                                <label>Strategy Mode</label>
+                                                <select
+                                                    className='auto-trades-strategy-selector__select'
+                                                    value={m2StrategyMode}
+                                                    onChange={e => setM2StrategyMode(e.target.value as StrategyMode)}
+                                                    disabled={isRunning}
+                                                >
+                                                    <option value='STANDARD'>Standard</option>
+                                                    <option value='INVERSE'>Inverse</option>
+                                                    <option value='PERCENTAGE'>Percentage Mode</option>
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        {m2StrategyMode !== 'PERCENTAGE' && (
+                                            <div className='auto-trades-config__group'>
+                                                <button
+                                                    type='button'
+                                                    className={classNames('auto-trades-strategy-btn', m2InverseMode && 'auto-trades-strategy-btn--active')}
+                                                    onClick={() => setM2InverseMode(prev => !prev)}
+                                                    disabled={isRunning}
+                                                >
+                                                    <span className='auto-trades-strategy-btn__badge'>{m2InverseMode ? 'Inverse' : 'Direct'}</span>
+                                                    <span className='auto-trades-strategy-btn__label'>Signal Mode</span>
+                                                    <span className='auto-trades-strategy-btn__switch'>
+                                                        <span className='auto-trades-inverse__toggle-knob' />
+                                                    </span>
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        <div className='auto-trades-config__group'>
+                                            <div className='auto-trades-config__field'>
+                                                <label>Stake ({currency || 'USD'})</label>
+                                                <Input type='number' min='0.35' step='0.01' value={m2Stake} onChange={e => setM2Stake(e.target.value)} disabled={isRunning} />
+                                            </div>
+                                            <div className='auto-trades-config__field'>
+                                                <label>Martingale ×</label>
+                                                <Input type='number' min='1.01' step='0.5' value={m2Martingale} onChange={e => setM2Martingale(e.target.value)} disabled={isRunning} />
+                                            </div>
+                                            <div className='auto-trades-config__field'>
+                                                <label>Take Profit ({currency || 'USD'})</label>
+                                                <Input type='number' min='0' step='1' value={m2TakeProfit} onChange={e => setM2TakeProfit(e.target.value)} disabled={isRunning} />
+                                            </div>
+                                            <div className='auto-trades-config__field'>
+                                                <label>Stop Loss ({currency || 'USD'})</label>
+                                                <Input type='number' min='0' step='1' value={m2StopLoss} onChange={e => setM2StopLoss(e.target.value)} disabled={isRunning} />
+                                            </div>
+                                        </div>
+
+                                        <div className='auto-trades-config__group'>
+                                            <div className='auto-trades-martingale-selector'>
+                                                <label>Martingale Strategy</label>
+                                                <select
+                                                    className='auto-trades-martingale-selector__select'
+                                                    value={m2MartingaleMode}
+                                                    onChange={e => setM2MartingaleMode(normalizeMartingaleMode(e.target.value))}
+                                                    disabled={isRunning}
+                                                >
+                                                    <option value='no_martingale'>No Martingale</option>
+                                                    <option value='after_one_loss'>After 1 loss</option>
+                                                    <option value='after_two_losses'>After 2 losses</option>
+                                                    <option value='custom_consecutive_loss_trigger'>Custom loss count</option>
+                                                </select>
+                                            </div>
+                                            {m2MartingaleMode === 'custom_consecutive_loss_trigger' && (
+                                                <div className='auto-trades-config__field' style={{ marginTop: '0.5rem' }}>
+                                                    <label>Consecutive losses before martingale</label>
+                                                    <Input
+                                                        type='number'
+                                                        min='1'
+                                                        max='10'
+                                                        step='1'
+                                                        value={m2ConsecutiveLossCountInput}
+                                                        onChange={e => {
+                                                            const val = e.target.value.replace(/[^\d]/g, '').slice(0, 2);
+                                                            setM2ConsecutiveLossCountInput(val);
+                                                        }}
+                                                        onBlur={() => setM2ConsecutiveLossCount(clampConsecutiveLossThreshold(m2ConsecutiveLossCountInput || 2))}
+                                                        disabled={isRunning}
+                                                    />
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                                {!m2Enabled && (
+                                    <p className='auto-trades-inverse__hint' style={{ marginTop: '1rem' }}>
+                                        Toggle ON to configure Market 2. M2 can be used as a fallback in Recovery Mode or as a standalone strategy.
+                                    </p>
+                                )}
+                            </div>
+
+                            {/* Controls */}
+                            <div className='auto-trades-controls'>
+                                {!isRunning ? (
+                                    <button className='auto-trades-controls__run' onClick={handleRun} disabled={!client.is_logged_in || selectedMarketSymbols.length === 0}>
+                                        ▶ Start Trading
+                                    </button>
+                                ) : (
+                                    <button className='auto-trades-controls__stop' onClick={handleStop}>■ Stop Trading</button>
+                                )}
                             </div>
                         </div>
 
@@ -3354,73 +3031,45 @@ const AutoTrades = observer(() => {
                         <div className='auto-trades-markets'>
                             <h2 className='auto-trades-markets__title'>
                                 Live Markets
-                                <span className='auto-trades-markets__selected-count'>
-                                    {selectedMarketSymbols.length}/{AUTO_MARKETS.length} selected
-                                </span>
+                                <span className='auto-trades-markets__selected-count'>{selectedMarketSymbols.length}/{AUTO_MARKETS.length} selected</span>
                                 {isConnected && <span className='auto-trades-markets__live-badge'>● LIVE</span>}
-                                {hasRecoveryWaiting && isRunning && (
-                                    <span className='auto-trades-markets__waiting-badge'>
-                                        ⏳ M2 WAITING
-                                    </span>
-                                )}
-                                {hasRecoveryActive && isRunning && (
-                                    <span className='auto-trades-markets__waiting-badge' style={{ background: 'rgba(255,60,60,0.15)', color: '#ff3c3c' }}>
-                                        🔴 M2 ACTIVE
-                                    </span>
-                                )}
-                                {lDigitStrategy.enabled && !hasRecoveryWaiting && !hasRecoveryActive && (
-                                    <span className={classNames('auto-trades-markets__l-digit-badge')}>
-                                        🔄 M2 Ready
+                                {isRunning && (
+                                    <span className='auto-trades-markets__mode-badge'>
+                                        {isM2Only ? '📊 M2 Only' : isRecoveryMode ? '🔄 Recovery' : '📈 M1'}
                                     </span>
                                 )}
                             </h2>
                             {!isRunning && (
                                 <div className='auto-trades-markets__actions'>
-                                    <button type='button' onClick={handleSelectAllMarkets}>
-                                        Select all
-                                    </button>
-                                    <button type='button' onClick={handleClearMarkets}>
-                                        Clear
-                                    </button>
+                                    <button type='button' onClick={() => setSelectedMarketSymbols(AUTO_MARKET_SYMBOLS)}>Select all</button>
+                                    <button type='button' onClick={() => setSelectedMarketSymbols([])}>Clear</button>
                                 </div>
                             )}
                             {selectedMarketSymbols.length === 0 && (
                                 <div className='auto-trades-hint'>
-                                    {usingSpecialStrategy
-                                        ? 'Background scanning is live across all supported volatility markets. Load one alert market to enable Start Trading.'
-                                        : 'Select at least one market to show live quotes and enable Auto Trades.'}
+                                    Select at least one market to show live quotes and enable Auto Trades.
                                 </div>
                             )}
                             <div className='auto-trades-markets__grid'>
                                 {marketDisplays.map(m => {
+                                    const status = getMarketStatus(m, m.symbol);
                                     const isMarketLoading = m.lastQuote === null;
                                     const isMarketRecovering = m.isRecovering && m.lastQuote !== null;
-                                    const dots = Math.min(m.consecutive, streakNum);
-                                    const candleReady =
-                                        !isCandleConfirmedTradeType(tradeType) ||
-                                        (inverseModeRef.current
-                                            ? isInverseCandleMatch(tradeType, m.candleDirection)
-                                            : isCandleMatch(tradeType, m.candleDirection));
+                                    const isM2Active = status.isMarket2 && status.isReady;
+                                    const isRecoveryActive = status.isRecovery && status.isReady;
 
-                                    const isWaiting = lDigitStrategyRef.current.enabled && m.lDigitWaitingForPattern;
-                                    const isM2Active = lDigitStrategyRef.current.enabled && m.lDigitPatternMatched;
-                                    const isReady = !isWaiting && !isM2Active &&
-                                        (((usingSpecialStrategy ? m.specialEntryReady : m.consecutive >= streakNum) &&
-                                            candleReady) ||
-                                            m.trading);
-                                    
                                     return (
                                         <div
                                             key={m.symbol}
                                             className={classNames('auto-trades-market', {
-                                                'auto-trades-market--ready': isReady && !m.trading && isRunning,
+                                                'auto-trades-market--ready': status.isReady && !m.trading && isRunning,
                                                 'auto-trades-market--trading': m.trading,
                                                 'auto-trades-market--win': m.lastResult === 'win' && !m.trading,
                                                 'auto-trades-market--loss': m.lastResult === 'loss' && !m.trading,
                                                 'auto-trades-market--loading': isMarketLoading,
                                                 'auto-trades-market--recovering': isMarketRecovering,
-                                                'auto-trades-market--l-digit-active': isM2Active,
-                                                'auto-trades-market--l-digit-waiting': isWaiting,
+                                                'auto-trades-market--m2-active': isM2Active || isRecoveryActive,
+                                                'auto-trades-market--recovery-active': isRecoveryActive,
                                             })}
                                         >
                                             {isMarketLoading && (
@@ -3433,215 +3082,118 @@ const AutoTrades = observer(() => {
                                                 <div>
                                                     <p className='auto-trades-market__name'>{m.label}</p>
                                                     <p className='auto-trades-market__symbol'>{m.symbol}</p>
+                                                    <p className='auto-trades-market__mode-label'>
+                                                        {getMarketSubtitle(m.symbol)}
+                                                    </p>
                                                 </div>
                                                 <div className='auto-trades-market__controls'>
                                                     {!isRunning && (
                                                         <button
                                                             className='auto-trades-market__btn auto-trades-market__btn--remove'
-                                                            onClick={() => handleRemoveMarket(m.symbol)}
+                                                            onClick={() => setSelectedMarketSymbols(current => current.filter(item => item !== m.symbol))}
                                                             title='Remove from Auto Trades'
                                                             type='button'
                                                         >
                                                             −
                                                         </button>
                                                     )}
-                                                    {isWaiting && isRunning ? (
-                                                        <div className='auto-trades-market__badge auto-trades-market__badge--waiting'>
-                                                            ⏳M2 WAIT
-                                                        </div>
-                                                    ) : isM2Active && isRunning ? (
-                                                        <div className='auto-trades-market__badge auto-trades-market__badge--l-digit'>
-                                                            🔴M2
-                                                        </div>
-                                                    ) : (
-                                                        <div
-                                                            className={classNames('auto-trades-market__badge', {
-                                                                'auto-trades-market__badge--ready':
-                                                                    isReady && isRunning,
-                                                                'auto-trades-market__badge--trading': m.trading,
-                                                            })}
-                                                        >
-                                                            {m.trading
-                                                                ? 'BUYING'
-                                                                : isReady && isRunning
-                                                                    ? 'READY'
-                                                                    : m.consecutive > 0
-                                                                      ? `${m.consecutive}`
-                                                                      : '—'}
-                                                        </div>
-                                                    )}
+                                                    <div
+                                                        className={classNames('auto-trades-market__badge', {
+                                                            'auto-trades-market__badge--ready': status.isReady && isRunning && !m.trading,
+                                                            'auto-trades-market__badge--trading': m.trading,
+                                                            'auto-trades-market__badge--m2': status.isMarket2,
+                                                            'auto-trades-market__badge--recovery': status.isRecovery,
+                                                        })}
+                                                    >
+                                                        {m.trading ? 'BUYING' : status.isReady && isRunning ? 'READY' : status.label}
+                                                    </div>
                                                 </div>
                                             </div>
 
-                                            {/* Live quote */}
                                             {m.lastQuote !== null && (
                                                 <div className='auto-trades-market__quote'>
-                                                    {m.lastQuote.toFixed(
-                                                        getMarketPipSize(
-                                                            m.symbol,
-                                                            AUTO_MARKET_LOOKUP.get(m.symbol)?.pip ?? 2
-                                                        )
-                                                    )}
+                                                    {m.lastQuote.toFixed(getMarketPipSize(m.symbol, AUTO_MARKET_LOOKUP.get(m.symbol)?.pip ?? 2))}
                                                 </div>
                                             )}
 
-                                            {/* Market 2 Waiting Status */}
-                                            {isWaiting && (
-                                                <div className='auto-trades-market__waiting-status'>
-                                                    ⏳ Market 2 Waiting: {lDigitStrategy.patternType}
+                                            {isRecoveryActive && (
+                                                <div className='auto-trades-market__recovery-status'>
+                                                    🔄 RECOVERY ACTIVE
                                                     <br />
-                                                    <small>
-                                                        [{m.lastDigits.slice(-lDigitStrategy.lookbackTicks).join(', ')}]
-                                                        {m.lastDigits.length >= lDigitStrategy.lookbackTicks && 
-                                                            ` → ${evaluateLDigitCondition(lDigitStrategy, m.lastDigits, m.directionHistory, activeBarrier) ? '✅ MATCHED!' : '❌ Not yet'}`
-                                                        }
-                                                    </small>
+                                                    <small>Market 2 active until win</small>
                                                 </div>
                                             )}
 
-                                            {/* Market 2 Active Status */}
-                                            {isM2Active && (
-                                                <div className='auto-trades-market__waiting-status' style={{ color: '#ff3c3c' }}>
-                                                    🔴 Market 2 Active: {tradeTypeRef.current}
-                                                    <br />
-                                                    <small>streak {m.consecutive}/{streakNum}</small>
-                                                </div>
-                                            )}
-
-                                            {usingSpecialStrategy && (
-                                                <div className='auto-trades-market__confidence'>
-                                                    {m.alertActive
-                                                        ? `${m.alertMessage} Trigger streak ${m.trailingTriggerCount}/3.`
-                                                        : m.alertMessage || 'Waiting for percentage alert.'}
-                                                </div>
-                                            )}
-
-                                            {isCandleConfirmedTradeType(tradeType) && (
-                                                <div
-                                                    className={classNames('auto-trades-market__candle', {
-                                                        'auto-trades-market__candle--bullish': m.candleDirection === 1,
-                                                        'auto-trades-market__candle--bearish': m.candleDirection === -1,
-                                                        'auto-trades-market__candle--waiting': m.candleDirection === 0,
-                                                    })}
-                                                >
+                                            {isCandleConfirmedTradeType(getActiveTradeType(m.symbol)) && (
+                                                <div className={classNames('auto-trades-market__candle', {
+                                                    'auto-trades-market__candle--bullish': m.candleDirection === 1,
+                                                    'auto-trades-market__candle--bearish': m.candleDirection === -1,
+                                                    'auto-trades-market__candle--waiting': m.candleDirection === 0,
+                                                })}>
                                                     5m candle: {getCandleDirectionLabel(m.candleDirection)}
                                                 </div>
                                             )}
 
-                                            {/* Progress indicators */}
-                                            {isRunning && !isWaiting && !isM2Active && (
+                                            {isRunning && (
                                                 <div className='auto-trades-market__dots'>
-                                                    {Array.from({ length: streakNum }).map((_, i) => (
+                                                    {Array.from({ length: status.target }).map((_, i) => (
                                                         <div
                                                             key={i}
                                                             className={classNames('auto-trades-market__dot', {
-                                                                'auto-trades-market__dot--filled': i < dots,
-                                                                'auto-trades-market__dot--ready': i < dots && isReady,
+                                                                'auto-trades-market__dot--filled': i < status.streak,
+                                                                'auto-trades-market__dot--ready': i < status.streak && status.isReady,
+                                                                'auto-trades-market__dot--m2': status.isMarket2 && i < status.streak,
+                                                                'auto-trades-market__dot--recovery': status.isRecovery && i < status.streak,
                                                             })}
                                                         />
                                                     ))}
                                                     <span className='auto-trades-market__dots-label'>
-                                                        {m.consecutive}/{streakNum}
+                                                        {status.isMarket2 ? 'M2' : status.isRecovery ? '🔄' : 'M1'} {status.streak}/{status.target}
                                                     </span>
                                                 </div>
                                             )}
 
-                                            {/* Progress indicators for Market 2 */}
-                                            {isRunning && isM2Active && (
-                                                <div className='auto-trades-market__dots'>
-                                                    {Array.from({ length: streakNum }).map((_, i) => (
-                                                        <div
-                                                            key={i}
-                                                            className={classNames('auto-trades-market__dot', {
-                                                                'auto-trades-market__dot--filled': i < dots,
-                                                                'auto-trades-market__dot--ready': i < dots && isReady,
-                                                            })}
-                                                            style={{ background: i < dots ? '#ff9800' : undefined }}
-                                                        />
-                                                    ))}
-                                                    <span className='auto-trades-market__dots-label' style={{ color: '#ff9800' }}>
-                                                        M2 {m.consecutive}/{streakNum}
-                                                    </span>
-                                                </div>
-                                            )}
-
-                                            {/* Digit history (digit modes) */}
-                                            {!isDirection && m.lastDigits.length > 0 && (
+                                            {!IS_DIRECTION_TYPE[getActiveTradeType(m.symbol)] && m.lastDigits.length > 0 && (
                                                 <div className='auto-trades-market__digits'>
                                                     {m.lastDigits.slice(-5).map((d, idx) => (
-                                                        <span
-                                                            key={idx}
-                                                            className={classNames('auto-trades-market__digit', {
-                                                                'auto-trades-market__digit--low': d <= 4,
-                                                                'auto-trades-market__digit--high': d > 4,
-                                                            })}
-                                                        >
+                                                        <span key={idx} className={classNames('auto-trades-market__digit', {
+                                                            'auto-trades-market__digit--low': d <= 4,
+                                                            'auto-trades-market__digit--high': d > 4,
+                                                        })}>
                                                             {d}
                                                         </span>
                                                     ))}
                                                 </div>
                                             )}
 
-                                            {/* Direction history (Rise/Fall modes) */}
-                                            {isDirection && m.directionHistory.length > 0 && (
+                                            {IS_DIRECTION_TYPE[getActiveTradeType(m.symbol)] && m.directionHistory.length > 0 && (
                                                 <div className='auto-trades-market__digits'>
                                                     {m.directionHistory.slice(-5).map((dir, idx) => (
-                                                        <span
-                                                            key={idx}
-                                                            className={classNames('auto-trades-market__digit', {
-                                                                'auto-trades-market__digit--low': dir === 1,
-                                                                'auto-trades-market__digit--high': dir === -1,
-                                                            })}
-                                                        >
+                                                        <span key={idx} className={classNames('auto-trades-market__digit', {
+                                                            'auto-trades-market__digit--low': dir === 1,
+                                                            'auto-trades-market__digit--high': dir === -1,
+                                                        })}>
                                                             {dir === 1 ? '▲' : dir === -1 ? '▼' : '—'}
                                                         </span>
                                                     ))}
                                                 </div>
                                             )}
 
-                                            {/* Percentage visualization */}
-                                            {strategyMode === 'PERCENTAGE' && (
+                                            {getActiveStrategyMode(m.symbol) === 'PERCENTAGE' && (
                                                 <div className='auto-trades-market__percentages'>
                                                     {(() => {
-                                                        const snapshot = getPercentageSnapshot(
-                                                            tradeType,
-                                                            m,
-                                                            getActiveDigitBarrier(
-                                                                tradeType,
-                                                                previousContractResult,
-                                                                consecutiveLossRef.current
-                                                            )
-                                                        );
-                                                        const threshold = getPercentageThreshold(
-                                                            tradeType,
-                                                            getActiveDigitBarrier(
-                                                                tradeType,
-                                                                previousContractResult,
-                                                                consecutiveLossRef.current
-                                                            )
-                                                        );
-                                                        const hasEnoughSamples =
-                                                            snapshot.sampleSize >= PERCENTAGE_MIN_SAMPLE_SIZE;
-                                                        const rollingWindowLabel =
-                                                            m.percentageBackfillInFlight && snapshot.sampleSize === 0
-                                                                ? 'Loading 1,000 tick window'
-                                                                : `Window ${Math.min(
-                                                                      snapshot.sampleSize,
-                                                                      PERCENTAGE_ANALYSIS_HISTORY_SIZE
-                                                                  )}/${PERCENTAGE_ANALYSIS_HISTORY_SIZE} ticks`;
+                                                        const { config } = getActiveConfig(m.symbol);
+                                                        const barrier = getActiveBarrier(m.symbol, m.lastResult, consecutiveLossRef.current);
+                                                        const snapshot = getPercentageSnapshot(config.tradeType, m, barrier);
+                                                        const threshold = getPercentageThreshold(config.tradeType, barrier);
+                                                        const hasEnoughSamples = snapshot.sampleSize >= PERCENTAGE_MIN_SAMPLE_SIZE;
 
                                                         return (
                                                             <>
                                                                 <div className='auto-trades-market__percentage-row'>
-                                                                    <span>
-                                                                        {snapshot.primaryLabel}:{' '}
-                                                                        {snapshot.primaryPercentage.toFixed(1)}%
-                                                                    </span>
+                                                                    <span>{snapshot.primaryLabel}: {snapshot.primaryPercentage.toFixed(1)}%</span>
                                                                     {snapshot.secondaryLabel && (
-                                                                        <span>
-                                                                            {snapshot.secondaryLabel}:{' '}
-                                                                            {snapshot.secondaryPercentage?.toFixed(1)}%
-                                                                        </span>
+                                                                        <span>{snapshot.secondaryLabel}: {snapshot.secondaryPercentage?.toFixed(1)}%</span>
                                                                     )}
                                                                 </div>
                                                                 <div className='auto-trades-market__confidence'>
@@ -3649,70 +3201,21 @@ const AutoTrades = observer(() => {
                                                                         ? `Signal needs ${threshold.minPercentage}% / confidence ${threshold.confidence}%`
                                                                         : `Collecting ${snapshot.sampleSize}/${PERCENTAGE_MIN_SAMPLE_SIZE} samples`}
                                                                     {' · '}
-                                                                    {rollingWindowLabel}
-                                                                    {' · '}
                                                                     Confidence: {snapshot.confidence.toFixed(0)}%
                                                                 </div>
                                                             </>
                                                         );
                                                     })()}
-
-                                                    {!isDirection && Object.keys(m.digitPercentages).length > 0 && (
-                                                        <div className='auto-trades-market__digit-bars'>
-                                                            {[...Array(10)].map((_, d) => {
-                                                                const pct = m.digitPercentages[d] || 0;
-                                                                const isHot = pct > 15;
-                                                                const isCold = pct < 5;
-                                                                return (
-                                                                    <div
-                                                                        key={d}
-                                                                        className='auto-trades-market__digit-bar-wrapper'
-                                                                    >
-                                                                        <span
-                                                                            className={classNames(
-                                                                                'auto-trades-market__digit-num',
-                                                                                {
-                                                                                    'auto-trades-market__digit-num--hot': isHot,
-                                                                                    'auto-trades-market__digit-num--cold': isCold,
-                                                                                }
-                                                                            )}
-                                                                        >
-                                                                            {d}
-                                                                        </span>
-                                                                        <div className='auto-trades-market__digit-bar-bg'>
-                                                                            <div
-                                                                                className={classNames(
-                                                                                    'auto-trades-market__digit-bar-fill',
-                                                                                    {
-                                                                                        'auto-trades-market__digit-bar-fill--hot': isHot,
-                                                                                        'auto-trades-market__digit-bar-fill--cold': isCold,
-                                                                                    }
-                                                                                )}
-                                                                                style={{ width: `${pct}%` }}
-                                                                            />
-                                                                        </div>
-                                                                        <span className='auto-trades-market__digit-pct'>
-                                                                            {pct.toFixed(0)}%
-                                                                        </span>
-                                                                    </div>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    )}
                                                 </div>
                                             )}
 
                                             {m.tradeCount > 0 && (
                                                 <div className='auto-trades-market__footer'>
-                                                    <span>
-                                                        {m.tradeCount} trade{m.tradeCount !== 1 ? 's' : ''}
-                                                    </span>
-                                                    <span
-                                                        className={classNames({
-                                                            'auto-trades-market__last-win': m.lastResult === 'win',
-                                                            'auto-trades-market__last-loss': m.lastResult === 'loss',
-                                                        })}
-                                                    >
+                                                    <span>{m.tradeCount} trade{m.tradeCount !== 1 ? 's' : ''}</span>
+                                                    <span className={classNames({
+                                                        'auto-trades-market__last-win': m.lastResult === 'win',
+                                                        'auto-trades-market__last-loss': m.lastResult === 'loss',
+                                                    })}>
                                                         {m.lastResult === 'win' ? '✓ Win' : '✗ Loss'}
                                                     </span>
                                                 </div>
@@ -3724,15 +3227,13 @@ const AutoTrades = observer(() => {
                             {!isRunning && availableMarkets.length > 0 && (
                                 <div className='auto-trades-markets__available'>
                                     <h3 className='auto-trades-markets__subtitle'>Available markets to add</h3>
-                                    <p className='auto-trades-markets__help'>
-                                        Removed markets stay here with a plus button until you add them back.
-                                    </p>
+                                    <p className='auto-trades-markets__help'>Removed markets stay here with a plus button until you add them back.</p>
                                     <div className='auto-trades-markets__grid auto-trades-markets__grid--available'>
                                         {availableMarkets.map(market => (
                                             <button
                                                 key={market.symbol}
                                                 className='auto-trades-market-add'
-                                                onClick={() => handleAddMarket(market.symbol)}
+                                                onClick={() => setSelectedMarketSymbols(current => [...current, market.symbol])}
                                                 type='button'
                                                 title={`Add ${market.label} to Auto Trades`}
                                             >
@@ -3756,8 +3257,8 @@ const AutoTrades = observer(() => {
                 <TPSLNotification
                     isOpen={showTPSLNotification}
                     onClose={() => setShowTPSLNotification(false)}
-                    takeProfit={Number(takeProfit)}
-                    stopLoss={Number(stopLoss)}
+                    takeProfit={Number(m1TakeProfit)}
+                    stopLoss={Number(m1StopLoss)}
                     currency={currency || 'USD'}
                     totalPnl={totalPnl}
                     totalTrades={totalTrades}
@@ -3767,9 +3268,7 @@ const AutoTrades = observer(() => {
             )}
 
             {/* Floating Risk Disclaimer */}
-            <button className='auto-trades-disclaimer-btn' onClick={() => setShowDisclaimer(true)}>
-                ⚠ Risk Disclaimer
-            </button>
+            <button className='auto-trades-disclaimer-btn' onClick={() => setShowDisclaimer(true)}>⚠ Risk Disclaimer</button>
 
             {showDisclaimer && (
                 <div className='auto-trades-disclaimer-overlay' onClick={() => setShowDisclaimer(false)}>
@@ -3777,38 +3276,18 @@ const AutoTrades = observer(() => {
                         <div className='auto-trades-disclaimer-modal__header'>
                             <span className='auto-trades-disclaimer-modal__icon'>⚠</span>
                             <h3 className='auto-trades-disclaimer-modal__title'>Risk Disclaimer</h3>
-                            <button
-                                className='auto-trades-disclaimer-modal__close'
-                                onClick={() => setShowDisclaimer(false)}
-                            >
-                                ✕
-                            </button>
+                            <button className='auto-trades-disclaimer-modal__close' onClick={() => setShowDisclaimer(false)}>✕</button>
                         </div>
                         <div className='auto-trades-disclaimer-modal__body'>
-                            <p>
-                                Deriv offers complex derivatives, such as options and contracts for difference
-                                (&ldquo;CFDs&rdquo;). These products may not be suitable for all clients, and trading
-                                them puts you at risk. Please make sure that you understand the following risks before
-                                trading Deriv products:
-                            </p>
+                            <p>Deriv offers complex derivatives, such as options and contracts for difference (&ldquo;CFDs&rdquo;). These products may not be suitable for all clients, and trading them puts you at risk. Please make sure that you understand the following risks before trading Deriv products:</p>
                             <ul>
                                 <li>You may lose some or all of the money you invest in the trade.</li>
-                                <li>
-                                    If your trade involves currency conversion, exchange rates will affect your profit
-                                    and loss.
-                                </li>
-                                <li>
-                                    You should never trade with borrowed money or with money you cannot afford to lose.
-                                </li>
+                                <li>If your trade involves currency conversion, exchange rates will affect your profit and loss.</li>
+                                <li>You should never trade with borrowed money or with money you cannot afford to lose.</li>
                             </ul>
                         </div>
                         <div className='auto-trades-disclaimer-modal__footer'>
-                            <button
-                                className='auto-trades-disclaimer-modal__ok'
-                                onClick={() => setShowDisclaimer(false)}
-                            >
-                                I Understand
-                            </button>
+                            <button className='auto-trades-disclaimer-modal__ok' onClick={() => setShowDisclaimer(false)}>I Understand</button>
                         </div>
                     </div>
                 </div>
