@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -53,36 +53,99 @@ import Scanner from '../scanner';
 import './main.scss';
 
 // ==================== LOADER COMPONENT ====================
+interface FloatingItem {
+    id: number;
+    x: number;
+    y: number;
+    size: number;
+    color: string;
+    speed: number;
+    rotation: number;
+    word: string;
+    delay: number;
+    opacity: number;
+}
+
 interface LoaderProps {
     progress?: number;
     message?: string;
     showProgress?: boolean;
-    totalDuration?: number; // Total duration in seconds
+    totalDuration?: number;
 }
+
+// 60 different trading-related words
+const TRADING_WORDS = [
+    'BUY', 'SELL', 'PROFIT', 'LOSS', 'TRADE', 'MARKET', 'STOCK', 'BOND', 
+    'FOREX', 'CRYPTO', 'BULL', 'BEAR', 'TREND', 'SPREAD', 'PIP', 'LEVERAGE',
+    'MARGIN', 'LIQUIDITY', 'VOLATILITY', 'DIVIDEND', 'BROKER', 'EXCHANGE',
+    'PORTFOLIO', 'ASSET', 'BALANCE', 'CANDLE', 'CHART', 'ORDER', 'BID', 'ASK',
+    'SWING', 'SCALP', 'HEDGE', 'ARBITRAGE', 'OPTIONS', 'FUTURES', 'COMMODITY',
+    'INDEX', 'ETF', 'IPO', 'BEARISH', 'BULLISH', 'CORRECTION', 'PULLBACK',
+    'BREAKOUT', 'RESISTANCE', 'SUPPORT', 'MOVING', 'RSI', 'MACD', 'FIBONACCI',
+    'MOMENTUM', 'VOLUME', 'OPEN', 'CLOSE', 'HIGH', 'LOW', 'RALLY', 'CRASH'
+];
+
+// 60 different colors for dollar icons
+const COLORS = [
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD',
+    '#FF8A5C', '#6C5CE7', '#A29BFE', '#FD79A8', '#00B894', '#00CEC9',
+    '#0984E3', '#6C5CE7', '#E17055', '#00B894', '#FDCB6E', '#E84393',
+    '#6AB04C', '#EB4D4B', '#F0932B', '#5B86E5', '#36D399', '#F472B6',
+    '#34D399', '#FBBF24', '#F87171', '#60A5FA', '#A78BFA', '#F472B6',
+    '#34D399', '#FBBF24', '#F87171', '#60A5FA', '#A78BFA', '#F472B6',
+    '#14B8A6', '#8B5CF6', '#EC4899', '#F59E0B', '#10B981', '#3B82F6',
+    '#EF4444', '#8B5CF6', '#06B6D4', '#F472B6', '#34D399', '#FBBF24',
+    '#6EE7B7', '#93C5FD', '#C4B5FD', '#FCA5A5', '#FDE68A', '#A7F3D0',
+    '#BFDBFE', '#DDD6FE', '#FECACA', '#FEF08A', '#6EE7B7', '#93C5FD'
+];
 
 const Loader: React.FC<LoaderProps> = ({ 
     progress: externalProgress, 
     message = 'Loading...', 
     showProgress = true,
-    totalDuration = 15 // Default 15 seconds
+    totalDuration = 9
 }) => {
     const [internalProgress, setInternalProgress] = useState(0);
     const [currentMessage, setCurrentMessage] = useState(message);
+    const [floatingItems, setFloatingItems] = useState<FloatingItem[]>([]);
+    const containerRef = useRef<HTMLDivElement>(null);
     const progress = externalProgress !== undefined ? externalProgress : internalProgress;
+
+    // Generate floating items on mount
+    useEffect(() => {
+        const items: FloatingItem[] = [];
+        for (let i = 0; i < 45; i++) {
+            items.push({
+                id: i,
+                x: Math.random() * 100,
+                y: Math.random() * 100,
+                size: Math.random() * 30 + 20,
+                color: COLORS[i % COLORS.length],
+                speed: Math.random() * 0.5 + 0.3,
+                rotation: Math.random() * 360,
+                word: TRADING_WORDS[i % TRADING_WORDS.length],
+                delay: Math.random() * 3,
+                opacity: Math.random() * 0.4 + 0.2
+            });
+        }
+        setFloatingItems(items);
+    }, []);
 
     // Progress messages based on percentage
     const getProgressMessage = (progressValue: number): string => {
-        if (progressValue < 10) return 'Initializing system...';
-        if (progressValue < 20) return 'Loading core modules...';
-        if (progressValue < 30) return 'Connecting to servers...';
-        if (progressValue < 40) return 'Loading RAMFX engine...';
-        if (progressValue < 50) return 'Configuring trading tools...';
-        if (progressValue < 60) return 'Loading bot strategies...';
-        if (progressValue < 70) return 'Setting up workspace...';
-        if (progressValue < 80) return 'Optimizing performance...';
-        if (progressValue < 90) return 'Finalizing configuration...';
-        if (progressValue < 100) return 'Almost ready...';
-        return 'Ready!';
+        if (progressValue < 8) return '🎯 Initializing Trading System...';
+        if (progressValue < 16) return '📊 Loading Market Data...';
+        if (progressValue < 24) return '🔗 Connecting to Exchanges...';
+        if (progressValue < 32) return '⚡ Powering Up Trading Engine...';
+        if (progressValue < 40) return '📈 Configuring Bot Strategies...';
+        if (progressValue < 48) return '🔄 Analyzing Market Trends...';
+        if (progressValue < 56) return '⚙️ Setting Up Algorithms...';
+        if (progressValue < 64) return '📊 Optimizing Performance...';
+        if (progressValue < 72) return '🧠 Loading AI Predictions...';
+        if (progressValue < 80) return '💹 Calibrating Risk Management...';
+        if (progressValue < 88) return '🚀 Finalizing Launch Sequence...';
+        if (progressValue < 96) return '⚡ Almost Ready to Trade...';
+        return '✅ Ready to Trade!';
     };
 
     useEffect(() => {
@@ -99,27 +162,53 @@ const Loader: React.FC<LoaderProps> = ({
                 
                 if (calculatedProgress >= 99) {
                     clearInterval(interval);
-                    // Set to 100% when complete
                     setTimeout(() => {
                         setInternalProgress(100);
-                        setCurrentMessage('Ready!');
+                        setCurrentMessage('✅ Ready to Trade! 🚀');
                     }, 100);
                 }
-            }, 50); // Update every 50ms for smooth animation
+            }, 50);
 
             return () => clearInterval(interval);
         }
     }, [externalProgress, totalDuration]);
 
     return (
-        <div className="loader-overlay">
+        <div className="loader-overlay" ref={containerRef}>
+            {/* Floating Background Elements */}
+            <div className="loader-background">
+                {floatingItems.map((item) => (
+                    <div
+                        key={item.id}
+                        className="floating-item"
+                        style={{
+                            left: `${item.x}%`,
+                            top: `${item.y}%`,
+                            fontSize: `${item.size}px`,
+                            color: item.color,
+                            opacity: item.opacity,
+                            animationDelay: `${item.delay}s`,
+                            animationDuration: `${15 / item.speed}s`,
+                            transform: `rotate(${item.rotation}deg)`,
+                            textShadow: `0 0 20px ${item.color}40`
+                        }}
+                    >
+                        <div className="floating-item-content">
+                            <span className="dollar-sign">$</span>
+                            <span className="trading-word">{item.word}</span>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Main Loader Content */}
             <div className="loader-container">
                 {/* RAMFX SVG Logo with Spinning Animation */}
                 <div className="loader-logo-wrapper">
                     <svg 
                         className="loader-logo-spin"
-                        width="140" 
-                        height="140" 
+                        width="160" 
+                        height="160" 
                         viewBox="0 0 200 200" 
                         fill="none" 
                         xmlns="http://www.w3.org/2000/svg"
@@ -131,7 +220,7 @@ const Loader: React.FC<LoaderProps> = ({
                             r="92" 
                             stroke="#00ff00" 
                             strokeWidth="1" 
-                            opacity="0.1"
+                            opacity="0.15"
                         />
                         
                         {/* Progress Ring */}
@@ -169,7 +258,7 @@ const Loader: React.FC<LoaderProps> = ({
                             fontFamily="'Courier New', monospace"
                             letterSpacing="4"
                             className="loader-logo-text"
-                            style={{ textShadow: '0 0 20px rgba(0, 255, 0, 0.3)' }}
+                            style={{ textShadow: '0 0 30px rgba(0, 255, 0, 0.4)' }}
                         >
                             RAM
                         </text>
@@ -183,7 +272,7 @@ const Loader: React.FC<LoaderProps> = ({
                             fontFamily="'Courier New', monospace"
                             letterSpacing="6"
                             className="loader-logo-text"
-                            style={{ textShadow: '0 0 20px rgba(0, 255, 88, 0.3)' }}
+                            style={{ textShadow: '0 0 30px rgba(0, 255, 88, 0.4)' }}
                         >
                             FX
                         </text>
@@ -271,7 +360,6 @@ const Loader: React.FC<LoaderProps> = ({
                             stroke="#00ff00" 
                             strokeWidth="2" 
                             opacity="0.6"
-                            className="loader-top-line"
                         >
                             <animate 
                                 attributeName="opacity" 
@@ -288,47 +376,12 @@ const Loader: React.FC<LoaderProps> = ({
                             stroke="#00ff00" 
                             strokeWidth="2" 
                             opacity="0.6"
-                            className="loader-bottom-line"
                         >
                             <animate 
                                 attributeName="opacity" 
                                 values="0.3;0.8;0.3" 
                                 dur="2s" 
                                 begin="1s" 
-                                repeatCount="indefinite"
-                            />
-                        </line>
-                        <line 
-                            x1="12" 
-                            y1="100" 
-                            x2="28" 
-                            y2="100" 
-                            stroke="#00ff00" 
-                            strokeWidth="2" 
-                            opacity="0.4"
-                        >
-                            <animate 
-                                attributeName="opacity" 
-                                values="0.2;0.6;0.2" 
-                                dur="2.5s" 
-                                begin="0.5s" 
-                                repeatCount="indefinite"
-                            />
-                        </line>
-                        <line 
-                            x1="172" 
-                            y1="100" 
-                            x2="188" 
-                            y2="100" 
-                            stroke="#00ff00" 
-                            strokeWidth="2" 
-                            opacity="0.4"
-                        >
-                            <animate 
-                                attributeName="opacity" 
-                                values="0.2;0.6;0.2" 
-                                dur="2.5s" 
-                                begin="1.5s" 
                                 repeatCount="indefinite"
                             />
                         </line>
@@ -340,23 +393,25 @@ const Loader: React.FC<LoaderProps> = ({
                 
                 {/* Progress Bar */}
                 {showProgress && (
-                    <div className="loader-progress-bar-wrapper">
-                        <div className="loader-progress-track">
-                            <div 
-                                className="loader-progress-fill"
-                                style={{ width: `${Math.min(progress, 100)}%` }}
-                            />
+                    <div className="loader-progress-wrapper">
+                        <div className="loader-progress-bar-wrapper">
+                            <div className="loader-progress-track">
+                                <div 
+                                    className="loader-progress-fill"
+                                    style={{ width: `${Math.min(progress, 100)}%` }}
+                                />
+                            </div>
+                            <span className="loader-progress-percentage">
+                                {Math.round(Math.min(progress, 100))}%
+                            </span>
                         </div>
-                        <span className="loader-progress-percentage">
-                            {Math.round(Math.min(progress, 100))}%
-                        </span>
                     </div>
                 )}
                 
                 {/* Time Remaining */}
                 <div className="loader-time-remaining">
                     <span className="loader-time-text">
-                        {progress < 100 ? `Loading... ${Math.round((100 - progress) / (100 / 15))}s remaining` : 'Ready!'}
+                        {progress < 100 ? `⏳ ${Math.ceil((100 - progress) / (100 / totalDuration))}s to launch` : '🚀 Launching...'}
                     </span>
                 </div>
             </div>
@@ -415,48 +470,13 @@ const SocialPopup: React.FC = () => {
                 </button>
                 <h3>CONNECT WITH US</h3>
                 <div className="social-links">
-                    <a 
-                        href="#"
-                        onClick={(e) => handleLinkClick(e, "https://wa.me/+254757261120")}
-                    >
-                        📱 WhatsApp
-                    </a>
-                    <a 
-                        href="#"
-                        onClick={(e) => handleLinkClick(e, "https://t.me/+YDUwvuuVDYg5NjE0")}
-                    >
-                        ✈️ Telegram
-                    </a>
-                    <a 
-                        href="#"
-                        onClick={(e) => handleLinkClick(e, "https://www.youtube.com/@ceoramz")}
-                    >
-                        ▶️ YouTube
-                    </a>
-                    <a 
-                        href="#"
-                        onClick={(e) => handleLinkClick(e, "https://tiktok.com/@ceoramz")}
-                    >
-                        🎵 TikTok
-                    </a>
-                    <a 
-                        href="#"
-                        onClick={(e) => handleLinkClick(e, "https://www.instagram.com/ramztrader.site?igsh=aDY1aGFiMGpobHJi")}
-                    >
-                        📷 Instagram
-                    </a>
-                    <a 
-                        href="#"
-                        onClick={(e) => handleLinkClick(e, "https://www.facebook.com/profile.php?id=61573399294689")}
-                    >
-                        💬 Discord
-                    </a>
-                    <a 
-                        href="#"
-                        onClick={(e) => handleLinkClick(e, "https://www.instagram.com/ramztrader.site?igsh=aDY1aGFiMGpobHJi")}
-                    >
-                        🐦 Twitter
-                    </a>
+                    <a href="#" onClick={(e) => handleLinkClick(e, "https://wa.me/+254757261120")}>📱 WhatsApp</a>
+                    <a href="#" onClick={(e) => handleLinkClick(e, "https://t.me/+YDUwvuuVDYg5NjE0")}>✈️ Telegram</a>
+                    <a href="#" onClick={(e) => handleLinkClick(e, "https://www.youtube.com/@ceoramz")}>▶️ YouTube</a>
+                    <a href="#" onClick={(e) => handleLinkClick(e, "https://tiktok.com/@ceoramz")}>🎵 TikTok</a>
+                    <a href="#" onClick={(e) => handleLinkClick(e, "https://www.instagram.com/ramztrader.site")}>📷 Instagram</a>
+                    <a href="#" onClick={(e) => handleLinkClick(e, "https://www.facebook.com/profile.php?id=61573399294689")}>💬 Discord</a>
+                    <a href="#" onClick={(e) => handleLinkClick(e, "https://www.instagram.com/ramztrader.site")}>🐦 Twitter</a>
                 </div>
             </div>
         </div>
@@ -525,20 +545,19 @@ const AppWrapper = observer(() => {
     const [left_tab_shadow, setLeftTabShadow] = useState<boolean>(false);
     const [right_tab_shadow, setRightTabShadow] = useState<boolean>(false);
 
-    // Loader states - forced 15 seconds
+    // Loader states
     const [showGlobalLoader, setShowGlobalLoader] = useState<boolean>(true);
     const [loaderProgress, setLoaderProgress] = useState<number>(0);
     const [loaderMessage, setLoaderMessage] = useState<string>('Initializing...');
+    const [loaderDuration] = useState<number>(() => {
+        return Math.floor(Math.random() * (10 - 8 + 1)) + 8;
+    });
 
     // Trade type modal state
     const [tradeTypeModalState, setTradeTypeModalState] = useState(getModalState());
 
-    /**
-     * Helper function to get modal props with enhanced type safety and clear documentation
-     */
     const getTradeTypeModalProps = () => {
         const { tradeTypeData } = tradeTypeModalState;
-
         return {
             is_visible: tradeTypeModalState.isVisible,
             trade_type_display_name: tradeTypeData?.displayName || '',
@@ -560,62 +579,31 @@ const AppWrapper = observer(() => {
     };
     const active_hash_tab = GetHashedValue(active_tab);
 
-    // Force 15-second loader
+    // Force loader with random duration between 8-10 seconds
     useEffect(() => {
-        // Show loader immediately
         setShowGlobalLoader(true);
-        setLoaderMessage('Initializing RAMFX System...');
+        setLoaderMessage('🚀 Launching RAMFX Trading System...');
         
-        // Progress steps for 15 seconds
-        const progressSteps = [
-            { time: 1, progress: 5, message: 'Loading core modules...' },
-            { time: 2, progress: 10, message: 'Connecting to servers...' },
-            { time: 3, progress: 20, message: 'Loading RAMFX engine...' },
-            { time: 4, progress: 30, message: 'Configuring trading tools...' },
-            { time: 5, progress: 40, message: 'Loading bot strategies...' },
-            { time: 6, progress: 50, message: 'Setting up workspace...' },
-            { time: 7, progress: 55, message: 'Optimizing performance...' },
-            { time: 8, progress: 65, message: 'Loading algorithms...' },
-            { time: 9, progress: 75, message: 'Initializing AI models...' },
-            { time: 10, progress: 80, message: 'Finalizing configuration...' },
-            { time: 11, progress: 85, message: 'Loading user data...' },
-            { time: 12, progress: 90, message: 'Almost ready...' },
-            { time: 13, progress: 93, message: 'Finalizing setup...' },
-            { time: 14, progress: 96, message: 'Preparing workspace...' },
-            { time: 15, progress: 100, message: 'Ready!' },
-        ];
-
-        let stepIndex = 0;
         const startTime = Date.now();
-        const totalDuration = 15000; // 15 seconds in milliseconds
+        const totalDuration = loaderDuration * 1000;
 
         const interval = setInterval(() => {
             const elapsed = Date.now() - startTime;
             const progress = Math.min((elapsed / totalDuration) * 100, 100);
-            
-            // Update message based on progress
-            const currentStep = progressSteps.find(step => progress <= step.progress);
-            if (currentStep) {
-                setLoaderMessage(currentStep.message);
-            } else {
-                setLoaderMessage('Loading...');
-            }
-            
             setLoaderProgress(progress);
             
-            // When complete, hide loader after a brief delay
             if (progress >= 100) {
                 clearInterval(interval);
-                setLoaderMessage('Ready!');
+                setLoaderMessage('✅ Ready to Trade! 🚀');
                 setTimeout(() => {
                     setShowGlobalLoader(false);
                     setLoaderProgress(0);
-                }, 800);
+                }, 500);
             }
-        }, 50); // Update every 50ms for smooth animation
+        }, 50);
 
         return () => clearInterval(interval);
-    }, []); // Run once on mount
+    }, [loaderDuration]);
 
     // Set up modal state change listener
     useEffect(() => {
@@ -706,7 +694,6 @@ const AppWrapper = observer(() => {
         }
     }, [active_tab, active_trading_module, clear, connectionStatus, run_panel, setWebSocketState, stopBot]);
 
-    // Update tab shadows height to match bot builder height
     const updateTabShadowsHeight = () => {
         const botBuilderEl = document.getElementById('id-bot-builder');
         const leftShadow = document.querySelector('.tabs-shadow--left') as HTMLElement;
@@ -722,7 +709,6 @@ const AppWrapper = observer(() => {
     useEffect(() => {
         let pollTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
-        // Handle URL trade type parameters when switching to Bot Builder tab
         if (active_tab === BOT_BUILDER) {
             requestAnimationFrame(() => {
                 disableUrlParameterApplication();
@@ -755,9 +741,7 @@ const AppWrapper = observer(() => {
                             pollAttempts++;
                             pollTimeoutId = setTimeout(checkBlocklyLoaded, 500);
                         } else {
-                            console.warn(
-                                'Blockly loading timeout after 5 seconds - proceeding without URL parameter check'
-                            );
+                            console.warn('Blockly loading timeout - proceeding without URL parameter check');
                         }
                     };
 
@@ -803,7 +787,7 @@ const AppWrapper = observer(() => {
 
     useEffect(() => {
         const trashcan_init_id = setTimeout(() => {
-            if (active_tab === BOT_BUILDER && Blockly?.derivWorkspace?.trashcan) {
+            if (active_tab === BOT_BUILDER && (window as any).Blockly?.derivWorkspace?.trashcan) {
                 const trashcanY = window.innerHeight - 250;
                 let trashcanX;
                 if (is_drawer_open) {
@@ -811,7 +795,7 @@ const AppWrapper = observer(() => {
                 } else {
                     trashcanX = isDbotRTL() ? 20 : window.innerWidth - 100;
                 }
-                Blockly?.derivWorkspace?.trashcan?.setTrashcanPosition(trashcanX, trashcanY);
+                (window as any).Blockly?.derivWorkspace?.trashcan?.setTrashcanPosition(trashcanX, trashcanY);
             }
         }, 100);
 
@@ -864,7 +848,6 @@ const AppWrapper = observer(() => {
         [dashboard, setActiveTab]
     );
 
-    // [AI]
     const handleLoginGeneration = async () => {
         const oauthUrl = await generateOAuthURL();
         if (oauthUrl) {
@@ -873,17 +856,16 @@ const AppWrapper = observer(() => {
             console.error('Failed to generate OAuth URL');
         }
     };
-    // [/AI]
     
     return (
         <React.Fragment>
-            {/* Global Loader - Forced 15 seconds */}
+            {/* Global Loader */}
             {showGlobalLoader && (
                 <Loader 
                     progress={loaderProgress} 
                     message={loaderMessage}
                     showProgress={true}
-                    totalDuration={15}
+                    totalDuration={loaderDuration}
                 />
             )}
 
@@ -901,11 +883,7 @@ const AppWrapper = observer(() => {
                                 <div
                                     label={
                                         <>
-                                            <LabelPairedLightbulbCaptionRegularIcon
-                                                height='24px'
-                                                width='24px'
-                                                fill='#c8a45d'
-                                            />
+                                            <LabelPairedLightbulbCaptionRegularIcon height='24px' width='24px' fill='#c8a45d' />
                                             <Localize i18n_default_text='Ramzfx Bot Ideas' />
                                         </>
                                     }
@@ -917,11 +895,7 @@ const AppWrapper = observer(() => {
                             <div
                                 label={
                                     <>
-                                        <LabelPairedCircleStarCaptionRegularIcon
-                                            height='24px'
-                                            width='24px'
-                                            fill='#c8a45d'
-                                        />
+                                        <LabelPairedCircleStarCaptionRegularIcon height='24px' width='24px' fill='#c8a45d' />
                                         <Localize i18n_default_text='Free Bots' />
                                     </>
                                 }
@@ -932,11 +906,7 @@ const AppWrapper = observer(() => {
                             <div
                                 label={
                                     <>
-                                        <LabelPairedObjectsColumnCaptionRegularIcon
-                                            height='24px'
-                                            width='24px'
-                                            fill='#c8a45d'
-                                        />
+                                        <LabelPairedObjectsColumnCaptionRegularIcon height='24px' width='24px' fill='#c8a45d' />
                                         <Localize i18n_default_text='Dashboard' />
                                     </>
                                 }
@@ -947,11 +917,7 @@ const AppWrapper = observer(() => {
                             <div
                                 label={
                                     <>
-                                        <LabelPairedPuzzlePieceTwoCaptionBoldIcon
-                                            height='24px'
-                                            width='24px'
-                                            fill='#c8a45d'
-                                        />
+                                        <LabelPairedPuzzlePieceTwoCaptionBoldIcon height='24px' width='24px' fill='#c8a45d' />
                                         <Localize i18n_default_text='Bot Builder' />
                                     </>
                                 }
@@ -961,11 +927,7 @@ const AppWrapper = observer(() => {
                                 <div
                                     label={
                                         <>
-                                            <LabelPairedChartTrendUpCaptionRegularIcon
-                                                height='24px'
-                                                width='24px'
-                                                fill='#c8a45d'
-                                            />
+                                            <LabelPairedChartTrendUpCaptionRegularIcon height='24px' width='24px' fill='#c8a45d' />
                                             <Localize i18n_default_text='Ramzfx Ultimate Bot' />
                                         </>
                                     }
@@ -978,11 +940,7 @@ const AppWrapper = observer(() => {
                                 <div
                                     label={
                                         <>
-                                            <LabelPairedChartMixedCaptionRegularIcon
-                                                height='24px'
-                                                width='24px'
-                                                fill='#c8a45d'
-                                            />
+                                            <LabelPairedChartMixedCaptionRegularIcon height='24px' width='24px' fill='#c8a45d' />
                                             <Localize i18n_default_text='Manual Trading' />
                                         </>
                                     }
@@ -995,11 +953,7 @@ const AppWrapper = observer(() => {
                                 <div
                                     label={
                                         <>
-                                            <LabelPairedSearchCaptionRegularIcon
-                                                height='24px'
-                                                width='24px'
-                                                fill='#c8a45d'
-                                            />
+                                            <LabelPairedSearchCaptionRegularIcon height='24px' width='24px' fill='#c8a45d' />
                                             <Localize i18n_default_text='ProScanner Tool' />
                                         </>
                                     }
@@ -1011,11 +965,7 @@ const AppWrapper = observer(() => {
                             <div
                                 label={
                                     <>
-                                        <LabelPairedChartLineCaptionRegularIcon
-                                            height='24px'
-                                            width='24px'
-                                            fill='#c8a45d'
-                                        />
+                                        <LabelPairedChartLineCaptionRegularIcon height='24px' width='24px' fill='#c8a45d' />
                                         <Localize i18n_default_text='Ramzfx Analysis Tool' />
                                     </>
                                 }
@@ -1037,13 +987,9 @@ const AppWrapper = observer(() => {
             </DesktopWrapper>
             <MobileWrapper>{!is_open && <RunPanel />}</MobileWrapper>
             <Dialog
-                cancel_button_text={
-                    navigation_stop_in_progress ? undefined : localize('Stay')
-                }
+                cancel_button_text={navigation_stop_in_progress ? undefined : localize('Stay')}
                 className='dc-dialog__wrapper--fixed'
-                confirm_button_text={
-                    navigation_stop_in_progress ? localize('Stopping trades...') : localize('Stop and switch')
-                }
+                confirm_button_text={navigation_stop_in_progress ? localize('Stopping trades...') : localize('Stop and switch')}
                 has_close_icon={!navigation_stop_in_progress}
                 is_mobile_full_width={false}
                 is_visible={is_leave_trading_dialog_open}
