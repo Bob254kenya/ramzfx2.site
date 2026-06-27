@@ -572,18 +572,6 @@ export const isPercentageSignalReady = (trade_type: TradeType, state: MarketStat
 
 // ─── Market Configuration ────────────────────────────────────────────────────
 
-interface MarketConfig {
-    tradeType: TradeType;
-    barrier: number;
-    predictionBeforeLoss: number;
-    predictionAfterLoss: number;
-    streak: number;
-    analysisTicks: number;
-    inverseMode: boolean;
-    strategyMode: StrategyMode;
-    strategyTemplate: StrategyTemplate;
-}
-
 interface MarketState {
     // Core state
     consecutive: number;
@@ -614,10 +602,8 @@ interface MarketState {
     trailingTriggerCount: number;
     alertActive: boolean;
     alertMessage: string;
-    // Market mode state
-    activeMarket: 'market1' | 'market2' | 'recovery' | 'idle';
+    // Recovery state
     recoveryActive: boolean;
-    recoveryPatternMatched: boolean;
     recoveryStartTime: number | null;
     // Market 2 specific
     market2Consecutive: number;
@@ -660,9 +646,7 @@ const createMarketState = (prev?: Partial<MarketState>): MarketState => ({
     trailingTriggerCount: prev?.trailingTriggerCount ?? 0,
     alertActive: prev?.alertActive ?? false,
     alertMessage: prev?.alertMessage ?? '',
-    activeMarket: prev?.activeMarket ?? 'idle',
     recoveryActive: prev?.recoveryActive ?? false,
-    recoveryPatternMatched: prev?.recoveryPatternMatched ?? false,
     recoveryStartTime: prev?.recoveryStartTime ?? null,
     market2Consecutive: prev?.market2Consecutive ?? 0,
     market2LastResult: prev?.market2LastResult ?? null,
@@ -971,7 +955,7 @@ const AutoTrades = observer(() => {
         String(getInitialConsecutiveLossThreshold())
     );
 
-    // ─── Market Mode ────────────────────────────────────────────────────────
+    // ─── Trading Mode ────────────────────────────────────────────────────────
 
     type TradingMode = 'market1_only' | 'market2_only' | 'recovery_mode';
     const [tradingMode, setTradingMode] = useState<TradingMode>(() => {
@@ -1297,9 +1281,10 @@ const AutoTrades = observer(() => {
         // Check if we're in recovery mode and M2 is enabled
         if (tradingModeRef.current === 'recovery_mode' && m2EnabledRef.current) {
             if (state.recoveryActive) {
+                // RECOVERY ACTIVE → Market 2 ONLY
                 return { config: m2ConfigRef.current, isMarket2: true, isRecovery: true };
             }
-            // If not in recovery, use M1
+            // Recovery mode but NOT active → Market 1
             return { config: m1ConfigRef.current, isMarket2: false, isRecovery: false };
         }
 
@@ -1360,37 +1345,6 @@ const AutoTrades = observer(() => {
             barrier,
             inverse,
         });
-    }, []);
-
-    const isSignalReady = useCallback((
-        state: MarketState,
-        symbol: string,
-        tradeType: TradeType,
-        barrier: number,
-        inverse: boolean,
-        streak: number,
-        strategyMode: StrategyMode,
-        requiresCandle: boolean,
-        candleMatch: boolean
-    ): boolean => {
-        const targetLen = getEffectiveSignalStreak({
-            trade_type: tradeType,
-            configured_streak: streak,
-        });
-
-        if (IS_DIRECTION_TYPE[tradeType]) {
-            return state.consecutive >= targetLen && (!requiresCandle || candleMatch);
-        }
-
-        const riskFiltered = hasRequiredDigitStreak({
-            trade_type: tradeType,
-            digits: state.lastDigits,
-            barrier,
-            inverse,
-            streak: targetLen,
-        });
-
-        return state.consecutive >= targetLen && riskFiltered && (!requiresCandle || candleMatch);
     }, []);
 
     // ─── Trade Execution ──────────────────────────────────────────────────
@@ -1552,20 +1506,25 @@ const AutoTrades = observer(() => {
 
         // ─── Recovery Mode Logic ──────────────────────────────────────────
 
-        if (tradingModeRef.current === 'recovery_mode' && m2EnabledRef.current) {
+        const isRecoveryMode = tradingModeRef.current === 'recovery_mode' && m2EnabledRef.current;
+
+        if (isRecoveryMode) {
             if (profit < 0 && !isMarket2) {
-                // Loss on Market 1 → Activate recovery
+                // Loss on Market 1 → Activate recovery (BLOCK Market 1)
                 state.recoveryActive = true;
-                state.activeMarket = 'recovery';
                 state.recoveryStartTime = Date.now();
                 state.market2Consecutive = 0;
                 state.market2ConsecutiveLosses = 0;
                 state.market2LastResult = null;
+                // Reset Market 1 state to prevent it from firing
+                state.consecutive = 0;
+                consecutiveLossRef.current = 0;
+                previousContractResultRef.current = null;
                 nextStakeRef.current = m2ConfigRef.current.stake;
 
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `🔴 LOSS on Market 1 — Switching to Market 2 (Recovery Mode)`,
+                    condition: `🔴 LOSS on Market 1 — RECOVERY ACTIVE: Market 1 BLOCKED, using Market 2`,
                     digits: '',
                     result: false,
                     source: 'recovery-activated',
@@ -1574,11 +1533,11 @@ const AutoTrades = observer(() => {
             } else if (profit >= 0 && isMarket2) {
                 // Win on Market 2 → Return to Market 1
                 state.recoveryActive = false;
-                state.activeMarket = 'idle';
                 state.recoveryStartTime = null;
                 state.market2Consecutive = 0;
                 state.market2ConsecutiveLosses = 0;
                 state.market2LastResult = null;
+                state.consecutive = 0;
                 consecutiveLossRef.current = 0;
                 previousContractResultRef.current = null;
                 nextStakeRef.current = m1ConfigRef.current.stake;
@@ -1595,19 +1554,20 @@ const AutoTrades = observer(() => {
                 // Loss on Market 2 → Stay on Market 2
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `🔴 LOSS on Market 2 — Continuing recovery`,
+                    condition: `🔴 LOSS on Market 2 — Continuing recovery on Market 2`,
                     digits: '',
                     result: false,
                     source: 'recovery-continue',
                     timestamp: Date.now(),
                 });
             } else if (profit >= 0 && !isMarket2) {
-                // Win on Market 1 → Reset everything
+                // Win on Market 1 → Reset everything (recovery not active)
                 consecutiveLossRef.current = 0;
                 previousContractResultRef.current = null;
                 nextStakeRef.current = m1ConfigRef.current.stake;
+                state.consecutive = 0;
                 state.recoveryActive = false;
-                state.activeMarket = 'idle';
+                state.recoveryStartTime = null;
                 state.market2Consecutive = 0;
                 state.market2ConsecutiveLosses = 0;
                 state.market2LastResult = null;
@@ -1651,6 +1611,21 @@ const AutoTrades = observer(() => {
         signalReady: boolean,
         isMarket2: boolean
     ) => {
+        // CRITICAL: In recovery mode, BLOCK Market 1 trades
+        const isRecoveryMode = tradingModeRef.current === 'recovery_mode' && m2EnabledRef.current;
+        
+        // If recovery is active, ONLY allow Market 2 trades
+        if (isRecoveryMode && state.recoveryActive && !isMarket2) {
+            // Market 1 is BLOCKED during recovery
+            return;
+        }
+
+        // If recovery mode is enabled but not active, allow Market 1
+        // If market2_only mode, only allow Market 2
+        if (tradingModeRef.current === 'market2_only' && !isMarket2) {
+            return;
+        }
+
         if (
             runningRef.current &&
             signalReady &&
@@ -1697,7 +1672,32 @@ const AutoTrades = observer(() => {
             clearDataRecoveryLoading();
         }
 
-        const { config: activeConfig, isMarket2, isRecovery } = getActiveConfig(symbol);
+        // ─── Determine which market is active ────────────────────────────
+
+        const isRecoveryMode = tradingModeRef.current === 'recovery_mode' && m2EnabledRef.current;
+        const isRecoveryActive = isRecoveryMode && state.recoveryActive;
+
+        let activeConfig = m1ConfigRef.current;
+        let isMarket2 = false;
+        let isRecovery = false;
+
+        if (isRecoveryActive) {
+            // RECOVERY ACTIVE → Market 2 ONLY (Market 1 BLOCKED)
+            activeConfig = m2ConfigRef.current;
+            isMarket2 = true;
+            isRecovery = true;
+        } else if (tradingModeRef.current === 'market2_only' && m2EnabledRef.current) {
+            // Market 2 Only mode
+            activeConfig = m2ConfigRef.current;
+            isMarket2 = true;
+            isRecovery = false;
+        } else {
+            // Default: Market 1
+            activeConfig = m1ConfigRef.current;
+            isMarket2 = false;
+            isRecovery = false;
+        }
+
         const ct = activeConfig.tradeType;
         const barrier = getActiveBarrier(symbol, isMarket2 ? state.market2LastResult : previousContractResultRef.current, isMarket2 ? state.market2ConsecutiveLosses : consecutiveLossRef.current);
         const inverse = activeConfig.inverseMode;
@@ -1705,95 +1705,8 @@ const AutoTrades = observer(() => {
         const strategyMode = activeConfig.strategyMode;
         const targetLen = getEffectiveSignalStreak({ trade_type: ct, configured_streak: streak });
 
-        // ─── Recovery Mode: Check if we should use M2 ──────────────────
+        // ─── Update state for active market ──────────────────────────────
 
-        if (tradingModeRef.current === 'recovery_mode' && m2EnabledRef.current) {
-            // If we're in recovery and M2 is active, use M2 logic
-            if (state.recoveryActive && !isMarket2) {
-                // We should be using M2, but somehow we're on M1 - switch
-                const m2Config = m2ConfigRef.current;
-                const m2Barrier = getActiveBarrier(symbol, state.market2LastResult, state.market2ConsecutiveLosses);
-                const m2Inverse = m2Config.inverseMode;
-                const m2Streak = m2Config.streak;
-                const m2TargetLen = getEffectiveSignalStreak({ trade_type: m2Config.tradeType, configured_streak: m2Streak });
-                const m2RequiresCandle = isCandleConfirmedTradeType(m2Config.tradeType);
-                const m2CandleMatch = m2RequiresCandle ? (m2Inverse ? isInverseCandleMatch(m2Config.tradeType, state.candleDirection) : isCandleMatch(m2Config.tradeType, state.candleDirection)) : true;
-
-                // Update state for M2
-                if (IS_DIRECTION_TYPE[m2Config.tradeType]) {
-                    const prev = state.prevQuote;
-                    const dir: Direction = prev === null ? 0 : quote > prev ? 1 : quote < prev ? -1 : 0;
-                    state.directionHistory = [...state.directionHistory.slice(-9), dir];
-                    state.prevQuote = quote;
-
-                    if (dir !== 0) {
-                        const match = m2Inverse ? isInverseDirectionMatch(m2Config.tradeType, dir) : isDirectionMatch(m2Config.tradeType, dir);
-                        state.market2Consecutive = match ? Math.min(state.market2Consecutive + 1, 10) : 0;
-                    }
-                } else {
-                    const lastDigit = getLastDigitFromQuote(quote, symbol, pip);
-                    state.lastDigits = [...state.lastDigits.slice(-9), lastDigit];
-                    state.prevQuote = quote;
-
-                    const isMatch = isPatternDigit(symbol, lastDigit, m2Config.tradeType, m2Barrier, m2Inverse);
-                    state.market2Consecutive = isMatch ? Math.min(state.market2Consecutive + 1, 10) : 0;
-                }
-
-                const signalReady = state.market2Consecutive >= m2TargetLen && (!m2RequiresCandle || m2CandleMatch);
-                tryExecuteSignal(symbol, state, signalReady, true);
-                refreshDisplays();
-                return;
-            }
-
-            // If we're not in recovery, use M1
-            if (!state.recoveryActive) {
-                // Use M1 logic below
-            } else {
-                // In recovery, M2 is active - handled above
-                return;
-            }
-        }
-
-        // ─── Market 2 Only Mode ──────────────────────────────────────────
-
-        if (tradingModeRef.current === 'market2_only' && m2EnabledRef.current) {
-            const m2Config = m2ConfigRef.current;
-            const m2Barrier = getActiveBarrier(symbol, state.market2LastResult, state.market2ConsecutiveLosses);
-            const m2Inverse = m2Config.inverseMode;
-            const m2Streak = m2Config.streak;
-            const m2TargetLen = getEffectiveSignalStreak({ trade_type: m2Config.tradeType, configured_streak: m2Streak });
-            const m2RequiresCandle = isCandleConfirmedTradeType(m2Config.tradeType);
-            const m2CandleMatch = m2RequiresCandle ? (m2Inverse ? isInverseCandleMatch(m2Config.tradeType, state.candleDirection) : isCandleMatch(m2Config.tradeType, state.candleDirection)) : true;
-
-            // Update M2 state
-            if (IS_DIRECTION_TYPE[m2Config.tradeType]) {
-                const prev = state.prevQuote;
-                const dir: Direction = prev === null ? 0 : quote > prev ? 1 : quote < prev ? -1 : 0;
-                state.directionHistory = [...state.directionHistory.slice(-9), dir];
-                state.prevQuote = quote;
-
-                if (dir !== 0) {
-                    const match = m2Inverse ? isInverseDirectionMatch(m2Config.tradeType, dir) : isDirectionMatch(m2Config.tradeType, dir);
-                    state.market2Consecutive = match ? Math.min(state.market2Consecutive + 1, 10) : 0;
-                }
-            } else {
-                const lastDigit = getLastDigitFromQuote(quote, symbol, pip);
-                state.lastDigits = [...state.lastDigits.slice(-9), lastDigit];
-                state.prevQuote = quote;
-
-                const isMatch = isPatternDigit(symbol, lastDigit, m2Config.tradeType, m2Barrier, m2Inverse);
-                state.market2Consecutive = isMatch ? Math.min(state.market2Consecutive + 1, 10) : 0;
-            }
-
-            const signalReady = state.market2Consecutive >= m2TargetLen && (!m2RequiresCandle || m2CandleMatch);
-            tryExecuteSignal(symbol, state, signalReady, true);
-            refreshDisplays();
-            return;
-        }
-
-        // ─── Market 1 (Default) ──────────────────────────────────────────
-
-        // Update M1 state
         if (IS_DIRECTION_TYPE[ct]) {
             const prev = state.prevQuote;
             const dir: Direction = prev === null ? 0 : quote > prev ? 1 : quote < prev ? -1 : 0;
@@ -1802,7 +1715,16 @@ const AutoTrades = observer(() => {
 
             if (dir !== 0) {
                 const match = inverse ? isInverseDirectionMatch(ct, dir) : isDirectionMatch(ct, dir);
-                state.consecutive = match ? Math.min(state.consecutive + 1, 10) : 0;
+                if (isMarket2) {
+                    state.market2Consecutive = match ? Math.min(state.market2Consecutive + 1, 10) : 0;
+                    // Also update M1 state but keep it separate
+                    if (isRecoveryActive) {
+                        // During recovery, M1 is blocked - keep it at 0
+                        state.consecutive = 0;
+                    }
+                } else {
+                    state.consecutive = match ? Math.min(state.consecutive + 1, 10) : 0;
+                }
             }
         } else {
             const lastDigit = getLastDigitFromQuote(quote, symbol, pip);
@@ -1810,12 +1732,20 @@ const AutoTrades = observer(() => {
             state.prevQuote = quote;
 
             const isMatch = isPatternDigit(symbol, lastDigit, ct, barrier, inverse);
-            state.consecutive = isMatch ? Math.min(state.consecutive + 1, 10) : 0;
+            if (isMarket2) {
+                state.market2Consecutive = isMatch ? Math.min(state.market2Consecutive + 1, 10) : 0;
+                if (isRecoveryActive) {
+                    // During recovery, M1 is blocked - keep it at 0
+                    state.consecutive = 0;
+                }
+            } else {
+                state.consecutive = isMatch ? Math.min(state.consecutive + 1, 10) : 0;
+            }
         }
 
-        // ─── Strategy Template Evaluation ──────────────────────────────
-
-        if (activeConfig.strategyTemplate !== 'STANDARD') {
+        // ─── STRATEGY TEMPLATE EVALUATION (Market 1 only) ────────────────
+        // Skip during recovery or M2-only mode
+        if (!isRecoveryActive && !isMarket2 && activeConfig.strategyTemplate !== 'STANDARD') {
             const evaluation = evaluateDigitStrategy(
                 activeConfig.strategyTemplate as DigitStrategyId,
                 state.digitPercentages,
@@ -1855,15 +1785,13 @@ const AutoTrades = observer(() => {
             }
         }
 
-        // ─── Percentage Mode ─────────────────────────────────────────────
-
+        // ─── PERCENTAGE MODE ───────────────────────────────────────────────
         if (strategyMode === 'PERCENTAGE') {
             const epoch = Number(tick.epoch);
             appendPercentageQuote(symbol, state, quote, Number.isFinite(epoch) ? epoch : null, ct);
         }
 
-        // ─── Signal Check ────────────────────────────────────────────────
-
+        // ─── SIGNAL CHECK ──────────────────────────────────────────────────
         const requiresCandle = isCandleConfirmedTradeType(ct);
         const candleMatch = requiresCandle ? (inverse ? isInverseCandleMatch(ct, state.candleDirection) : isCandleMatch(ct, state.candleDirection)) : true;
 
@@ -1872,15 +1800,16 @@ const AutoTrades = observer(() => {
         if (strategyMode === 'PERCENTAGE') {
             signalReady = isPercentageSignalReady(ct, state, barrier) && (!requiresCandle || candleMatch);
         } else {
-            signalReady = isSignalReady(state, symbol, ct, barrier, inverse, streak, strategyMode, requiresCandle, candleMatch);
+            const currentStreak = isMarket2 ? state.market2Consecutive : state.consecutive;
+            signalReady = currentStreak >= targetLen && (!requiresCandle || candleMatch);
         }
 
-        // ─── Condition Notifier ──────────────────────────────────────────
-
+        // ─── CONDITION NOTIFIER ────────────────────────────────────────────
         if (runningRef.current) {
             const mkt = AUTO_MARKET_LOOKUP.get(symbol);
             let condStr = '';
             let digitsStr = '';
+            const currentStreak = isMarket2 ? state.market2Consecutive : state.consecutive;
 
             if (IS_DIRECTION_TYPE[ct]) {
                 const dirs = state.directionHistory.slice(-targetLen);
@@ -1914,9 +1843,11 @@ const AutoTrades = observer(() => {
                 }
             }
 
+            const prefix = isRecovery ? '🔄 RECOVERY: ' : isMarket2 ? '📊 M2: ' : '📈 M1: ';
+
             conditionNotifierStore.setCondition({
                 market: mkt?.label ?? symbol,
-                condition: condStr,
+                condition: prefix + condStr,
                 digits: digitsStr,
                 result: signalReady,
                 source: 'auto',
@@ -1924,10 +1855,37 @@ const AutoTrades = observer(() => {
             });
         }
 
-        tryExecuteSignal(symbol, state, signalReady, false);
+        // ─── EXECUTE SIGNAL ────────────────────────────────────────────────
+        // ONLY execute if:
+        // 1. In recovery mode AND recovery is active → allow M2 only
+        // 2. In market2_only mode → allow M2 only
+        // 3. In market1_only mode → allow M1 only
+        // 4. In recovery mode but NOT active → allow M1 only
+        
+        let shouldExecute = false;
+        
+        if (isRecoveryMode) {
+            if (state.recoveryActive) {
+                // Recovery active → ONLY M2
+                shouldExecute = isMarket2;
+            } else {
+                // Recovery mode but not active → ONLY M1
+                shouldExecute = !isMarket2;
+            }
+        } else if (tradingModeRef.current === 'market2_only') {
+            shouldExecute = isMarket2;
+        } else {
+            // market1_only
+            shouldExecute = !isMarket2;
+        }
+
+        if (shouldExecute) {
+            tryExecuteSignal(symbol, state, signalReady, isMarket2);
+        }
+
         refreshDisplays();
 
-    }, [clearDataRecoveryLoading, getActiveConfig, getActiveBarrier, getActiveInverse, getActiveStrategyMode, isPatternDigit, isSignalReady, refreshDisplays, tryExecuteSignal]);
+    }, [clearDataRecoveryLoading, getActiveBarrier, isPatternDigit, refreshDisplays, tryExecuteSignal]);
 
     handleTickRef.current = handleTick;
 
@@ -1945,7 +1903,6 @@ const AutoTrades = observer(() => {
         state.candleClose = close;
         state.candleDirection = close > open ? 1 : close < open ? -1 : 0;
 
-        // The tick handler will use this updated candle direction
         refreshDisplays();
     }, [refreshDisplays]);
 
@@ -2220,7 +2177,6 @@ const AutoTrades = observer(() => {
             state.tradeStartTime = null;
             state.verificationId = null;
             state.recoveryActive = false;
-            state.activeMarket = 'idle';
             state.recoveryStartTime = null;
             state.market2Consecutive = 0;
             state.market2ConsecutiveLosses = 0;
@@ -3120,7 +3076,7 @@ const AutoTrades = observer(() => {
                                                 <div className='auto-trades-market__recovery-status'>
                                                     🔄 RECOVERY ACTIVE
                                                     <br />
-                                                    <small>Market 2 active until win</small>
+                                                    <small>Market 1 BLOCKED — Market 2 active until win</small>
                                                 </div>
                                             )}
 
