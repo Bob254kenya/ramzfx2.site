@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { observer } from 'mobx-react-lite';
 import { useDevice } from '@deriv-com/ui';
-import classNames from 'classnames';
 import { contract_stages } from '@/constants/contract-stage';
 import { DBOT_TABS } from '@/constants/bot-contents';
 import { api_base, observer as globalObserver } from '@/external/bot-skeleton';
@@ -11,8 +10,6 @@ import { buyContractForUi, streamContractUntilSettled } from '@/utils/trade-purc
 import { safeSubscribe } from '@/utils/websocket-handler';
 import './scanner.scss';
 
-// ── Types ──────────────────────────────────────────────────────────────────────
-
 type TTickPoint = {
     epoch: number;
     quote: number;
@@ -21,16 +18,16 @@ type TTickPoint = {
 type TScannerStrategy = 'Matches & Differs' | 'Even & Odd' | 'Over & Under' | 'Rise & Fall';
 type TScannerMode = 'Analyze' | 'Trade';
 
+// Updated TScannerSignal to include recovery properties
 type TScannerSignal = {
     barrier?: string;
     contractType: 'DIGITEVEN' | 'DIGITODD' | 'DIGITOVER' | 'DIGITUNDER' | 'DIGITMATCH' | 'DIGITDIFF' | 'CALL' | 'PUT';
     label: string;
+    // Recovery properties for Over & Under strategy
     recoveryBarrier?: string;
     recoveryContractType?: 'DIGITOVER' | 'DIGITUNDER';
     recoveryLabel?: string;
 };
-
-// ── Constants ──────────────────────────────────────────────────────────────────
 
 const MAX_TICKS = 1000;
 const DEFAULT_STAKE = '10';
@@ -40,9 +37,12 @@ const DEFAULT_MARTINGALE_MULTIPLIER = 2;
 const DEFAULT_RUNS_TO_CHECK = '5';
 const TIMER_SOUND_URL = 'https://www.fesliyanstudios.com/play-mp3/4386';
 
+// Martingale multiplier from 1 to 10 with 0.1 increments
 const MARTINGALE_MULTIPLIERS = [1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2.0, 2.2, 2.5, 3.0, 3.5, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0, 10.0];
 
+// FIXED: Properly named volatility indices with correct symbols
 const MARKETS = [
+    // 1s indices - properly named with (1s) suffix
     { label: 'Volatility 10 (1s) Index', symbol: '1HZ10V' },
     { label: 'Volatility 15 (1s) Index', symbol: '1HZ15V' },
     { label: 'Volatility 25 (1s) Index', symbol: '1HZ25V' },
@@ -51,6 +51,7 @@ const MARKETS = [
     { label: 'Volatility 75 (1s) Index', symbol: '1HZ75V' },
     { label: 'Volatility 90 (1s) Index', symbol: '1HZ90V' },
     { label: 'Volatility 100 (1s) Index', symbol: '1HZ100V' },
+    // Standard volatility indices
     { label: 'Volatility 10 Index', symbol: 'R_10' },
     { label: 'Volatility 25 Index', symbol: 'R_25' },
     { label: 'Volatility 50 Index', symbol: 'R_50' },
@@ -60,131 +61,8 @@ const MARKETS = [
 
 const STRATEGIES: TScannerStrategy[] = ['Matches & Differs', 'Even & Odd', 'Over & Under', 'Rise & Fall'];
 
-// ── TP/SL Notification Component ─────────────────────────────────────────────
-
-const TPSLNotification: React.FC<{
-    isOpen: boolean;
-    onClose: () => void;
-    takeProfit: number;
-    stopLoss: number;
-    currency: string;
-    totalPnl: number;
-    totalTrades: number;
-    currentStake: number;
-    onStopTrading?: () => void;
-}> = ({
-    isOpen,
-    onClose,
-    takeProfit,
-    stopLoss,
-    currency,
-    totalPnl,
-    totalTrades,
-    currentStake,
-    onStopTrading,
-}) => {
-    if (!isOpen) return null;
-
-    const pnlPercent = currentStake > 0 ? (totalPnl / currentStake) * 100 : 0;
-    const isProfit = totalPnl > 0;
-    const isLoss = totalPnl < 0;
-    const tpHit = totalPnl >= takeProfit;
-    const slHit = totalPnl <= -stopLoss;
-
-    return (
-        <div className="tp-sl-overlay" onClick={onClose}>
-            <div className="tp-sl-card" onClick={(e) => e.stopPropagation()}>
-                <div className="tp-sl-card__header">
-                    <div className="tp-sl-card__icon">
-                        {tpHit ? '🎯' : slHit ? '🛑' : '📈'}
-                    </div>
-                    <h3 className="tp-sl-card__title">
-                        {tpHit ? '🎯 Take Profit Hit!' : slHit ? '🛑 Stop Loss Hit!' : '📊 Profit Target'}
-                    </h3>
-                    <button className="tp-sl-card__close" onClick={onClose}>
-                        ✕
-                    </button>
-                </div>
-
-                <div className="tp-sl-card__body">
-                    <div 
-                        className={classNames('tp-sl-card__row', 'tp-sl-card__row--tp', {
-                            'tp-sl-card__row--active': tpHit,
-                        })}
-                    >
-                        <div className="tp-sl-card__row-label">
-                            <span>🎯 Take Profit</span>
-                            <span className="tp-sl-card__row-badge">target</span>
-                        </div>
-                        <div className="tp-sl-card__row-value">
-                            <span className="tp-sl-card__amount">
-                                +{takeProfit} {currency}
-                            </span>
-                            <span className={classNames('tp-sl-card__status', {
-                                'tp-sl-card__status--hit': tpHit,
-                                'tp-sl-card__status--miss': !tpHit,
-                            })}>
-                                {tpHit ? '✅ HIT' : '⏳ pending'}
-                            </span>
-                        </div>
-                        <div className="tp-sl-card__progress">
-                            <div 
-                                className={classNames('tp-sl-card__progress-bar', {
-                                    'tp-sl-card__progress-bar--hit': tpHit,
-                                })}
-                                style={{ width: `${Math.min(100, (totalPnl / takeProfit) * 100)}%` }}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="tp-sl-card__summary">
-                        <div className="tp-sl-card__pnl">
-                            <span className="tp-sl-card__pnl-label">💰 P&L</span>
-                            <span className={classNames('tp-sl-card__pnl-value', {
-                                'tp-sl-card__pnl-value--profit': isProfit,
-                                'tp-sl-card__pnl-value--loss': isLoss,
-                                'tp-sl-card__pnl-value--neutral': totalPnl === 0,
-                            })}>
-                                {isProfit ? '+' : ''}{totalPnl.toFixed(2)} {currency}
-                                <span className="tp-sl-card__pnl-percent">
-                                    ({pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)
-                                </span>
-                            </span>
-                        </div>
-                        <div className="tp-sl-card__trades">
-                            <span>📊 {totalTrades} trade{totalTrades !== 1 ? 's' : ''}</span>
-                            <span>•</span>
-                            <span className="tp-sl-card__stake">💰 {currentStake.toFixed(2)} {currency}</span>
-                        </div>
-                        <div className="tp-sl-card__sl-reference">
-                            <span>🛑 Stop Loss: {stopLoss} {currency}</span>
-                            <span className={classNames('tp-sl-card__sl-status', {
-                                'tp-sl-card__sl-status--active': slHit,
-                            })}>
-                                {slHit ? '⚠️ TRIGGERED' : '⏳ active'}
-                            </span>
-                        </div>
-                    </div>
-                </div>
-
-                <div className="tp-sl-card__footer">
-                    <button className="tp-sl-card__btn tp-sl-card__btn--dismiss" onClick={onClose}>
-                        ✕ Dismiss
-                    </button>
-                    {(tpHit || slHit) && onStopTrading && (
-                        <button className="tp-sl-card__btn tp-sl-card__btn--stop" onClick={onStopTrading}>
-                            ⏹ Stop Trading
-                        </button>
-                    )}
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// ── Utility Functions ─────────────────────────────────────────────────────────
-
 const cleanMoneyInput = (value: string) => value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1');
+
 const cleanNumberInput = (value: string) => value.replace(/[^\d]/g, '');
 
 const generateRandomCode = () => {
@@ -218,19 +96,13 @@ const generateFakeLogs = () => {
     return line;
 };
 
-const getRandomEntryPoints = (count: number) => {
-    const entryPoints: number[] = [];
-    for (let i = 0; i < count; i++) {
-        entryPoints.push(Math.floor(Math.random() * 10));
-    }
-    return entryPoints;
-};
-
+// FIXED: Over & Under analysis with hardcoded primary and recovery signals
 const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
     const lastDigits = ticks.slice(-MAX_TICKS).map(tick => getLastDigitFromQuote(tick.quote, symbol));
     const sampleSize = Math.max(lastDigits.length, 1);
     const lines: string[] = ['Analysis Complete!'];
     
+    // Count OVER (0-4) and UNDER (5-9)
     let overCount = 0;
     let underCount = 0;
 
@@ -247,7 +119,10 @@ const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
 
     let signal: TScannerSignal;
     
+    // Determine which side is less frequent
     if (overCount < underCount) {
+        // OVER is the primary signal (less common)
+        // FIXED: Always use OVER 1 as primary, OVER 3 as recovery
         const primaryOver = 1;
         const recoveryOver = 3;
         
@@ -267,6 +142,8 @@ const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
         };
         
     } else if (underCount < overCount) {
+        // UNDER is the primary signal (less common)
+        // FIXED: Always use UNDER 8 as primary, UNDER 6 as recovery
         const primaryUnder = 8;
         const recoveryUnder = 6;
         
@@ -286,6 +163,7 @@ const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
         };
         
     } else {
+        // Equal counts or no data - default to UNDER 8 with recovery UNDER 6
         lines.push(`📊 Equal distribution between OVER and UNDER`);
         lines.push(`🎯 Default Primary Signal: UNDER 8`);
         lines.push(`🔄 Default Recovery Signal: UNDER 6`);
@@ -304,6 +182,7 @@ const buildOverUnderAnalysis = (ticks: TTickPoint[], symbol: string) => {
     return { lines, signal };
 };
 
+// Modified buildAnalysis to use the new Over & Under logic
 const buildAnalysis = (strategy: TScannerStrategy, ticks: TTickPoint[], symbol: string) => {
     const lastDigits = ticks.slice(-MAX_TICKS).map(tick => getLastDigitFromQuote(tick.quote, symbol));
     const sampleSize = Math.max(lastDigits.length, 1);
@@ -361,7 +240,9 @@ const buildAnalysis = (strategy: TScannerStrategy, ticks: TTickPoint[], symbol: 
             signal = { contractType: 'DIGITODD', label: 'Odd' };
         }
     } else if (strategy === 'Over & Under') {
-        return buildOverUnderAnalysis(ticks, symbol);
+        // Use the new enhanced Over & Under analysis
+        const result = buildOverUnderAnalysis(ticks, symbol);
+        return result;
     } else {
         let ups = 0;
         let downs = 0;
@@ -383,6 +264,14 @@ const buildAnalysis = (strategy: TScannerStrategy, ticks: TTickPoint[], symbol: 
     return { lines, signal };
 };
 
+const getRandomEntryPoints = (count: number) => {
+    const entryPoints: number[] = [];
+    for (let i = 0; i < count; i++) {
+        entryPoints.push(Math.floor(Math.random() * 10));
+    }
+    return entryPoints;
+};
+
 const getQuoteFromTick = (data: any): TTickPoint | null => {
     const quote = Number(data?.tick?.quote);
     if (!Number.isFinite(quote)) return null;
@@ -393,14 +282,10 @@ const getQuoteFromTick = (data: any): TTickPoint | null => {
     };
 };
 
-// ── Main Scanner Component ──────────────────────────────────────────────────
-
 const Scanner = observer(() => {
     const { client, dashboard, run_panel, summary_card, transactions } = useStore();
     const { isDesktop } = useDevice();
     const { active_tab } = dashboard;
-    
-    // State
     const [selectedSymbol, setSelectedSymbol] = useState('R_10');
     const [strategy, setStrategy] = useState<TScannerStrategy>('Over & Under');
     const [mode, setMode] = useState<TScannerMode>('Trade');
@@ -416,19 +301,6 @@ const Scanner = observer(() => {
     const [scrollingText, setScrollingText] = useState('');
     const [isWorking, setIsWorking] = useState(false);
     const [sessionProfit, setSessionProfit] = useState(0);
-    const [totalTrades, setTotalTrades] = useState(0);
-    
-    // TP/SL Popup state
-    const [showTpSlPopup, setShowTpSlPopup] = useState(false);
-    const [tpSlData, setTpSlData] = useState({
-        takeProfit: 0,
-        stopLoss: 0,
-        totalPnl: 0,
-        totalTrades: 0,
-        currentStake: 0,
-    });
-
-    // Refs
     const subscriptionRef = useRef<{ unsubscribe?: () => void } | null>(null);
     const requestVersionRef = useRef(0);
     const ticksRef = useRef<TTickPoint[]>([]);
@@ -437,7 +309,6 @@ const Scanner = observer(() => {
     const tradeInFlightRef = useRef(false);
     const completedRunsRef = useRef(0);
     const sessionProfitRef = useRef(0);
-    const totalTradesRef = useRef(0);
     const stakeRef = useRef(0);
     const stopLossRef = useRef(0);
     const takeProfitRef = useRef(0);
@@ -466,8 +337,6 @@ const Scanner = observer(() => {
     const latestTick = ticks[ticks.length - 1];
     const latestDigit = latestTick ? getLastDigitFromQuote(latestTick.quote, selectedSymbol) : null;
     const canAnalyze = ticks.length >= MAX_TICKS;
-
-    // ── Effects ──────────────────────────────────────────────────────────────
 
     useEffect(() => {
         ticksRef.current = ticks;
@@ -500,24 +369,6 @@ const Scanner = observer(() => {
         };
     }, []);
 
-    useEffect(() => {
-        if (!showScanner) return undefined;
-
-        const updateScrollingText = () => {
-            let text = '';
-            for (let i = 0; i < 100; i++) {
-                text += `${generateFakeLogs()}\n`;
-            }
-            setScrollingText(text + text);
-        };
-
-        updateScrollingText();
-        const interval = setInterval(updateScrollingText, 200);
-        return () => clearInterval(interval);
-    }, [showScanner]);
-
-    // ── Sound Functions ──────────────────────────────────────────────────────
-
     const stopTimerSound = useCallback(() => {
         const sound = timerSoundRef.current;
         if (!sound) return;
@@ -543,28 +394,21 @@ const Scanner = observer(() => {
         }
     }, []);
 
-    // ── TP/SL Popup Functions ───────────────────────────────────────────────
+    useEffect(() => {
+        if (!showScanner) return undefined;
 
-    const showTpSlNotification = useCallback((totalPnl: number, trades: number) => {
-        const tp = takeProfitRef.current;
-        const sl = stopLossRef.current;
-        const stake = baseStakeRef.current;
-        
-        setTpSlData({
-            takeProfit: tp,
-            stopLoss: sl,
-            totalPnl: totalPnl,
-            totalTrades: trades,
-            currentStake: stake,
-        });
-        setShowTpSlPopup(true);
-    }, []);
+        const updateScrollingText = () => {
+            let text = '';
+            for (let i = 0; i < 100; i++) {
+                text += `${generateFakeLogs()}\n`;
+            }
+            setScrollingText(text + text);
+        };
 
-    const hideTpSlNotification = useCallback(() => {
-        setShowTpSlPopup(false);
-    }, []);
-
-    // ── Trading Functions ────────────────────────────────────────────────────
+        updateScrollingText();
+        const interval = setInterval(updateScrollingText, 200);
+        return () => clearInterval(interval);
+    }, [showScanner]);
 
     const unsubscribe = useCallback(() => {
         try {
@@ -581,12 +425,7 @@ const Scanner = observer(() => {
         setIsWorking(false);
         stopTimerSound();
         
-        // Show TP/SL notification if we have trades
-        if (totalTradesRef.current > 0) {
-            showTpSlNotification(sessionProfitRef.current, totalTradesRef.current);
-        }
-        
-        // Reset martingale state
+        // Reset martingale state on stop
         consecutiveLossesRef.current = 0;
         currentMartingaleStakeRef.current = baseStakeRef.current;
         consecutiveRecoveryLossesRef.current = 0;
@@ -602,8 +441,9 @@ const Scanner = observer(() => {
         }
 
         dashboard.setActiveTradingModule(null);
-    }, [dashboard, run_panel, stopTimerSound, showTpSlNotification]);
+    }, [dashboard, run_panel, stopTimerSound]);
 
+    // Manual stop button handler - stops the bot gracefully but doesn't close the popup
     const handleStopBot = useCallback(() => {
         if (tradeActiveRef.current || isWorking) {
             stopTrading();
@@ -763,6 +603,7 @@ const Scanner = observer(() => {
         [buildTradeParameters, currency, pushContract, selectedMarket.label, selectedSymbol]
     );
 
+    // Execute trade with recovery logic for Over & Under
     const executeTradeWithRecovery = useCallback(
         async (primarySignal: TScannerSignal, recoverySignal: TScannerSignal, currentTicks: TTickPoint[]) => {
             if (!tradeActiveRef.current || tradeInFlightRef.current || shouldStopRef.current || currentTicks.length < MAX_TICKS) {
@@ -806,6 +647,7 @@ const Scanner = observer(() => {
                 }
             }
 
+            // Determine which signal to use (primary or recovery)
             const currentSignal = isRecoveryTradeRef.current ? recoverySignal : primarySignal;
             const signalType = isRecoveryTradeRef.current ? 'RECOVERY' : 'PRIMARY';
             
@@ -821,10 +663,9 @@ const Scanner = observer(() => {
             try {
                 const profit = await runSingleTrade(currentSignal, tradeStake);
                 const isWin = profit > 0;
-                totalTradesRef.current += 1;
-                setTotalTrades(totalTradesRef.current);
                 
                 if (isWin) {
+                    // WIN: Reset everything
                     consecutiveLossesRef.current = 0;
                     consecutiveRecoveryLossesRef.current = 0;
                     currentMartingaleStakeRef.current = baseStakeRef.current;
@@ -836,9 +677,11 @@ const Scanner = observer(() => {
                         `🔄 Back to PRIMARY signal for next trade`
                     ]);
                 } else {
+                    // LOSS: Determine recovery strategy
                     consecutiveLossesRef.current += 1;
                     
                     if (isRecoveryTradeRef.current) {
+                        // Loss on recovery trade - activate martingale on recovery
                         consecutiveRecoveryLossesRef.current += 1;
                         const newStake = baseStakeRef.current * Math.pow(martingaleMultiplierRef.current, consecutiveRecoveryLossesRef.current);
                         currentMartingaleStakeRef.current = newStake;
@@ -849,6 +692,7 @@ const Scanner = observer(() => {
                             `💰 Next recovery stake: ${newStake.toFixed(2)} ${currency} (x${martingaleMultiplierRef.current}^${consecutiveRecoveryLossesRef.current})`
                         ]);
                     } else {
+                        // Loss on primary trade - switch to recovery
                         isRecoveryTradeRef.current = true;
                         consecutiveRecoveryLossesRef.current = 1;
                         const newStake = baseStakeRef.current * martingaleMultiplierRef.current;
@@ -874,7 +718,7 @@ const Scanner = observer(() => {
                     `🎯 Next trade: ${isRecoveryTradeRef.current ? 'RECOVERY' : 'PRIMARY'} signal`
                 ]);
 
-                // Check conditions after updating
+                // Check conditions again after updating
                 if (totalProfit <= -stopLossRef.current) {
                     setTerminalDashboard(previous => [
                         ...previous,
@@ -908,6 +752,7 @@ const Scanner = observer(() => {
         [currency, runSingleTrade, stopTrading]
     );
 
+    // Modified executeTradeFromTick to use recovery logic for Over & Under
     const executeTradeFromTick = useCallback(
         async (currentTicks: TTickPoint[]) => {
             if (!tradeActiveRef.current || tradeInFlightRef.current || shouldStopRef.current || currentTicks.length < MAX_TICKS) {
@@ -967,8 +812,6 @@ const Scanner = observer(() => {
             try {
                 const profit = await runSingleTrade(analysis.signal, tradeStake);
                 const isWin = profit > 0;
-                totalTradesRef.current += 1;
-                setTotalTrades(totalTradesRef.current);
                 
                 if (isWin) {
                     consecutiveLossesRef.current = 0;
@@ -1031,9 +874,10 @@ const Scanner = observer(() => {
         };
     }, [executeTradeFromTick]);
 
+    // Modified startScannerTrading to store primary and recovery signals
     const startScannerTrading = useCallback(
         (firstSignal: TScannerSignal, stake: number, stopLoss: number, takeProfit: number, multiplier: number, runsToCheck: number) => {
-            // Initialize state
+            // Initialize martingale state
             baseStakeRef.current = stake;
             currentMartingaleStakeRef.current = stake;
             consecutiveLossesRef.current = 0;
@@ -1045,12 +889,10 @@ const Scanner = observer(() => {
             runsToCheckRef.current = runsToCheck;
             sessionProfitRef.current = 0;
             completedRunsRef.current = 0;
-            totalTradesRef.current = 0;
             shouldStopRef.current = false;
             tradeActiveRef.current = true;
             tradeInFlightRef.current = false;
             setSessionProfit(0);
-            setTotalTrades(0);
 
             // Store primary and recovery signals for Over & Under strategy
             if (strategyRef.current === 'Over & Under' && firstSignal.recoveryBarrier && firstSignal.recoveryContractType && firstSignal.recoveryLabel) {
@@ -1148,8 +990,6 @@ const Scanner = observer(() => {
         [playTimerSound, selectedSymbol, startScannerTrading, stopTimerSound, strategy]
     );
 
-    // ── Event Handlers ──────────────────────────────────────────────────────
-
     const handleAnalyze = () => {
         const stake = Number(stakeInput);
         const stopLoss = Number(stopLossInput);
@@ -1181,15 +1021,11 @@ const Scanner = observer(() => {
             return;
         }
 
-        // Hide any previous TP/SL popup
-        setShowTpSlPopup(false);
-
         shouldStopRef.current = false;
         setIsWorking(true);
         setSessionProfit(0);
         sessionProfitRef.current = 0;
         completedRunsRef.current = 0;
-        totalTradesRef.current = 0;
         setPopupOpen(true);
         setTerminalDashboard([`Analysis Dashboard - ${strategy} on ${selectedSymbol}`]);
         setTerminalBody(['Connecting to server...']);
@@ -1243,143 +1079,126 @@ const Scanner = observer(() => {
         setMode(nextMode);
     };
 
-    // ── Render ──────────────────────────────────────────────────────────────
-
     if (!showScanner) return null;
 
     return (
-        <>
-            <div className={`scanner-page${isCoveredByMobileRunPanel ? ' scanner-page--run-panel-open' : ''}`}>
-                <div className='background'>
-                    <div className='scrolling-text'>{scrollingText}</div>
-                </div>
-                <div className='container'>
-                    <h1>⚡ SIGNAL ANALYZER ⚡</h1>
-                    
-                    <label htmlFor='strategy'>📊 SELECT STRATEGY</label>
-                    <select id='strategy' className='dropdown' value={strategy} onChange={event => handleStrategyChange(event.target.value as TScannerStrategy)}>
-                        {STRATEGIES.map(item => (
-                            <option key={item}>{item}</option>
+        <div className={`scanner-page${isCoveredByMobileRunPanel ? ' scanner-page--run-panel-open' : ''}`}>
+            <div className='background'>
+                <div className='scrolling-text'>{scrollingText}</div>
+            </div>
+            <div className='container'>
+                <h1>⚡ RAMZFX 🚀SIGNAL ANALYZER ⚡</h1>
+                
+                <label htmlFor='strategy'>📊 SELECT STRATEGY</label>
+                <select id='strategy' className='dropdown' value={strategy} onChange={event => handleStrategyChange(event.target.value as TScannerStrategy)}>
+                    {STRATEGIES.map(item => (
+                        <option key={item}>{item}</option>
+                    ))}
+                </select>
+                
+                <label htmlFor='market'>🌍 SELECT MARKET👌</label>
+                <select id='market' className='dropdown' value={selectedSymbol} onChange={event => handleMarketChange(event.target.value)}>
+                    {MARKETS.map(market => (
+                        <option key={market.symbol} value={market.symbol}>
+                            {market.label}
+                        </option>
+                    ))}
+                </select>
+                
+                <label htmlFor='stake'>💰 BASE STAKE</label>
+                <input id='stake' className='dropdown' inputMode='decimal' value={stakeInput} onChange={event => setStakeInput(cleanMoneyInput(event.target.value))} />
+                
+                <label htmlFor='stop-loss'>🛑 STOP LOSS (SL)</label>
+                <input id='stop-loss' className='dropdown' inputMode='decimal' value={stopLossInput} onChange={event => setStopLossInput(cleanMoneyInput(event.target.value))} />
+                
+                <label htmlFor='take-profit'>🎯 TAKE PROFIT (TP)</label>
+                <input id='take-profit' className='dropdown' inputMode='decimal' value={takeProfitInput} onChange={event => setTakeProfitInput(cleanMoneyInput(event.target.value))} />
+                
+                <label htmlFor='runs-to-check'>🔢 RUNS BEFORE CHECKING PROFIT</label>
+                <input 
+                    id='runs-to-check' 
+                    className='dropdown' 
+                    inputMode='numeric' 
+                    value={runsToCheckInput} 
+                    onChange={event => setRunsToCheckInput(cleanNumberInput(event.target.value))}
+                />
+                
+                <div className='martingale-row'>
+                    <label>🎲 MARTINGALE MULTIPLIER (1x - 10x)</label>
+                    <select 
+                        className='martingale-select' 
+                        value={martingaleMultiplier} 
+                        onChange={event => setMartingaleMultiplier(Number(event.target.value))}
+                    >
+                        {MARTINGALE_MULTIPLIERS.map(m => (
+                            <option key={m} value={m}>x{m.toFixed(1)}</option>
                         ))}
                     </select>
-                    
-                    <label htmlFor='market'>🌍 SELECT MARKET</label>
-                    <select id='market' className='dropdown' value={selectedSymbol} onChange={event => handleMarketChange(event.target.value)}>
-                        {MARKETS.map(market => (
-                            <option key={market.symbol} value={market.symbol}>
-                                {market.label}
-                            </option>
-                        ))}
-                    </select>
-                    
-                    <label htmlFor='stake'>💰 BASE STAKE</label>
-                    <input id='stake' className='dropdown' inputMode='decimal' value={stakeInput} onChange={event => setStakeInput(cleanMoneyInput(event.target.value))} />
-                    
-                    <label htmlFor='stop-loss'>🛑 STOP LOSS (SL)</label>
-                    <input id='stop-loss' className='dropdown' inputMode='decimal' value={stopLossInput} onChange={event => setStopLossInput(cleanMoneyInput(event.target.value))} />
-                    
-                    <label htmlFor='take-profit'>🎯 TAKE PROFIT (TP)</label>
-                    <input id='take-profit' className='dropdown' inputMode='decimal' value={takeProfitInput} onChange={event => setTakeProfitInput(cleanMoneyInput(event.target.value))} />
-                    
-                    <label htmlFor='runs-to-check'>🔢 RUNS BEFORE CHECKING PROFIT</label>
-                    <input 
-                        id='runs-to-check' 
-                        className='dropdown' 
-                        inputMode='numeric' 
-                        value={runsToCheckInput} 
-                        onChange={event => setRunsToCheckInput(cleanNumberInput(event.target.value))}
-                    />
-                    
-                    <div className='martingale-row'>
-                        <label>🎲 MARTINGALE MULTIPLIER (1x - 10x)</label>
-                        <select 
-                            className='martingale-select' 
-                            value={martingaleMultiplier} 
-                            onChange={event => setMartingaleMultiplier(Number(event.target.value))}
-                        >
-                            {MARTINGALE_MULTIPLIERS.map(m => (
-                                <option key={m} value={m}>x{m.toFixed(1)}</option>
-                            ))}
-                        </select>
-                    </div>
-                    
-                    <label htmlFor='mode'>⚙️ MODE</label>
-                    <select id='mode' className='dropdown' value={mode} onChange={event => handleModeChange(event.target.value as TScannerMode)}>
-                        <option>Analyze</option>
-                        <option>Trade</option>
-                    </select>
-                    
-                    <div className='contain'>
-                        <div className='latest-tick'>
-                            📈 Latest Tick: <span>{latestTick?.quote ?? '--'}</span>
-                        </div>
-                        <div className='latest-tick'>
-                            🔢 Last Digit: <span>{latestDigit ?? '--'}</span>
-                        </div>
-                        <div className='latest-tick'>
-                            💵 P/L: <span>{sessionProfit.toFixed(2)} {currency}</span>
-                        </div>
-                        <div className='latest-tick'>
-                            🎯 Runs: <span>{completedRunsRef.current}/{runsToCheckInput}</span>
-                        </div>
-                    </div>
-
-                    <div className='buttons'>
-                        <button className='analyse' type='button' onClick={handleAnalyze} disabled={isWorking}>
-                            {isWorking ? 'PROCESSING...' : '🚀 ANALYSE & RUN'}
-                        </button>
-                    </div>
                 </div>
                 
-                <div className='popup popup--reduced' style={{ display: popupOpen ? 'block' : 'none' }}>
-                    <div className='popup-content'>
-                        <div className='popup-header'>
-                            <button className='stop-bot-btn' type='button' onClick={handleStopBot} disabled={!tradeActiveRef.current && !isWorking}>
-                                ⏹️ STOP BOT
-                            </button>
-                            <button className='close-btn' type='button' onClick={handleClosePopup}>
-                                ✕
-                            </button>
-                        </div>
-                        <div className='terminal-header'>
-                            <span className='dot red' />
-                            <span className='dot yellow' />
-                            <span className='dot green' />
-                            <span className='terminal-title'>QUANTUM TERMINAL v2.0</span>
-                        </div>
-                        <div className='terminal-dashboard'>
-                            {terminalDashboard.map((line, index) => (
-                                <p className={line?.startsWith('Error') ? 'red' : 'green'} key={`${line}-${index}`}>
+                <label htmlFor='mode'>⚙️ MODE</label>
+                <select id='mode' className='dropdown' value={mode} onChange={event => handleModeChange(event.target.value as TScannerMode)}>
+                    <option>Analyze</option>
+                    <option>Trade</option>
+                </select>
+                
+                <div className='contain'>
+                    <div className='latest-tick'>
+                        📈 Latest Tick: <span>{latestTick?.quote ?? '--'}</span>
+                    </div>
+                    <div className='latest-tick'>
+                        🔢 Last Digit: <span>{latestDigit ?? '--'}</span>
+                    </div>
+                    <div className='latest-tick'>
+                        💵 P/L: <span>{sessionProfit.toFixed(2)} {currency}</span>
+                    </div>
+                    <div className='latest-tick'>
+                        🎯 Runs: <span>{completedRunsRef.current}/{runsToCheckInput}</span>
+                    </div>
+                </div>
+
+                <div className='buttons'>
+                    <button className='analyse' type='button' onClick={handleAnalyze} disabled={isWorking}>
+                        {isWorking ? 'PROCESSING...' : '🚀 ANALYSE & RUN'}
+                    </button>
+                </div>
+            </div>
+            
+            <div className='popup popup--reduced' style={{ display: popupOpen ? 'block' : 'none' }}>
+                <div className='popup-content'>
+                    <div className='popup-header'>
+                        <button className='stop-bot-btn' type='button' onClick={handleStopBot} disabled={!tradeActiveRef.current && !isWorking}>
+                            ⏹️ STOP BOT
+                        </button>
+                        <button className='close-btn' type='button' onClick={handleClosePopup}>
+                            ✕
+                        </button>
+                    </div>
+                    <div className='terminal-header'>
+                        <span className='dot red' />
+                        <span className='dot yellow' />
+                        <span className='dot green' />
+                        <span className='terminal-title'>QUANTUM TERMINAL v2.0</span>
+                    </div>
+                    <div className='terminal-dashboard'>
+                        {terminalDashboard.map((line, index) => (
+                            <p className={line?.startsWith('Error') ? 'red' : 'green'} key={`${line}-${index}`}>
+                                {line ?? ''}
+                            </p>
+                        ))}
+                    </div>
+                    <div className='terminal-scroll'>
+                        <div className='terminal-scroll-content'>
+                            {terminalBody.map((line, index) => (
+                                <p className={(line ?? '').startsWith('Error') ? 'red' : 'green'} key={`${line}-${index}`}>
                                     {line ?? ''}
                                 </p>
                             ))}
                         </div>
-                        <div className='terminal-scroll'>
-                            <div className='terminal-scroll-content'>
-                                {terminalBody.map((line, index) => (
-                                    <p className={(line ?? '').startsWith('Error') ? 'red' : 'green'} key={`${line}-${index}`}>
-                                        {line ?? ''}
-                                    </p>
-                                ))}
-                            </div>
-                        </div>
                     </div>
                 </div>
             </div>
-
-            {/* TP/SL Notification Popup */}
-            <TPSLNotification
-                isOpen={showTpSlPopup}
-                onClose={hideTpSlNotification}
-                takeProfit={tpSlData.takeProfit}
-                stopLoss={tpSlData.stopLoss}
-                currency={currency}
-                totalPnl={tpSlData.totalPnl}
-                totalTrades={tpSlData.totalTrades}
-                currentStake={tpSlData.currentStake}
-                onStopTrading={handleStopBot}
-            />
-        </>
+        </div>
     );
 });
 
