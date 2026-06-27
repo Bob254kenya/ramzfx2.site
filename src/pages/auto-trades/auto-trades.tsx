@@ -1,9 +1,10 @@
-// auto-trades.tsx - COMPLETE FIXED VERSION
+// auto-trades.tsx - COMPLETE FIXED VERSION WITH TP/SL NOTIFICATION
 // Features:
 // 1. L→Digit strategy properly blocks trading while waiting for pattern
 // 2. NO trading with original contract type during waiting period
 // 3. Black background styling for all L→Digit inputs
 // 4. Proper activation/deactivation on win/loss
+// 5. TP/SL notification popup card (200px × 250px, centered)
 
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import classNames from 'classnames';
@@ -716,12 +717,11 @@ interface MarketState {
     qualifyingWinningDigits: number[];
     specialEntryReady: boolean;
     trailingTriggerCount: number;
-    // L→Digit state
     lDigitActive: boolean;
     lDigitOriginalTradeType: TradeType | null;
     lDigitActiveSince: number | null;
     lDigitPatternMatched: boolean;
-    lDigitWaitingForPattern: boolean;  // NEW: Blocks trading while waiting for pattern
+    lDigitWaitingForPattern: boolean;
 }
 
 interface MarketDisplay extends MarketState {
@@ -823,6 +823,129 @@ const appendPercentageQuote = (
     rebuildPercentageAnalytics(symbol, state, trade_type);
 };
 
+// TP/SL Notification Component
+const TPSLNotification: React.FC<{
+    isOpen: boolean;
+    onClose: () => void;
+    takeProfit: number;
+    stopLoss: number;
+    currency: string;
+    totalPnl: number;
+    totalTrades: number;
+    currentStake: number;
+    onStopTrading?: () => void;
+}> = ({
+    isOpen,
+    onClose,
+    takeProfit,
+    stopLoss,
+    currency,
+    totalPnl,
+    totalTrades,
+    currentStake,
+    onStopTrading,
+}) => {
+    if (!isOpen) return null;
+
+    const pnlPercent = currentStake > 0 ? (totalPnl / currentStake) * 100 : 0;
+    const isProfit = totalPnl > 0;
+    const isLoss = totalPnl < 0;
+    const tpHit = totalPnl >= takeProfit;
+    const slHit = totalPnl <= -stopLoss;
+
+    return (
+        <div className="tp-sl-overlay" onClick={onClose}>
+            <div className="tp-sl-card" onClick={(e) => e.stopPropagation()}>
+                <div className="tp-sl-card__header">
+                    <div className="tp-sl-card__icon">
+                        {tpHit ? '🎯' : slHit ? '🛑' : '📊'}
+                    </div>
+                    <h3 className="tp-sl-card__title">
+                        {tpHit ? 'Take Profit Hit!' : slHit ? 'Stop Loss Hit!' : 'TP / SL Status'}
+                    </h3>
+                    <button className="tp-sl-card__close" onClick={onClose}>
+                        ✕
+                    </button>
+                </div>
+
+                <div className="tp-sl-card__body">
+                    <div className={classNames('tp-sl-card__row', 'tp-sl-card__row--tp', {
+                        'tp-sl-card__row--active': tpHit,
+                    })}>
+                        <div className="tp-sl-card__row-label">
+                            <span>🎯 Take Profit</span>
+                            <span className="tp-sl-card__row-badge">target</span>
+                        </div>
+                        <div className="tp-sl-card__row-value">
+                            <span className="tp-sl-card__amount">
+                                {takeProfit} {currency}
+                            </span>
+                            <span className={classNames('tp-sl-card__status', {
+                                'tp-sl-card__status--hit': tpHit,
+                                'tp-sl-card__status--miss': !tpHit,
+                            })}>
+                                {tpHit ? '✓ HIT' : 'pending'}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className={classNames('tp-sl-card__row', 'tp-sl-card__row--sl', {
+                        'tp-sl-card__row--active': slHit,
+                    })}>
+                        <div className="tp-sl-card__row-label">
+                            <span>🛑 Stop Loss</span>
+                            <span className="tp-sl-card__row-badge">limit</span>
+                        </div>
+                        <div className="tp-sl-card__row-value">
+                            <span className="tp-sl-card__amount">
+                                {stopLoss} {currency}
+                            </span>
+                            <span className={classNames('tp-sl-card__status', {
+                                'tp-sl-card__status--hit': slHit,
+                                'tp-sl-card__status--miss': !slHit,
+                            })}>
+                                {slHit ? '✗ HIT' : 'pending'}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="tp-sl-card__summary">
+                        <div className="tp-sl-card__pnl">
+                            <span className="tp-sl-card__pnl-label">P&L</span>
+                            <span className={classNames('tp-sl-card__pnl-value', {
+                                'tp-sl-card__pnl-value--profit': isProfit,
+                                'tp-sl-card__pnl-value--loss': isLoss,
+                                'tp-sl-card__pnl-value--neutral': totalPnl === 0,
+                            })}>
+                                {isProfit ? '+' : ''}{totalPnl.toFixed(2)} {currency}
+                                <span className="tp-sl-card__pnl-percent">
+                                    ({pnlPercent >= 0 ? '+' : ''}{pnlPercent.toFixed(1)}%)
+                                </span>
+                            </span>
+                        </div>
+                        <div className="tp-sl-card__trades">
+                            <span>{totalTrades} trade{totalTrades !== 1 ? 's' : ''}</span>
+                            <span>•</span>
+                            <span className="tp-sl-card__stake">stake: {currentStake.toFixed(2)} {currency}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="tp-sl-card__footer">
+                    <button className="tp-sl-card__btn tp-sl-card__btn--dismiss" onClick={onClose}>
+                        Dismiss
+                    </button>
+                    {(tpHit || slHit) && onStopTrading && (
+                        <button className="tp-sl-card__btn tp-sl-card__btn--stop" onClick={onStopTrading}>
+                            ⏹ Stop Trading
+                        </button>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const AutoTrades = observer(() => {
     const { dashboard, client, run_panel, summary_card, transactions } = useStore();
     const { currency } = client;
@@ -895,7 +1018,6 @@ const AutoTrades = observer(() => {
     const [analysisTicks, setAnalysisTicks] = useState(() => loadSavedNum('analysisTicks', '1', 1, 10));
     const [selectedMarketSymbols, setSelectedMarketSymbols] = useState<string[]>(loadSavedMarkets);
     
-    // L→Digit strategy state
     const [lDigitStrategy, setLDigitStrategy] = useState<LDigitAnalysis>(() => {
         try {
             const saved = localStorage.getItem('auto_trades_lDigitStrategy');
@@ -965,6 +1087,7 @@ const AutoTrades = observer(() => {
     const [dataStreamLoading, setDataStreamLoading] = useState(false);
     const [dataStreamMessage, setDataStreamMessage] = useState('Loading selected market data...');
     const [floatingStrategyAlert, setFloatingStrategyAlert] = useState<FloatingStrategyAlert | null>(null);
+    const [showTPSLNotification, setShowTPSLNotification] = useState(false);
 
     const [marketDisplays, setMarketDisplays] = useState<MarketDisplay[]>(
         selectedMarkets.map(m => ({
@@ -1080,7 +1203,6 @@ const AutoTrades = observer(() => {
         }
     }, [stake, martingale, takeProfit, stopLoss, martingaleMode, consecutiveLossCount]);
 
-    // Track original trade type separately
     useEffect(() => {
         originalTradeTypeRef.current = tradeType;
         try {
@@ -1090,12 +1212,9 @@ const AutoTrades = observer(() => {
         }
     }, [tradeType]);
 
-    // Update tradeTypeRef based on L→Digit state
     useEffect(() => {
-        // Check if any market has L→Digit active
         const hasActiveLDigit = Object.values(marketStatesRef.current).some(state => state.lDigitActive);
         if (!hasActiveLDigit) {
-            // Restore original trade type when L→Digit is not active
             tradeTypeRef.current = originalTradeTypeRef.current;
         }
     }, [tradeType, lDigitStrategy]);
@@ -1458,7 +1577,6 @@ const AutoTrades = observer(() => {
 
     const executeTrade = useCallback(
         async (symbol: string, stakeAmount: number, lastResult: 'win' | 'loss' | null): Promise<number> => {
-            // Use the current trade type (which may have been switched by L→Digit)
             const ct = tradeTypeRef.current;
             
             const bar = getActiveDigitBarrier(ct, lastResult, consecutiveLossRef.current);
@@ -1528,7 +1646,6 @@ const AutoTrades = observer(() => {
         [currency, getActiveDigitBarrier, pushContract, setError]
     );
 
-    // FIXED: handleAfterTrade - Properly reset L→Digit on win
     const handleAfterTrade = useCallback(
         (symbol: string, profit: number) => {
             if (!runningRef.current) return;
@@ -1565,7 +1682,6 @@ const AutoTrades = observer(() => {
                 state.lDigitPatternMatched = false;
                 state.lDigitWaitingForPattern = true;
                 state.consecutive = 0;
-                // Restore original type — L type will only be set once pattern fires
                 tradeTypeRef.current = originalTradeTypeRef.current;
                 state.lDigitOriginalTradeType = null;
 
@@ -1603,7 +1719,9 @@ const AutoTrades = observer(() => {
                 refreshDisplays();
             }
 
+            // ── TP/SL Notification ──────────────────────────────────────────
             if ((totalPnlRef.current >= tp || totalPnlRef.current <= -sl) && runningRef.current) {
+                setShowTPSLNotification(true);
                 runningRef.current = false;
                 if (!unmountedRef.current) {
                     setIsRunning(false);
@@ -1693,7 +1811,6 @@ const AutoTrades = observer(() => {
 
             const ct = tradeTypeRef.current;
             
-            // Block candle signal during L-WAITING or L-ACTIVE (both use tick-streak-only logic)
             const lBlocked = lDigitStrategyRef.current.enabled && (state.lDigitWaitingForPattern || state.lDigitActive);
             
             let signalReady = false;
@@ -1715,23 +1832,6 @@ const AutoTrades = observer(() => {
 
     handleCandleRef.current = handleCandle;
 
-    // handleTick - Three strictly separated modes:
-    //
-    //  ① L-WAITING  (lDigitWaitingForPattern=true, lDigitActive=false)
-    //     • Update lastDigits / directionHistory for lookback only.
-    //     • NO streak counting, NO consecutive, NO strategy-template checks,
-    //       NO contract-type checks, NO percentage mode.
-    //     • Only evaluates the lookback-tick pattern (evaluateLDigitCondition).
-    //     • When pattern fires → switch to L-ACTIVE; otherwise block all trading.
-    //
-    //  ② L-ACTIVE   (lDigitWaitingForPattern=false, lDigitActive=true)
-    //     • tradeTypeRef is already set to the L contract type.
-    //     • Signal = streak only (state.consecutive >= targetLen).
-    //     • NO strategy-template checks, NO percentage mode, NO specialStrategy.
-    //     • Reset to NORMAL happens in handleAfterTrade on win.
-    //
-    //  ③ NORMAL     (both false)
-    //     • Full original logic: streak + strategy-template + percentage mode.
     const handleTick = useCallback(
         (symbol: string, tick: any) => {
             if (!monitoredMarketSymbolsRef.current.has(symbol)) return;
@@ -1743,7 +1843,6 @@ const AutoTrades = observer(() => {
             const quote = tick.quote as number;
             let ct = tradeTypeRef.current;
 
-            // ── Bookkeeping always runs (quote, timing) ───────────────────────
             state.lastQuote = quote;
             state.isRecovering = false;
             lastTickAtRef.current = Date.now();
@@ -1755,12 +1854,8 @@ const AutoTrades = observer(() => {
             const isLWaiting  = lDigitEnabled && state.lDigitWaitingForPattern && !state.lDigitActive;
             const isLActive   = lDigitEnabled && state.lDigitActive && !state.lDigitWaitingForPattern;
 
-            // ================================================================
-            // ① L-WAITING: update raw history for lookback, then check pattern.
-            //    Nothing else — no streak, no contract-type, no template.
-            // ================================================================
+            // ── L-WAITING ────────────────────────────────────────────────────
             if (isLWaiting) {
-                // Record digit / direction for lookback evaluation only
                 const lastDigit = getLastDigitFromQuote(quote, symbol, pip);
                 state.lastDigits = [...state.lastDigits.slice(-9), lastDigit];
 
@@ -1769,7 +1864,6 @@ const AutoTrades = observer(() => {
                 state.directionHistory = [...state.directionHistory.slice(-9), dir];
                 state.prevQuote = quote;
 
-                // Evaluate lookback pattern (uses lastDigits + directionHistory)
                 const lDigitConditionMet = evaluateLDigitCondition(
                     lDigitStrategyRef.current,
                     state.lastDigits,
@@ -1785,7 +1879,6 @@ const AutoTrades = observer(() => {
                     );
 
                     if (newTradeType) {
-                        // Pattern confirmed — switch to L-ACTIVE
                         const lTargetLen = getEffectiveSignalStreak({
                             trade_type: newTradeType,
                             configured_streak: streakRef.current,
@@ -1795,7 +1888,7 @@ const AutoTrades = observer(() => {
                         state.lDigitActiveSince = Date.now();
                         state.lDigitPatternMatched = true;
                         state.lDigitWaitingForPattern = false;
-                        state.consecutive = lTargetLen; // fire immediately this tick
+                        state.consecutive = lTargetLen;
                         tradeTypeRef.current = newTradeType;
                         ct = newTradeType;
 
@@ -1808,7 +1901,6 @@ const AutoTrades = observer(() => {
                             timestamp: Date.now(),
                         });
 
-                        // Fall through to L-ACTIVE signal check below
                         const signalReady = state.consecutive >= lTargetLen;
                         tryExecuteSignal(symbol, state, signalReady);
                         refreshDisplays();
@@ -1816,7 +1908,6 @@ const AutoTrades = observer(() => {
                     }
                 }
 
-                // Pattern not yet met — log and block all trading
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
                     condition: `⏳ L→Digit WAITING: ${lDigitStrategyRef.current.patternType} — need ${lDigitStrategyRef.current.lookbackTicks} ticks [${state.lastDigits.slice(-lDigitStrategyRef.current.lookbackTicks).join(', ')}]`,
@@ -1826,20 +1917,16 @@ const AutoTrades = observer(() => {
                     timestamp: Date.now(),
                 });
                 refreshDisplays();
-                return; // no trading until pattern fires
+                return;
             }
 
-            // ================================================================
-            // ② L-ACTIVE: streak-only signal with the L contract type.
-            //    No strategy-template, no percentage mode, no specialStrategy.
-            // ================================================================
+            // ── L-ACTIVE ────────────────────────────────────────────────────
             if (isLActive) {
                 const targetLen = getEffectiveSignalStreak({
                     trade_type: ct,
                     configured_streak: streakRef.current,
                 });
 
-                // Update digit / direction history for streak counting
                 if (IS_DIRECTION_TYPE[ct]) {
                     const prev = state.prevQuote;
                     const dir: Direction = prev === null ? 0 : quote > prev ? 1 : quote < prev ? -1 : 0;
@@ -1864,7 +1951,6 @@ const AutoTrades = observer(() => {
                     }
                 }
 
-                // Signal = streak only
                 const signalReady = state.consecutive >= targetLen;
 
                 conditionNotifierStore.setCondition({
@@ -1883,16 +1969,12 @@ const AutoTrades = observer(() => {
                 return;
             }
 
-            // ================================================================
-            // ③ NORMAL: full original logic — streak + strategy-template +
-            //    percentage mode + contract-type checks.
-            // ================================================================
+            // ── NORMAL ──────────────────────────────────────────────────────
             const targetLen = getEffectiveSignalStreak({
                 trade_type: ct,
                 configured_streak: streakRef.current,
             });
 
-            // Percentage / strategy-template history
             if (
                 (strategyModeRef.current === 'PERCENTAGE' || strategyTemplateRef.current !== 'STANDARD') &&
                 !modeTransitionLockRef.current
@@ -1901,7 +1983,6 @@ const AutoTrades = observer(() => {
                 appendPercentageQuote(symbol, state, quote, Number.isFinite(epoch) ? epoch : null, ct);
             }
 
-            // Streak counting
             if (IS_DIRECTION_TYPE[ct]) {
                 const prev = state.prevQuote;
                 const dir: Direction = prev === null ? 0 : quote > prev ? 1 : quote < prev ? -1 : 0;
@@ -1998,7 +2079,6 @@ const AutoTrades = observer(() => {
                   ? isPercentageSignalReady(ct, state, activeBarrier) && (!requiresCandle || candleMatch)
                   : state.consecutive >= targetLen && riskFilteredDigitStreakReady && (!requiresCandle || candleMatch);
 
-            // Log condition for debugging
             if (runningRef.current || specialStrategyEvaluation) {
                 const mkt = AUTO_MARKET_LOOKUP.get(symbol);
                 const inv = inverseModeRef.current;
@@ -2329,6 +2409,7 @@ const AutoTrades = observer(() => {
         setTotalTrades(0);
         setCurrentStakeDisplay(baseStake);
         setError(null);
+        setShowTPSLNotification(false);
         refreshDisplays();
     }, [refreshDisplays, selectedMarkets]);
 
@@ -2373,13 +2454,13 @@ const AutoTrades = observer(() => {
             state.lDigitPatternMatched = false;
             state.lDigitWaitingForPattern = false;
         });
-        // Restore original trade type when stopping
         tradeTypeRef.current = originalTradeTypeRef.current;
         setIsRunning(false);
         clearDataRecoveryLoading();
         setCurrentStakeDisplay(configRef.current.stake);
         nextStakeRef.current = configRef.current.stake;
         dashboard.setActiveTradingModule(null);
+        setShowTPSLNotification(false);
         recordDiagnosticEvent('auto_trades.stop_trading', {
             selectedMarkets: selectedMarketsRef.current.length,
             tickStreams: Object.keys(subscriptionsRef.current).length,
@@ -2553,7 +2634,6 @@ const AutoTrades = observer(() => {
     const activeBarrier = getActiveDigitBarrier(tradeType, previousContractResult, consecutiveLossRef.current);
     const isLossActive = previousContractResult === 'loss' || consecutiveLossRef.current > 0;
 
-    // Check if any market has L→Digit active or waiting
     const hasActiveLDigit = Object.values(marketStatesRef.current).some(state => state.lDigitActive);
     const hasWaitingLDigit = Object.values(marketStatesRef.current).some(state => state.lDigitWaitingForPattern);
 
@@ -2954,7 +3034,7 @@ const AutoTrades = observer(() => {
                                     </div>
                                 )}
 
-                                {/* L→Digit Strategy Section - FIXED with BLACK background */}
+                                {/* L→Digit Strategy Section */}
                                 <div className='auto-trades-l-digit-section'>
                                     <div className='auto-trades-l-digit-section__header'>
                                         <span className='auto-trades-l-digit-section__icon'>🎯</span>
@@ -3073,7 +3153,6 @@ const AutoTrades = observer(() => {
                                                             cursor: isRunning ? 'not-allowed' : 'pointer'
                                                         }}
                                                     />
-                                                    {/* FIXED: Black background for lookback value */}
                                                     <div className='auto-trades-l-digit-section__lookback-value' style={{
                                                         display: 'flex',
                                                         alignItems: 'center',
@@ -3084,7 +3163,7 @@ const AutoTrades = observer(() => {
                                                             fontSize: '1.4rem',
                                                             fontWeight: '700',
                                                             color: '#ffffff',
-                                                            backgroundColor: '#1a1a1a',  // ← BLACK background
+                                                            backgroundColor: '#1a1a1a',
                                                             padding: '2px 14px',
                                                             borderRadius: '6px',
                                                             border: '2px solid #2a7de1',
@@ -3106,7 +3185,6 @@ const AutoTrades = observer(() => {
                                                 </div>
                                             </div>
                                             
-                                            {/* FIXED: Black background for Threshold Digit select */}
                                             {(lDigitStrategy.patternType === 'over_to_under' || lDigitStrategy.patternType === 'under_to_over') && (
                                                 <div className='auto-trades-l-digit-section__field'>
                                                     <label className='auto-trades-l-digit-section__label'>Threshold Digit</label>
@@ -3125,8 +3203,8 @@ const AutoTrades = observer(() => {
                                                             fontSize: '1rem',
                                                             fontWeight: '500',
                                                             width: '100%',
-                                                            backgroundColor: '#1a1a1a',  // ← BLACK background
-                                                            color: '#ffffff',  // ← White text
+                                                            backgroundColor: '#1a1a1a',
+                                                            color: '#ffffff',
                                                             cursor: isRunning ? 'not-allowed' : 'pointer',
                                                             boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
                                                             transition: 'all 0.2s ease',
@@ -3148,7 +3226,6 @@ const AutoTrades = observer(() => {
                                                 </div>
                                             )}
                                             
-                                            {/* FIXED: Black background for Barrier Digit select */}
                                             {(lDigitStrategy.patternType === 'match_to_diff' || lDigitStrategy.patternType === 'diff_to_match') && (
                                                 <div className='auto-trades-l-digit-section__field'>
                                                     <label className='auto-trades-l-digit-section__label'>Barrier Digit</label>
@@ -3167,8 +3244,8 @@ const AutoTrades = observer(() => {
                                                             fontSize: '1rem',
                                                             fontWeight: '500',
                                                             width: '100%',
-                                                            backgroundColor: '#1a1a1a',  // ← BLACK background
-                                                            color: '#ffffff',  // ← White text
+                                                            backgroundColor: '#1a1a1a',
+                                                            color: '#ffffff',
                                                             cursor: isRunning ? 'not-allowed' : 'pointer',
                                                             boxShadow: '0 2px 4px rgba(0,0,0,0.3)',
                                                             transition: 'all 0.2s ease',
@@ -3190,12 +3267,11 @@ const AutoTrades = observer(() => {
                                                 </div>
                                             )}
                                             
-                                            {/* FIXED: Black background for hint */}
                                             <p className='auto-trades-l-digit-section__hint' style={{
                                                 fontSize: '0.8rem',
                                                 marginTop: '10px',
                                                 padding: '10px',
-                                                background: '#1a1a1a',  // ← BLACK background
+                                                background: '#1a1a1a',
                                                 borderRadius: '6px',
                                                 borderLeft: '3px solid #2a7de1',
                                                 lineHeight: '1.5',
@@ -3738,6 +3814,21 @@ const AutoTrades = observer(() => {
                     </div>
                 </div>
             </ThemedScrollbars>
+
+            {/* TP/SL Notification */}
+            {showTPSLNotification && (
+                <TPSLNotification
+                    isOpen={showTPSLNotification}
+                    onClose={() => setShowTPSLNotification(false)}
+                    takeProfit={Number(takeProfit)}
+                    stopLoss={Number(stopLoss)}
+                    currency={currency || 'USD'}
+                    totalPnl={totalPnl}
+                    totalTrades={totalTrades}
+                    currentStake={currentStakeDisplay}
+                    onStopTrading={handleStop}
+                />
+            )}
 
             {/* Floating Risk Disclaimer */}
             <button className='auto-trades-disclaimer-btn' onClick={() => setShowDisclaimer(true)}>
