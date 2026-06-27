@@ -1629,6 +1629,7 @@ const AutoTrades = observer(() => {
         [currency, getActiveDigitBarrier, pushContract, setError]
     );
 
+    // ── FIXED: L→Digit Recovery Logic ──────────────────────────────────────
     const handleAfterTrade = useCallback(
         (symbol: string, profit: number) => {
             if (!runningRef.current) return;
@@ -1659,26 +1660,24 @@ const AutoTrades = observer(() => {
             globalTradingRef.current = false;
 
             // ── L→Digit RECOVERY LOGIC ──────────────────────────────────────
-            // Think of this as: Market 1 = original strategy, Market 2 = L→Digit recovery.
-            // After a loss, we EXCLUSIVELY trade Market 2 (L→Digit) until a win.
-            // After a win on Market 2, we return to Market 1 (original strategy).
+            // RULE: After loss → activate Market 2 (L→Digit) EXCLUSIVELY
+            // RULE: After win on Market 2 → return to Market 1 (original strategy)
             const lDigitEnabled = lDigitStrategyRef.current.enabled;
 
             if (profit < 0 && lDigitEnabled) {
-                // LOSS → Activate Market 2 (L→Digit recovery mode)
+                // ── LOSS → Activate Market 2 ──────────────────────────────
+                // Reset all market consecutive counters to prevent stale Market 1 signals
+                Object.keys(marketStatesRef.current).forEach(sym => {
+                    marketStatesRef.current[sym].consecutive = 0;
+                });
+
                 state.lDigitRecoveryActive = true;
                 state.lDigitWaitingForPattern = true;
                 state.lDigitPatternMatched = false;
                 state.lDigitOriginalTradeType = originalTradeTypeRef.current;
                 state.lDigitRecoveryStartTime = Date.now();
-                // Keep trade type ref as original while waiting for L→Digit pattern
+                // Keep trade type as original while waiting for pattern
                 tradeTypeRef.current = originalTradeTypeRef.current;
-
-                // ── CRITICAL: Reset consecutive on ALL markets to prevent any
-                // stale Market 1 signal from firing before pattern is confirmed ──
-                Object.keys(marketStatesRef.current).forEach(sym => {
-                    marketStatesRef.current[sym].consecutive = 0;
-                });
 
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
@@ -1688,13 +1687,14 @@ const AutoTrades = observer(() => {
                     source: 'l-digit-recovery-waiting',
                     timestamp: Date.now(),
                 });
-                
+
                 refreshDisplays();
-                return; // Wait for pattern — do NOT fall through to normal flow
+                return; // EXIT — Market 1 is blocked, wait for pattern
             }
 
-            // ── WIN while recovery waiting → DISABLE recovery, back to Market 1 ──
-            if (profit >= 0 && state.lDigitWaitingForPattern) {
+            // ── WIN on Market 2 ──────────────────────────────────────────────
+            if (profit >= 0 && (state.lDigitWaitingForPattern || state.lDigitPatternMatched || state.lDigitRecoveryActive)) {
+                // Reset recovery state
                 state.lDigitRecoveryActive = false;
                 state.lDigitWaitingForPattern = false;
                 state.lDigitPatternMatched = false;
@@ -1702,24 +1702,9 @@ const AutoTrades = observer(() => {
                 state.lDigitRecoveryStartTime = null;
                 tradeTypeRef.current = originalTradeTypeRef.current;
 
-                conditionNotifierStore.setCondition({
-                    market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `✅ WIN — Returning to Market 1 (${originalTradeTypeRef.current}). L→Digit RECOVERY DISABLED.`,
-                    digits: '',
-                    result: true,
-                    source: 'l-digit-recovery-disabled',
-                    timestamp: Date.now(),
-                });
-            }
-
-            // ── WIN while actively trading with L strategy (Market 2) ──────
-            if (profit >= 0 && state.lDigitPatternMatched) {
-                state.lDigitRecoveryActive = false;
-                state.lDigitWaitingForPattern = false;
-                state.lDigitPatternMatched = false;
-                state.lDigitOriginalTradeType = null;
-                state.lDigitRecoveryStartTime = null;
-                tradeTypeRef.current = originalTradeTypeRef.current;
+                // Reset consecutive losses so Market 1 starts fresh
+                consecutiveLossRef.current = 0;
+                nextStakeRef.current = configRef.current.stake;
 
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
@@ -1729,9 +1714,12 @@ const AutoTrades = observer(() => {
                     source: 'l-digit-recovery-complete',
                     timestamp: Date.now(),
                 });
+
+                refreshDisplays();
+                return;
             }
 
-            // ── LOSS without L→Digit enabled — normal martingale flow ───────
+            // ── LOSS without L→Digit enabled — normal flow ─────────────────
             if (profit < 0 && !lDigitEnabled) {
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
@@ -1743,19 +1731,13 @@ const AutoTrades = observer(() => {
                 });
             }
 
-            // ── Safety: Reset recovery state on win if still flagged active ──
-            if (profit >= 0 && state.lDigitRecoveryActive) {
-                state.lDigitRecoveryActive = false;
-                state.lDigitWaitingForPattern = false;
-                state.lDigitPatternMatched = false;
-                state.lDigitOriginalTradeType = null;
-                state.lDigitRecoveryStartTime = null;
-                tradeTypeRef.current = originalTradeTypeRef.current;
+            // ── WIN on Market 1 — reset everything ──────────────────────────
+            if (profit >= 0 && !state.lDigitRecoveryActive) {
+                consecutiveLossRef.current = 0;
+                nextStakeRef.current = configRef.current.stake;
             }
 
-            if (!unmountedRef.current) {
-                refreshDisplays();
-            }
+            refreshDisplays();
 
             // ── TP/SL check ─────────────────────────────────────────────────
             if ((totalPnlRef.current >= tp || totalPnlRef.current <= -sl) && runningRef.current) {
@@ -1799,21 +1781,19 @@ const AutoTrades = observer(() => {
         [getActiveDigitBarrier]
     );
 
-    // ── FIX 4: tryExecuteSignal hard guard ─────────────────────────────────
-    // This is the final safety net. Even if a caller forgets to check recovery
-    // state, this guard prevents any trade from firing while L→Digit is waiting
-    // for its pattern (Market 2 not yet confirmed).
     const tryExecuteSignal = useCallback(
         (symbol: string, state: MarketState, signalReady: boolean) => {
-            // HARD GUARD: while waiting for L→Digit pattern, NOTHING trades.
-            // Only the lDigitPatternMatched branch in handleTick is allowed through,
-            // because at that point lDigitWaitingForPattern is already set to false.
-            if (
-                lDigitStrategyRef.current.enabled &&
-                state.lDigitWaitingForPattern &&
-                !state.lDigitPatternMatched
-            ) {
-                return;
+            // HARD GUARD: Block Market 1 trades while L→Digit recovery is active or waiting
+            if (lDigitStrategyRef.current.enabled) {
+                // If waiting for pattern → NO trades at all
+                if (state.lDigitWaitingForPattern && !state.lDigitPatternMatched) {
+                    return;
+                }
+                // If recovery is active → ONLY Market 2 trades (handled in handleTick)
+                // This prevents Market 1 from firing while in recovery mode
+                if (state.lDigitRecoveryActive && !state.lDigitPatternMatched) {
+                    return;
+                }
             }
 
             if (
@@ -1847,7 +1827,6 @@ const AutoTrades = observer(() => {
         [executeTrade, handleAfterTrade, refreshDisplays]
     );
 
-    // ── FIX 3: handleCandle — block ALL candle signals during L→Digit recovery ──
     const handleCandle = useCallback(
         (symbol: string, candle: any) => {
             if (!selectedMarketSymbolsRef.current.has(symbol)) return;
@@ -1865,9 +1844,7 @@ const AutoTrades = observer(() => {
 
             const ct = tradeTypeRef.current;
 
-            // Block candle-confirmed trades while L→Digit recovery is in effect.
-            // All three flags block: waiting for pattern, recovery active (but pattern
-            // not yet confirmed in tick handler), and pattern matched (tick handler owns it).
+            // Block candle-confirmed trades during L→Digit recovery
             const recoveryBlocked =
                 lDigitStrategyRef.current.enabled &&
                 (state.lDigitWaitingForPattern ||
@@ -1915,8 +1892,6 @@ const AutoTrades = observer(() => {
             const isRecoveryActive = lDigitEnabled && state.lDigitPatternMatched;
 
             // ── BRANCH 1: RECOVERY WAITING (Market 2 — pattern not yet confirmed) ──
-            // Only update digits/directions and check for pattern match.
-            // NO trading allowed here.
             if (isRecoveryWaiting) {
                 const lastDigit = getLastDigitFromQuote(quote, symbol, pip);
                 state.lastDigits = [...state.lastDigits.slice(-9), lastDigit];
@@ -1979,10 +1954,10 @@ const AutoTrades = observer(() => {
                     timestamp: Date.now(),
                 });
                 refreshDisplays();
-                return; // Early return — Market 1 must not fire
+                return;
             }
 
-            // ── BRANCH 2: RECOVERY ACTIVE (Market 2 — pattern confirmed, trading L strategy) ──
+            // ── BRANCH 2: RECOVERY ACTIVE (Market 2 — pattern confirmed) ──
             if (isRecoveryActive) {
                 const targetLen = getEffectiveSignalStreak({
                     trade_type: ct,
@@ -2028,10 +2003,10 @@ const AutoTrades = observer(() => {
 
                 tryExecuteSignal(symbol, state, signalReady);
                 refreshDisplays();
-                return; // Early return — Market 1 must not fire
+                return;
             }
 
-            // ── BRANCH 3: NORMAL TRADING (Market 1 — no L→Digit recovery active) ──
+            // ── BRANCH 3: NORMAL TRADING (Market 1) ──────────────────────────
             const targetLen = getEffectiveSignalStreak({
                 trade_type: ct,
                 configured_streak: streakRef.current,
@@ -2191,11 +2166,7 @@ const AutoTrades = observer(() => {
                 });
             }
 
-            // ── FIX 2: Block Market 1 trading while L→Digit recovery is in effect ──
-            // lDigitWaitingForPattern or lDigitRecoveryActive means we are post-loss
-            // and exclusively in Market 2 mode. lDigitPatternMatched means Branch 2
-            // above already owns execution and returned early — this line is never
-            // reached in that case, but we guard it anyway for safety.
+            // Block Market 1 trades during L→Digit recovery
             const lDigitBlocksNormalTrade =
                 lDigitStrategyRef.current.enabled &&
                 (state.lDigitWaitingForPattern || state.lDigitPatternMatched || state.lDigitRecoveryActive);
@@ -2900,7 +2871,7 @@ const AutoTrades = observer(() => {
                         <div className='auto-trades-page__sidebar'>
                             {/* Settings card */}
                             <div className='auto-trades-card'>
-                                <h2 className='auto-trades-card__title'>Settings</h2>
+                                <h2 className='auto-trades-card__title'>Market 1 — Contract Type</h2>
 
                                 <div className='auto-trades-config__group'>
                                     <div className='auto-trades-strategy-selector'>
@@ -3118,7 +3089,107 @@ const AutoTrades = observer(() => {
                                     </div>
                                 )}
 
-                                {/* L→Digit Recovery Strategy Section */}
+                                {/* Money settings */}
+                                <div className='auto-trades-config'>
+                                    <div className='auto-trades-config__field'>
+                                        <label>Stake ({currency || 'USD'})</label>
+                                        <Input
+                                            type='number'
+                                            min='0.35'
+                                            step='0.01'
+                                            value={stake}
+                                            onChange={e => setStake(e.target.value)}
+                                            disabled={isRunning}
+                                        />
+                                    </div>
+                                    <div className='auto-trades-config__field'>
+                                        <label>Martingale ×</label>
+                                        <Input
+                                            type='number'
+                                            min='1.01'
+                                            step='0.5'
+                                            value={martingale}
+                                            onChange={e => setMartingale(e.target.value)}
+                                            disabled={isRunning}
+                                        />
+                                    </div>
+                                    <div className='auto-trades-config__field'>
+                                        <label>Take Profit ({currency || 'USD'})</label>
+                                        <Input
+                                            type='number'
+                                            min='0'
+                                            step='1'
+                                            value={takeProfit}
+                                            onChange={e => setTakeProfit(e.target.value)}
+                                            disabled={isRunning}
+                                        />
+                                    </div>
+                                    <div className='auto-trades-config__field'>
+                                        <label>Stop Loss ({currency || 'USD'})</label>
+                                        <Input
+                                            type='number'
+                                            min='0'
+                                            step='1'
+                                            value={stopLoss}
+                                            onChange={e => setStopLoss(e.target.value)}
+                                            disabled={isRunning}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Martingale Strategy Selector */}
+                                <div className='auto-trades-config__group'>
+                                    <div className='auto-trades-martingale-selector'>
+                                        <label>Martingale Strategy</label>
+                                        <select
+                                            className='auto-trades-martingale-selector__select'
+                                            value={martingaleMode}
+                                            onChange={e => setMartingaleMode(normalizeMartingaleMode(e.target.value))}
+                                            disabled={isRunning}
+                                        >
+                                            <option value='no_martingale'>No Martingale</option>
+                                            <option value='after_one_loss'>After 1 loss</option>
+                                            <option value='after_two_losses'>After 2 losses</option>
+                                            <option value='custom_consecutive_loss_trigger'>Custom loss count</option>
+                                        </select>
+                                    </div>
+                                    <p className='auto-trades-martingale__hint'>
+                                        {martingaleMode === 'no_martingale'
+                                            ? 'Martingale is disabled. Stake stays at the base amount.'
+                                            : martingaleMode === 'after_one_loss'
+                                              ? 'Martingale engages immediately after one loss.'
+                                              : martingaleMode === 'after_two_losses'
+                                                ? 'Martingale engages only after two consecutive losses.'
+                                                : `Martingale engages after ${clampConsecutiveLossThreshold(
+                                                      consecutiveLossCount
+                                                  )} consecutive losses.`}
+                                    </p>
+                                    {martingaleMode === 'custom_consecutive_loss_trigger' && (
+                                        <div
+                                            className='auto-trades-config__field auto-trades-config__field--martingale-threshold'
+                                            style={{ marginTop: '0.5rem' }}
+                                        >
+                                            <label>Consecutive losses before martingale</label>
+                                            <Input
+                                                type='number'
+                                                min='1'
+                                                max='10'
+                                                step='1'
+                                                value={consecutiveLossCountInput}
+                                                inputMode='numeric'
+                                                onChange={e =>
+                                                    handleConsecutiveLossCountInputChange(
+                                                        (e.target as HTMLInputElement).value
+                                                    )
+                                                }
+                                                onBlur={commitConsecutiveLossCountInput}
+                                                disabled={isRunning}
+                                            />
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* L→Digit Recovery Strategy Section - Market 2 */}
                                 <div className='auto-trades-l-digit-section'>
                                     <div className='auto-trades-l-digit-section__header'>
                                         <span className='auto-trades-l-digit-section__icon'>🔄</span>
@@ -3257,141 +3328,6 @@ const AutoTrades = observer(() => {
                                                 🎯 Pattern matched: Market 2 trades with opposite contract type<br />
                                                 ✅ Win on Market 2: Returns to Market 1
                                             </p>
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Percentage Mode Configuration */}
-                                {strategyMode === 'PERCENTAGE' && (
-                                    <div className='auto-trades-config__group percentage-mode-config'>
-                                        <div className='auto-trades-config__field'>
-                                            <label>Trade Type</label>
-                                            <select
-                                                className='auto-trades-config__select'
-                                                value={tradeType}
-                                                onChange={e => setTradeType(e.target.value as TradeType)}
-                                                disabled={isRunning}
-                                            >
-                                                <option value='DIGITOVER'>Digit Over</option>
-                                                <option value='DIGITUNDER'>Digit Under</option>
-                                                <option value='DIGITEVEN'>Digit Even/Odd</option>
-                                                <option value='DIGITMATCH'>Digit Match/Differs</option>
-                                                <option value='CALL'>Rise/Fall</option>
-                                                <option value='RUNHIGH'>Higher/Lower</option>
-                                            </select>
-                                        </div>
-                                        <div className='auto-trades-config__field'>
-                                            <label>Confidence Threshold: 80%</label>
-                                            <input
-                                                type='range'
-                                                className='auto-trades-config__slider'
-                                                min='50'
-                                                max='95'
-                                                step='1'
-                                                value={80}
-                                                onChange={() => {}}
-                                                disabled={isRunning}
-                                            />
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Money settings */}
-                                <div className='auto-trades-config'>
-                                    <div className='auto-trades-config__field'>
-                                        <label>Stake ({currency || 'USD'})</label>
-                                        <Input
-                                            type='number'
-                                            min='0.35'
-                                            step='0.01'
-                                            value={stake}
-                                            onChange={e => setStake(e.target.value)}
-                                            disabled={isRunning}
-                                        />
-                                    </div>
-                                    <div className='auto-trades-config__field'>
-                                        <label>Martingale ×</label>
-                                        <Input
-                                            type='number'
-                                            min='1.01'
-                                            step='0.5'
-                                            value={martingale}
-                                            onChange={e => setMartingale(e.target.value)}
-                                            disabled={isRunning}
-                                        />
-                                    </div>
-                                    <div className='auto-trades-config__field'>
-                                        <label>Take Profit ({currency || 'USD'})</label>
-                                        <Input
-                                            type='number'
-                                            min='0'
-                                            step='1'
-                                            value={takeProfit}
-                                            onChange={e => setTakeProfit(e.target.value)}
-                                            disabled={isRunning}
-                                        />
-                                    </div>
-                                    <div className='auto-trades-config__field'>
-                                        <label>Stop Loss ({currency || 'USD'})</label>
-                                        <Input
-                                            type='number'
-                                            min='0'
-                                            step='1'
-                                            value={stopLoss}
-                                            onChange={e => setStopLoss(e.target.value)}
-                                            disabled={isRunning}
-                                        />
-                                    </div>
-                                </div>
-
-                                {/* Martingale Strategy Selector */}
-                                <div className='auto-trades-config__group'>
-                                    <div className='auto-trades-martingale-selector'>
-                                        <label>Martingale Strategy</label>
-                                        <select
-                                            className='auto-trades-martingale-selector__select'
-                                            value={martingaleMode}
-                                            onChange={e => setMartingaleMode(normalizeMartingaleMode(e.target.value))}
-                                            disabled={isRunning}
-                                        >
-                                            <option value='no_martingale'>No Martingale</option>
-                                            <option value='after_one_loss'>After 1 loss</option>
-                                            <option value='after_two_losses'>After 2 losses</option>
-                                            <option value='custom_consecutive_loss_trigger'>Custom loss count</option>
-                                        </select>
-                                    </div>
-                                    <p className='auto-trades-martingale__hint'>
-                                        {martingaleMode === 'no_martingale'
-                                            ? 'Martingale is disabled. Stake stays at the base amount.'
-                                            : martingaleMode === 'after_one_loss'
-                                              ? 'Martingale engages immediately after one loss.'
-                                              : martingaleMode === 'after_two_losses'
-                                                ? 'Martingale engages only after two consecutive losses.'
-                                                : `Martingale engages after ${clampConsecutiveLossThreshold(
-                                                      consecutiveLossCount
-                                                  )} consecutive losses.`}
-                                    </p>
-                                    {martingaleMode === 'custom_consecutive_loss_trigger' && (
-                                        <div
-                                            className='auto-trades-config__field auto-trades-config__field--martingale-threshold'
-                                            style={{ marginTop: '0.5rem' }}
-                                        >
-                                            <label>Consecutive losses before martingale</label>
-                                            <Input
-                                                type='number'
-                                                min='1'
-                                                max='10'
-                                                step='1'
-                                                value={consecutiveLossCountInput}
-                                                inputMode='numeric'
-                                                onChange={e =>
-                                                    handleConsecutiveLossCountInputChange(
-                                                        (e.target as HTMLInputElement).value
-                                                    )
-                                                }
-                                                onBlur={commitConsecutiveLossCountInput}
-                                                disabled={isRunning}
-                                            />
                                         </div>
                                     )}
                                 </div>
@@ -3593,7 +3529,7 @@ const AutoTrades = observer(() => {
                                             )}
 
                                             {/* Progress indicators */}
-                                            {isRunning && !isWaiting && (
+                                            {isRunning && !isWaiting && !isM2Active && (
                                                 <div className='auto-trades-market__dots'>
                                                     {Array.from({ length: streakNum }).map((_, i) => (
                                                         <div
@@ -3606,6 +3542,25 @@ const AutoTrades = observer(() => {
                                                     ))}
                                                     <span className='auto-trades-market__dots-label'>
                                                         {m.consecutive}/{streakNum}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {/* Progress indicators for Market 2 */}
+                                            {isRunning && isM2Active && (
+                                                <div className='auto-trades-market__dots'>
+                                                    {Array.from({ length: streakNum }).map((_, i) => (
+                                                        <div
+                                                            key={i}
+                                                            className={classNames('auto-trades-market__dot', {
+                                                                'auto-trades-market__dot--filled': i < dots,
+                                                                'auto-trades-market__dot--ready': i < dots && isReady,
+                                                            })}
+                                                            style={{ background: i < dots ? '#ff9800' : undefined }}
+                                                        />
+                                                    ))}
+                                                    <span className='auto-trades-market__dots-label' style={{ color: '#ff9800' }}>
+                                                        M2 {m.consecutive}/{streakNum}
                                                     </span>
                                                 </div>
                                             )}
