@@ -557,3 +557,210 @@
         }
     }
 }
+// TP/SL Popup Styles
+.popup--tp-sl {
+    .popup-content {
+        max-width: 450px;
+        background: linear-gradient(145deg, #1a1a2e, #16213e);
+        border: 1px solid #0f3460;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+        padding: 20px;
+        
+        .popup-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #0f3460;
+            padding-bottom: 10px;
+            
+            h3 {
+                color: #00d4ff;
+                font-size: 18px;
+                margin: 0;
+                text-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+            }
+            
+            .close-btn {
+                background: none;
+                border: none;
+                color: #ff6b6b;
+                font-size: 24px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+                
+                &:hover {
+                    color: #ff0000;
+                    transform: rotate(90deg);
+                }
+            }
+        }
+        
+        .tp-sl-settings {
+            .setting-row {
+                display: flex;
+                align-items: center;
+                margin-bottom: 16px;
+                gap: 10px;
+                
+                label {
+                    color: #a0aec0;
+                    font-size: 14px;
+                    font-weight: 600;
+                    min-width: 120px;
+                }
+                
+                .tp-sl-input {
+                    flex: 1;
+                    background: rgba(15, 52, 96, 0.3);
+                    border: 1px solid #0f3460;
+                    border-radius: 6px;
+                    padding: 8px 12px;
+                    color: #e2e8f0;
+                    font-size: 14px;
+                    transition: all 0.3s ease;
+                    
+                    &:focus {
+                        outline: none;
+                        border-color: #00d4ff;
+                        box-shadow: 0 0 10px rgba(0, 212, 255, 0.2);
+                    }
+                    
+                    &::placeholder {
+                        color: #4a5568;
+                    }
+                }
+                
+                .currency-label {
+                    color: #a0aec0;
+                    font-size: 14px;
+                    font-weight: 600;
+                    min-width: 40px;
+                }
+            }
+            
+            .tp-sl-status {
+                display: flex;
+                justify-content: center;
+                margin: 16px 0;
+                
+                .status-badge {
+                    padding: 6px 16px;
+                    border-radius: 20px;
+                    font-size: 14px;
+                    font-weight: 700;
+                    letter-spacing: 0.5px;
+                    
+                    &.active {
+                        background: rgba(72, 187, 120, 0.2);
+                        color: #48bb78;
+                        border: 1px solid #48bb78;
+                        animation: pulse 2s infinite;
+                    }
+                    
+                    &.inactive {
+                        background: rgba(160, 174, 192, 0.1);
+                        color: #a0aec0;
+                        border: 1px solid #4a5568;
+                    }
+                }
+            }
+            
+            .tp-sl-actions {
+                display: flex;
+                gap: 10px;
+                margin-top: 16px;
+                
+                .update-btn, .reset-btn {
+                    flex: 1;
+                    padding: 10px;
+                    border: none;
+                    border-radius: 6px;
+                    font-size: 14px;
+                    font-weight: 600;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    
+                    &:hover {
+                        transform: translateY(-2px);
+                        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+                    }
+                    
+                    &:active {
+                        transform: translateY(0);
+                    }
+                }
+                
+                .update-btn {
+                    background: linear-gradient(135deg, #00d4ff, #0090ff);
+                    color: white;
+                    
+                    &:hover {
+                        background: linear-gradient(135deg, #00e5ff, #00a0ff);
+                    }
+                }
+                
+                .reset-btn {
+                    background: rgba(160, 174, 192, 0.2);
+                    color: #a0aec0;
+                    border: 1px solid #4a5568;
+                    
+                    &:hover {
+                        background: rgba(160, 174, 192, 0.3);
+                        color: #e2e8f0;
+                    }
+                }
+            }
+        }
+    }
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.7;
+    }
+    100% {
+        opacity: 1;
+    }
+}
+
+// Mobile responsiveness for TP/SL popup
+@media (max-width: 768px) {
+    .popup--tp-sl {
+        .popup-content {
+            max-width: 95%;
+            margin: 10px;
+            padding: 16px;
+            
+            .tp-sl-settings {
+                .setting-row {
+                    flex-direction: column;
+                    align-items: stretch;
+                    
+                    label {
+                        min-width: unset;
+                        margin-bottom: 4px;
+                    }
+                    
+                    .currency-label {
+                        min-width: unset;
+                        text-align: right;
+                        margin-top: 4px;
+                    }
+                }
+                
+                .tp-sl-actions {
+                    flex-direction: column;
+                    
+                    .update-btn, .reset-btn {
+                        width: 100%;
+                    }
+                }
+            }
+        }
+    }
+}
