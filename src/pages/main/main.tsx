@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import classNames from 'classnames';
 import { observer } from 'mobx-react-lite';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -85,7 +85,7 @@ const TRADING_WORDS = [
     'MOMENTUM', 'VOLUME', 'OPEN', 'CLOSE', 'HIGH', 'LOW', 'RALLY', 'CRASH'
 ];
 
-// 60 different colors for dollar icons
+// 60 different colors
 const COLORS = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD',
     '#FF8A5C', '#6C5CE7', '#A29BFE', '#FD79A8', '#00B894', '#00CEC9',
@@ -103,12 +103,11 @@ const Loader: React.FC<LoaderProps> = ({
     progress: externalProgress, 
     message = 'Loading...', 
     showProgress = true,
-    totalDuration = 9
+    totalDuration = 5
 }) => {
     const [internalProgress, setInternalProgress] = useState(0);
     const [currentMessage, setCurrentMessage] = useState(message);
     const [floatingItems, setFloatingItems] = useState<FloatingItem[]>([]);
-    const containerRef = useRef<HTMLDivElement>(null);
     const progress = externalProgress !== undefined ? externalProgress : internalProgress;
 
     // Generate floating items on mount
@@ -119,13 +118,13 @@ const Loader: React.FC<LoaderProps> = ({
                 id: i,
                 x: Math.random() * 100,
                 y: Math.random() * 100,
-                size: Math.random() * 30 + 20,
+                size: Math.random() * 28 + 16,
                 color: COLORS[i % COLORS.length],
                 speed: Math.random() * 0.5 + 0.3,
                 rotation: Math.random() * 360,
                 word: TRADING_WORDS[i % TRADING_WORDS.length],
                 delay: Math.random() * 3,
-                opacity: Math.random() * 0.4 + 0.2
+                opacity: Math.random() * 0.4 + 0.15
             });
         }
         setFloatingItems(items);
@@ -133,18 +132,16 @@ const Loader: React.FC<LoaderProps> = ({
 
     // Progress messages based on percentage
     const getProgressMessage = (progressValue: number): string => {
-        if (progressValue < 8) return '🎯 Initializing Trading System...';
-        if (progressValue < 16) return '📊 Loading Market Data...';
-        if (progressValue < 24) return '🔗 Connecting to Exchanges...';
-        if (progressValue < 32) return '⚡ Powering Up Trading Engine...';
-        if (progressValue < 40) return '📈 Configuring Bot Strategies...';
-        if (progressValue < 48) return '🔄 Analyzing Market Trends...';
-        if (progressValue < 56) return '⚙️ Setting Up Algorithms...';
-        if (progressValue < 64) return '📊 Optimizing Performance...';
-        if (progressValue < 72) return '🧠 Loading AI Predictions...';
-        if (progressValue < 80) return '💹 Calibrating Risk Management...';
-        if (progressValue < 88) return '🚀 Finalizing Launch Sequence...';
-        if (progressValue < 96) return '⚡ Almost Ready to Trade...';
+        if (progressValue < 10) return '🚀 Initializing Trading System...';
+        if (progressValue < 20) return '📊 Loading Market Data...';
+        if (progressValue < 30) return '🔗 Connecting to Exchanges...';
+        if (progressValue < 40) return '⚡ Powering Up Trading Engine...';
+        if (progressValue < 50) return '📈 Configuring Bot Strategies...';
+        if (progressValue < 60) return '🔄 Analyzing Market Trends...';
+        if (progressValue < 70) return '⚙️ Setting Up Algorithms...';
+        if (progressValue < 80) return '🧠 Loading AI Predictions...';
+        if (progressValue < 90) return '💹 Calibrating Risk Management...';
+        if (progressValue < 100) return '🚀 Almost Ready...';
         return '✅ Ready to Trade!';
     };
 
@@ -174,7 +171,7 @@ const Loader: React.FC<LoaderProps> = ({
     }, [externalProgress, totalDuration]);
 
     return (
-        <div className="loader-overlay" ref={containerRef}>
+        <div className="loader-overlay">
             {/* Floating Background Elements */}
             <div className="loader-background">
                 {floatingItems.map((item) => (
@@ -188,7 +185,7 @@ const Loader: React.FC<LoaderProps> = ({
                             color: item.color,
                             opacity: item.opacity,
                             animationDelay: `${item.delay}s`,
-                            animationDuration: `${15 / item.speed}s`,
+                            animationDuration: `${12 / item.speed}s`,
                             transform: `rotate(${item.rotation}deg)`,
                             textShadow: `0 0 20px ${item.color}40`
                         }}
@@ -411,7 +408,7 @@ const Loader: React.FC<LoaderProps> = ({
                 {/* Time Remaining */}
                 <div className="loader-time-remaining">
                     <span className="loader-time-text">
-                        {progress < 100 ? `⏳ ${Math.ceil((100 - progress) / (100 / totalDuration))}s to launch` : '🚀 Launching...'}
+                        {progress < 100 ? `⏳ ${Math.ceil((100 - progress) / (100 / totalDuration))}s` : '🚀 Launching...'}
                     </span>
                 </div>
             </div>
@@ -545,13 +542,11 @@ const AppWrapper = observer(() => {
     const [left_tab_shadow, setLeftTabShadow] = useState<boolean>(false);
     const [right_tab_shadow, setRightTabShadow] = useState<boolean>(false);
 
-    // Loader states
+    // Loader states - 5 seconds
     const [showGlobalLoader, setShowGlobalLoader] = useState<boolean>(true);
     const [loaderProgress, setLoaderProgress] = useState<number>(0);
     const [loaderMessage, setLoaderMessage] = useState<string>('Initializing...');
-    const [loaderDuration] = useState<number>(() => {
-        return Math.floor(Math.random() * (10 - 8 + 1)) + 8;
-    });
+    const loaderDuration = 5;
 
     // Trade type modal state
     const [tradeTypeModalState, setTradeTypeModalState] = useState(getModalState());
@@ -579,7 +574,7 @@ const AppWrapper = observer(() => {
     };
     const active_hash_tab = GetHashedValue(active_tab);
 
-    // Force loader with random duration between 8-10 seconds
+    // Force 5-second loader
     useEffect(() => {
         setShowGlobalLoader(true);
         setLoaderMessage('🚀 Launching RAMFX Trading System...');
@@ -592,9 +587,16 @@ const AppWrapper = observer(() => {
             const progress = Math.min((elapsed / totalDuration) * 100, 100);
             setLoaderProgress(progress);
             
+            // Update message based on progress
+            if (progress < 20) setLoaderMessage('🚀 Initializing Trading System...');
+            else if (progress < 40) setLoaderMessage('📊 Loading Market Data...');
+            else if (progress < 60) setLoaderMessage('⚡ Powering Up Trading Engine...');
+            else if (progress < 80) setLoaderMessage('📈 Configuring Bot Strategies...');
+            else if (progress < 100) setLoaderMessage('🔄 Analyzing Market Trends...');
+            else setLoaderMessage('✅ Ready to Trade! 🚀');
+            
             if (progress >= 100) {
                 clearInterval(interval);
-                setLoaderMessage('✅ Ready to Trade! 🚀');
                 setTimeout(() => {
                     setShowGlobalLoader(false);
                     setLoaderProgress(0);
@@ -603,7 +605,7 @@ const AppWrapper = observer(() => {
         }, 50);
 
         return () => clearInterval(interval);
-    }, [loaderDuration]);
+    }, []);
 
     // Set up modal state change listener
     useEffect(() => {
@@ -859,7 +861,7 @@ const AppWrapper = observer(() => {
     
     return (
         <React.Fragment>
-            {/* Global Loader */}
+            {/* Global Loader - 5 seconds */}
             {showGlobalLoader && (
                 <Loader 
                     progress={loaderProgress} 
