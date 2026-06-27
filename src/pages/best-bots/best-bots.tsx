@@ -80,14 +80,21 @@ const RISK_MANAGERS_BOTS: TBot[] = [
 const TERMICA_BOTS: TBot[] = [
     {
         id: 'termica-wealth',
-        name: '🤑Wealth Bot Best of the Best 2026 v3 🤑',
+        name: '1.🤑Wealth Bot Best of the Best 2026 v3 🤑',
         file: 'Wealth Generator.xml',
         description: 'Ramzfx wealth strategy focused on structured account growth. Optimised for steady compounding with aggressive pullback entries.',
         emoji: '💰',
     },
     {
+        id: 'termica-shield',
+        name: '2.Ramzfx Shield Bot',
+        file: 'Kiazala v1 by The Risk Manager (1).xml',
+        description: 'Risk-aware Ramzfx bot built for disciplined capital protection. Prioritises capital preservation while seeking consistent returns.',
+        emoji: '🛡️',
+    },
+    {
         id: 'termica-pro',
-        name: 'Pro Bot',
+        name: '3.Pro Bot',
         file: 'D1-BY MR.DUKE(+254702490526).xml',
         description: 'Professional Ramzfx strategy tuned for consistent signal execution. Uses advanced confirmation filters for high-probability trades.',
         emoji: '🔥',
@@ -95,7 +102,7 @@ const TERMICA_BOTS: TBot[] = [
     {
         id: 'termica-classic',
         name: 'Classic Bot',
-        file: 'D2 BY--MR.DUKE(+254702490526) (1).xml',
+        file: '4.D2 BY--MR.DUKE(+254702490526) (1).xml',
         description: 'Classic Ramzfx setup with simple, reliable trade logic. Perfect for beginners seeking consistent results with minimal complexity.',
         emoji: '⭐',
     },
