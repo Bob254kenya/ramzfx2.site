@@ -1,5 +1,3 @@
-// auto-trades.scss
-
 @use 'components/shared/styles/mixins' as *;
 
 // ── Design tokens ────────────────────────────────────────────────────────────
@@ -248,26 +246,12 @@ $at-text-faint: #2c4060;
         margin-bottom: 0.5rem;
     }
 
-    &__label-icon {
-        font-size: 0.9rem;
-    }
-
-    &__label-value {
-        margin-left: auto;
-        background: #ff9800;
-        color: #1a1a1a;
-        padding: 0.2rem 0.6rem;
-        border-radius: 20px;
-        font-size: 0.75rem;
-        font-weight: 700;
-    }
-
     &__lookback {
         position: relative;
         padding: 0.5rem 0;
     }
 
-    &__slider {
+    &__range {
         width: 100%;
         height: 6px;
         -webkit-appearance: none;
@@ -317,28 +301,6 @@ $at-text-faint: #2c4060;
                 cursor: not-allowed;
                 transform: none !important;
             }
-        }
-    }
-
-    &__lookback-markers {
-        display: flex;
-        justify-content: space-between;
-        margin-top: 0.5rem;
-        padding: 0 0.25rem;
-    }
-
-    &__lookback-marker {
-        font-size: 0.7rem;
-        color: #666;
-        transition: color 0.2s, transform 0.2s;
-        padding: 0.1rem 0.3rem;
-        border-radius: 4px;
-        
-        &--active {
-            color: #ff9800;
-            font-weight: 600;
-            background: rgba(255, 152, 0, 0.15);
-            transform: scale(1.1);
         }
     }
 
@@ -825,8 +787,8 @@ $at-text-faint: #2c4060;
         animation: at-pulse 1s infinite;
     }
 
-    &--cooldown {
-        background: $at-crimson;
+    &--waiting {
+        background: #f5b342;
         animation: at-pulse 0.6s infinite;
     }
 
@@ -948,96 +910,6 @@ $at-text-faint: #2c4060;
             opacity: 0.9;
             box-shadow: 0 6px 24px rgba(196, 32, 56, 0.4);
         }
-    }
-
-    &__ai {
-        width: 10rem;
-        height: 8.6rem;
-        border: 0;
-        background: transparent;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 0.4rem;
-        cursor: pointer;
-        position: relative;
-
-        &:disabled {
-            opacity: 0.45;
-            cursor: not-allowed;
-        }
-
-        &:not(:disabled):hover .auto-trades-controls__ai-orbit {
-            transform: translateY(-1px) scale(1.04);
-            box-shadow: 0 0 0 0.8rem rgba(132, 91, 205, 0.12),
-                        0 1rem 2.8rem rgba(132, 91, 205, 0.36),
-                        inset 0 0.2rem 0.8rem rgba(255, 255, 255, 0.24);
-        }
-    }
-
-    &__ai-orbit {
-        width: 7rem;
-        height: 7rem;
-        border-radius: 50%;
-        display: grid;
-        place-items: center;
-        position: relative;
-        color: #fff;
-        font-family: Georgia, 'Times New Roman', serif;
-        font-weight: 800;
-        background: radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.32), transparent 28%),
-                    radial-gradient(circle at 52% 58%, #8b57c8 0, #7442b8 50%, #57339b 100%);
-        box-shadow: 0 0 0 1.2rem rgba(132, 91, 205, 0.08),
-                    0 1rem 3rem rgba(132, 91, 205, 0.32),
-                    inset 0 0.2rem 0.8rem rgba(255, 255, 255, 0.22);
-        transition: transform 0.16s, box-shadow 0.18s;
-    }
-
-    &__ai-text {
-        font-size: 3.4rem;
-        line-height: 1;
-        letter-spacing: 0;
-        text-shadow: 0 0.2rem 0.4rem rgba(40, 20, 84, 0.35);
-    }
-
-    &__ai-dot {
-        width: 1.2rem;
-        height: 1.2rem;
-        background: #00c983;
-        border: 0.2rem solid #392364;
-        border-radius: 50%;
-        position: absolute;
-        top: 1rem;
-        right: 0.8rem;
-        box-shadow: 0 0 0.6rem rgba(0, 201, 131, 0.55);
-    }
-
-    &__ai-label {
-        font-size: 1.3rem;
-        font-weight: 700;
-        color: $at-text-dim;
-    }
-}
-
-// ── Cooldown banner ──────────────────────────────────────────────────────────
-
-.auto-trades-cooldown {
-    display: flex;
-    align-items: center;
-    gap: 0.8rem;
-    padding: 1.2rem 1.6rem;
-    background: $at-crimson-faint;
-    border: 1px solid rgba(196, 32, 56, 0.2);
-    border-radius: 0.8rem;
-    font-size: 1.4rem;
-    color: $at-crimson-light;
-    font-weight: 600;
-    margin-bottom: 1.6rem;
-
-    &__icon {
-        font-size: 1.6rem;
-        flex-shrink: 0;
     }
 }
 
@@ -1243,15 +1115,16 @@ $at-text-faint: #2c4060;
         animation: at-pulse 2s infinite;
     }
 
-    &__cooldown-badge {
-        font-size: 1.1rem;
+    &__waiting-badge {
+        background: #f5b342;
+        color: #1a1a1a;
+        font-size: 10px;
         font-weight: 700;
-        color: $at-crimson-light;
-        background: $at-crimson-faint;
-        border: 1px solid rgba(196, 32, 56, 0.2);
-        padding: 0.2rem 0.8rem;
-        border-radius: 2rem;
-        animation: at-pulse 0.6s infinite;
+        padding: 2px 10px;
+        border-radius: 20px;
+        margin-left: 8px;
+        letter-spacing: 0.3px;
+        text-transform: uppercase;
     }
 
     &__actions {
@@ -1340,18 +1213,17 @@ $at-text-faint: #2c4060;
         box-shadow: 0 0 0 1px rgba(217, 146, 26, 0.2);
     }
 
+    &--l-digit-waiting {
+        border-color: #f5b342;
+        box-shadow: 0 0 20px rgba(245, 179, 66, 0.1);
+    }
+
     &--win {
         border-color: rgba(0, 204, 122, 0.2);
     }
 
     &--loss {
         border-color: rgba(196, 32, 56, 0.25);
-    }
-
-    &--cooldown {
-        border-color: rgba(196, 32, 56, 0.15);
-        background: rgba(196, 32, 56, 0.04);
-        opacity: 0.6;
     }
 
     &__top {
@@ -1410,6 +1282,11 @@ $at-text-faint: #2c4060;
             background: $at-amber-glow;
             color: $at-amber;
             border-color: rgba(217, 146, 26, 0.25);
+        }
+
+        &--waiting {
+            background: #f5b342;
+            color: #1a1a1a;
         }
     }
 
@@ -1493,6 +1370,21 @@ $at-text-faint: #2c4060;
     &__last-loss {
         color: $at-crimson;
         font-weight: 700;
+    }
+
+    &__waiting-status {
+        background: #1a1a1a;
+        border-left: 3px solid #f5b342;
+        padding: 8px 12px;
+        margin-top: 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        color: #e0e0e0;
+        line-height: 1.4;
+
+        small {
+            color: #8fa0b5;
+        }
     }
 
     &__btn {
@@ -1686,73 +1578,6 @@ $at-text-faint: #2c4060;
     }
 }
 
-// ── AI Modal ─────────────────────────────────────────────────────────────────
-
-.auto-trades-ai-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 1000;
-    background: rgba(2, 6, 14, 0.72);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 1.6rem;
-}
-
-.auto-trades-ai-modal {
-    width: min(58rem, 100%);
-    max-height: calc(100vh - 3.2rem);
-    overflow-y: auto;
-    background: $at-bg-card;
-    border: 1px solid rgba(132, 91, 205, 0.45);
-    border-radius: 1.2rem;
-    box-shadow: 0 2.2rem 6rem rgba(0, 0, 0, 0.48);
-    padding: 1.8rem;
-
-    &__header {
-        display: flex;
-        align-items: center;
-        gap: 1.2rem;
-        margin-bottom: 1.4rem;
-    }
-
-    &__title {
-        color: $at-text;
-        font-size: 1.8rem;
-        margin: 0;
-        flex: 1;
-    }
-
-    &__textarea {
-        width: 100%;
-        min-height: 14rem;
-        resize: vertical;
-        border-radius: 0.8rem;
-        border: 1px solid $at-border;
-        background: $at-bg-base;
-        color: $at-text;
-        padding: 1.2rem;
-        font-size: 1.4rem;
-    }
-
-    &__footer {
-        display: flex;
-        gap: 1rem;
-        justify-content: flex-end;
-        margin-top: 1.4rem;
-    }
-
-    &__primary {
-        background: linear-gradient(135deg, #7442b8, #9c6fdd);
-        color: #fff;
-        border: 0;
-        border-radius: 0.8rem;
-        padding: 1rem 1.6rem;
-        font-weight: 700;
-        cursor: pointer;
-    }
-}
-
 // ── Animations ───────────────────────────────────────────────────────────────
 
 @keyframes at-pulse {
@@ -1767,6 +1592,382 @@ $at-text-faint: #2c4060;
 @keyframes at-trade-pulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(46, 127, 216, 0.2); }
     50% { box-shadow: 0 0 0 6px rgba(46, 127, 216, 0); }
+}
+
+// ── TP/SL Notification Styles ───────────────────────────────────────────────
+// Size: 250px × 290px (width +50, height +40 from original)
+// Shows ONLY Take Profit notification prominently
+// Stop Loss is only referenced, not displayed as a row
+// Rich emoji styling throughout
+
+.tp-sl-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    animation: tpSlFadeIn 0.25s ease;
+}
+
+.tp-sl-card {
+    width: 250px;      // +50 from original
+    height: 290px;     // +40 from original
+    background: linear-gradient(145deg, #1a1e28, #0f131c);
+    border-radius: 20px;
+    padding: 16px 16px 18px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.9), 0 0 0 1px rgba(255, 255, 255, 0.06);
+    display: flex;
+    flex-direction: column;
+    animation: tpSlSlideUp 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    position: relative;
+    overflow: hidden;
+
+    // Premium border glow
+    &::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: 20px;
+        padding: 1.5px;
+        background: linear-gradient(145deg, rgba(255, 255, 255, 0.08), rgba(76, 175, 84, 0.3), transparent 70%);
+        -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+        -webkit-mask-composite: xor;
+        mask-composite: exclude;
+        pointer-events: none;
+    }
+
+    &__header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding-bottom: 12px;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        flex-shrink: 0;
+    }
+
+    &__icon {
+        font-size: 20px;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #2a3344, #1a222f);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    }
+
+    &__title {
+        font-size: 14px;
+        font-weight: 700;
+        color: #f0f4fc;
+        letter-spacing: 0.3px;
+        flex: 1;
+        margin: 0;
+        line-height: 1.2;
+        text-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    &__close {
+        background: transparent;
+        border: none;
+        color: #6a7a8e;
+        font-size: 16px;
+        cursor: pointer;
+        padding: 4px 8px;
+        border-radius: 8px;
+        transition: all 0.15s;
+        line-height: 1;
+
+        &:hover {
+            background: #2a3344;
+            color: #f0f4fc;
+            transform: scale(1.05);
+        }
+    }
+
+    &__body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px 0 8px;
+        overflow: hidden;
+    }
+
+    // TP Row - prominently styled
+    &__row {
+        background: linear-gradient(135deg, #0f1a18, #0a1412);
+        border-radius: 14px;
+        padding: 12px 14px;
+        border-left: 4px solid transparent;
+        transition: all 0.3s ease;
+
+        &--tp {
+            border-left-color: #4caf84;
+            
+            .tp-sl-card__row-badge {
+                color: #4caf84;
+                background: rgba(76, 175, 132, 0.15);
+                padding: 1px 8px;
+                border-radius: 12px;
+                font-size: 8px;
+                font-weight: 600;
+                text-transform: uppercase;
+            }
+        }
+
+        &--active {
+            background: rgba(76, 175, 132, 0.12);
+            border-left-width: 4px;
+            box-shadow: 0 0 20px rgba(76, 175, 132, 0.05);
+        }
+
+        &-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 10px;
+            font-weight: 600;
+            color: #8fa0b5;
+            letter-spacing: 0.3px;
+            margin-bottom: 4px;
+        }
+
+        &-value {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+    }
+
+    &__amount {
+        font-size: 16px;
+        font-weight: 700;
+        color: #4caf84;
+        letter-spacing: -0.2px;
+    }
+
+    &__status {
+        font-size: 9px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        padding: 2px 10px;
+        border-radius: 30px;
+        background: rgba(255, 255, 255, 0.04);
+
+        &--hit {
+            color: #4caf84;
+            background: rgba(76, 175, 132, 0.15);
+        }
+
+        &--miss {
+            color: #5f7289;
+        }
+    }
+
+    // Progress bar
+    &__progress {
+        margin-top: 8px;
+        height: 3px;
+        background: rgba(255, 255, 255, 0.06);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+
+    &__progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #4caf84, #66bb6a);
+        border-radius: 4px;
+        transition: width 0.5s ease;
+
+        &--hit {
+            background: linear-gradient(90deg, #4caf84, #2e7d5e);
+            animation: tpProgressPulse 1s ease-in-out infinite;
+        }
+    }
+
+    // Summary section
+    &__summary {
+        margin-top: 4px;
+        padding-top: 8px;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    &__pnl {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+
+        &-label {
+            font-size: 10px;
+            font-weight: 600;
+            color: #6a7a8e;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        &-value {
+            font-size: 14px;
+            font-weight: 700;
+            letter-spacing: -0.1px;
+
+            &--profit {
+                color: #4caf84;
+            }
+            &--loss {
+                color: #e35f5f;
+            }
+            &--neutral {
+                color: #8fa0b5;
+            }
+        }
+
+        &-percent {
+            font-size: 10px;
+            font-weight: 400;
+            opacity: 0.6;
+            margin-left: 4px;
+        }
+    }
+
+    &__trades {
+        display: flex;
+        gap: 6px;
+        font-size: 9px;
+        color: #5f7289;
+        margin-top: 3px;
+        align-items: center;
+    }
+
+    &__stake {
+        color: #7f8fa3;
+    }
+
+    // Stop Loss reference (muted, informational only)
+    &__sl-reference {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 9px;
+        color: #5f7289;
+        margin-top: 4px;
+        padding: 4px 8px;
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+
+    &__sl-status {
+        font-weight: 600;
+        padding: 1px 6px;
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.04);
+
+        &--active {
+            color: #e35f5f;
+            background: rgba(227, 95, 95, 0.12);
+        }
+    }
+
+    &__footer {
+        display: flex;
+        gap: 6px;
+        padding-top: 10px;
+        border-top: 1px solid rgba(255, 255, 255, 0.05);
+        flex-shrink: 0;
+    }
+
+    &__btn {
+        flex: 1;
+        padding: 7px 0;
+        border: none;
+        border-radius: 30px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        cursor: pointer;
+        transition: all 0.15s;
+
+        &--dismiss {
+            background: #2a3344;
+            color: #b3c2d4;
+
+            &:hover {
+                background: #3a4558;
+                color: #f0f4fc;
+            }
+        }
+
+        &--stop {
+            background: linear-gradient(135deg, #e35f5f, #c44a4a);
+            color: #fff;
+
+            &:hover {
+                background: linear-gradient(135deg, #d14a4a, #b33a3a);
+                transform: scale(0.97);
+            }
+        }
+    }
+}
+
+@keyframes tpSlFadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes tpSlSlideUp {
+    from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.96);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+@keyframes tpProgressPulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: 0.6;
+    }
+}
+
+// ── L→Digit Waiting Banner ───────────────────────────────────────────────────
+
+.auto-trades-l-digit-waiting {
+    background: #1a1a1a;
+    border: 2px solid #f5b342;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin: 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #e0e0e0;
+
+    &__icon {
+        font-size: 20px;
+    }
+
+    strong {
+        color: #ffffff;
+    }
 }
 
 // ── Mobile overrides ─────────────────────────────────────────────────────────
@@ -1819,822 +2020,15 @@ $at-text-faint: #2c4060;
             flex: 1;
             min-height: 48px;
         }
-
-        &__ai {
-            position: fixed;
-            left: var(--auto-trades-ai-fab-left, auto);
-            top: var(--auto-trades-ai-fab-top, auto);
-            width: 6.4rem;
-            height: 6.4rem;
-            flex: 0 0 auto;
-            border-radius: 50%;
-            background: transparent;
-        }
     }
 
     .auto-trades-markets__grid {
         grid-template-columns: 1fr;
     }
-}
-// auto-trades.scss - Add these styles at the end
 
-// ============================================================
-// TP/SL Notification Styles
-// ============================================================
-.tp-sl-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  animation: tpSlFadeIn 0.2s ease;
-}
-
-.tp-sl-card {
-  width: 200px;
-  height: 250px;
-  background: #1a1e26;
-  border-radius: 18px;
-  padding: 14px 14px 16px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05);
-  display: flex;
-  flex-direction: column;
-  animation: tpSlSlideUp 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-  position: relative;
-  overflow: hidden;
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 18px;
-    padding: 1px;
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.06), transparent 70%);
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
-  }
-
-  &__header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    flex-shrink: 0;
-  }
-
-  &__icon {
-    font-size: 16px;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: #262e3a;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  &__title {
-    font-size: 13px;
-    font-weight: 600;
-    color: #eef2f8;
-    letter-spacing: 0.2px;
-    flex: 1;
-    margin: 0;
-    line-height: 1.2;
-  }
-
-  &__close {
-    background: transparent;
-    border: none;
-    color: #6a7a8e;
-    font-size: 14px;
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 6px;
-    transition: all 0.15s;
-    line-height: 1;
-
-    &:hover {
-      background: #262e3a;
-      color: #eef2f8;
+    .tp-sl-card {
+        width: 220px;
+        height: 260px;
+        padding: 14px 14px 16px;
     }
-  }
-
-  &__body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px 0 8px;
-    overflow: hidden;
-  }
-
-  &__row {
-    background: #13181f;
-    border-radius: 12px;
-    padding: 10px 12px;
-    border-left: 3px solid transparent;
-    transition: all 0.2s;
-
-    &--tp {
-      border-left-color: #4caf84;
-      background: #0f1a18;
-
-      .tp-sl-card__row-badge {
-        color: #4caf84;
-      }
-    }
-
-    &--sl {
-      border-left-color: #e35f5f;
-      background: #1a1214;
-
-      .tp-sl-card__row-badge {
-        color: #e35f5f;
-      }
-    }
-
-    &--active {
-      background: rgba(255, 255, 255, 0.04);
-      border-left-width: 4px;
-    }
-
-    &-label {
-      display: flex;
-      justify-content: space-between;
-      font-size: 10px;
-      font-weight: 500;
-      color: #8fa0b5;
-      letter-spacing: 0.2px;
-      margin-bottom: 4px;
-    }
-
-    &-badge {
-      font-size: 8px;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-      opacity: 0.7;
-    }
-
-    &-value {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-  }
-
-  &__amount {
-    font-size: 15px;
-    font-weight: 600;
-    color: #f0f4fc;
-    letter-spacing: -0.2px;
-  }
-
-  &__status {
-    font-size: 9px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    padding: 2px 10px;
-    border-radius: 30px;
-    background: rgba(255, 255, 255, 0.04);
-
-    &--hit {
-      color: #f5b342;
-      background: rgba(245, 179, 66, 0.12);
-    }
-
-    &--miss {
-      color: #5f7289;
-    }
-  }
-
-  &__summary {
-    margin-top: 2px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
-  }
-
-  &__pnl {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-
-    &-label {
-      font-size: 10px;
-      font-weight: 500;
-      color: #6a7a8e;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-    }
-
-    &-value {
-      font-size: 14px;
-      font-weight: 600;
-      letter-spacing: -0.1px;
-
-      &--profit {
-        color: #4caf84;
-      }
-      &--loss {
-        color: #e35f5f;
-      }
-      &--neutral {
-        color: #8fa0b5;
-      }
-    }
-
-    &-percent {
-      font-size: 10px;
-      font-weight: 400;
-      opacity: 0.6;
-      margin-left: 4px;
-    }
-  }
-
-  &__trades {
-    display: flex;
-    gap: 6px;
-    font-size: 9px;
-    color: #5f7289;
-    margin-top: 3px;
-    align-items: center;
-  }
-
-  &__stake {
-    color: #7f8fa3;
-  }
-
-  &__footer {
-    display: flex;
-    gap: 6px;
-    padding-top: 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
-    flex-shrink: 0;
-  }
-
-  &__btn {
-    flex: 1;
-    padding: 6px 0;
-    border: none;
-    border-radius: 30px;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-    cursor: pointer;
-    transition: all 0.15s;
-
-    &--dismiss {
-      background: #262e3a;
-      color: #b3c2d4;
-
-      &:hover {
-        background: #323c4b;
-        color: #eef2f8;
-      }
-    }
-
-    &--stop {
-      background: #e35f5f;
-      color: #fff;
-
-      &:hover {
-        background: #d14a4a;
-        transform: scale(0.97);
-      }
-    }
-  }
-}
-
-@keyframes tpSlFadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes tpSlSlideUp {
-  from {
-    opacity: 0;
-    transform: translateY(16px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-// ============================================================
-// L→Digit Waiting Banner
-// ============================================================
-.auto-trades-l-digit-waiting {
-  background: #1a1a1a;
-  border: 2px solid #f5b342;
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin: 12px 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: #e0e0e0;
-
-  &__icon {
-    font-size: 20px;
-  }
-
-  strong {
-    color: #ffffff;
-  }
-}
-
-// ============================================================
-// L→Digit Badge in Markets
-// ============================================================
-.auto-trades-market {
-  &--l-digit-active {
-    border-color: #4caf84;
-    box-shadow: 0 0 20px rgba(76, 175, 132, 0.15);
-  }
-
-  &--l-digit-waiting {
-    border-color: #f5b342;
-    box-shadow: 0 0 20px rgba(245, 179, 66, 0.1);
-  }
-
-  &__badge--l-digit {
-    background: #4caf84;
-    color: #fff;
-  }
-
-  &__badge--waiting {
-    background: #f5b342;
-    color: #1a1a1a;
-  }
-
-  &__waiting-status {
-    background: #1a1a1a;
-    border-left: 3px solid #f5b342;
-    padding: 8px 12px;
-    margin-top: 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    color: #e0e0e0;
-    line-height: 1.4;
-
-    small {
-      color: #8fa0b5;
-    }
-  }
-}
-
-// ============================================================
-// Markets Waiting Badge
-// ============================================================
-.auto-trades-markets {
-  &__waiting-badge {
-    background: #f5b342;
-    color: #1a1a1a;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 10px;
-    border-radius: 20px;
-    margin-left: 8px;
-    letter-spacing: 0.3px;
-    text-transform: uppercase;
-  }
-
-  &__l-digit-badge {
-    font-size: 10px;
-    font-weight: 600;
-    padding: 2px 10px;
-    border-radius: 20px;
-    margin-left: 8px;
-    letter-spacing: 0.3px;
-    background: #262e3a;
-    color: #8fa0b5;
-
-    &--active {
-      background: #4caf84;
-      color: #fff;
-    }
-
-    &--waiting {
-      background: #f5b342;
-      color: #1a1a1a;
-    }
-  }
-}
-// auto-trades.scss - Add these styles at the end
-
-// ============================================================
-// TP/SL Notification Styles
-// ============================================================
-.tp-sl-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 9999;
-  animation: tpSlFadeIn 0.2s ease;
-}
-
-.tp-sl-card {
-  width: 200px;
-  height: 250px;
-  background: #1a1e26;
-  border-radius: 18px;
-  padding: 14px 14px 16px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(255, 255, 255, 0.05);
-  display: flex;
-  flex-direction: column;
-  animation: tpSlSlideUp 0.25s cubic-bezier(0.22, 1, 0.36, 1);
-  position: relative;
-  overflow: hidden;
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 18px;
-    padding: 1px;
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.06), transparent 70%);
-    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-    pointer-events: none;
-  }
-
-  &__header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    flex-shrink: 0;
-  }
-
-  &__icon {
-    font-size: 16px;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    background: #262e3a;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-
-  &__title {
-    font-size: 13px;
-    font-weight: 600;
-    color: #eef2f8;
-    letter-spacing: 0.2px;
-    flex: 1;
-    margin: 0;
-    line-height: 1.2;
-  }
-
-  &__close {
-    background: transparent;
-    border: none;
-    color: #6a7a8e;
-    font-size: 14px;
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 6px;
-    transition: all 0.15s;
-    line-height: 1;
-
-    &:hover {
-      background: #262e3a;
-      color: #eef2f8;
-    }
-  }
-
-  &__body {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 10px 0 8px;
-    overflow: hidden;
-  }
-
-  &__row {
-    background: #13181f;
-    border-radius: 12px;
-    padding: 10px 12px;
-    border-left: 3px solid transparent;
-    transition: all 0.2s;
-
-    &--tp {
-      border-left-color: #4caf84;
-      background: #0f1a18;
-
-      .tp-sl-card__row-badge {
-        color: #4caf84;
-      }
-    }
-
-    &--sl {
-      border-left-color: #e35f5f;
-      background: #1a1214;
-
-      .tp-sl-card__row-badge {
-        color: #e35f5f;
-      }
-    }
-
-    &--active {
-      background: rgba(255, 255, 255, 0.04);
-      border-left-width: 4px;
-    }
-
-    &-label {
-      display: flex;
-      justify-content: space-between;
-      font-size: 10px;
-      font-weight: 500;
-      color: #8fa0b5;
-      letter-spacing: 0.2px;
-      margin-bottom: 4px;
-    }
-
-    &-badge {
-      font-size: 8px;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-      opacity: 0.7;
-    }
-
-    &-value {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-  }
-
-  &__amount {
-    font-size: 15px;
-    font-weight: 600;
-    color: #f0f4fc;
-    letter-spacing: -0.2px;
-  }
-
-  &__status {
-    font-size: 9px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    padding: 2px 10px;
-    border-radius: 30px;
-    background: rgba(255, 255, 255, 0.04);
-
-    &--hit {
-      color: #f5b342;
-      background: rgba(245, 179, 66, 0.12);
-    }
-
-    &--miss {
-      color: #5f7289;
-    }
-  }
-
-  &__summary {
-    margin-top: 2px;
-    padding-top: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
-  }
-
-  &__pnl {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-
-    &-label {
-      font-size: 10px;
-      font-weight: 500;
-      color: #6a7a8e;
-      text-transform: uppercase;
-      letter-spacing: 0.3px;
-    }
-
-    &-value {
-      font-size: 14px;
-      font-weight: 600;
-      letter-spacing: -0.1px;
-
-      &--profit {
-        color: #4caf84;
-      }
-      &--loss {
-        color: #e35f5f;
-      }
-      &--neutral {
-        color: #8fa0b5;
-      }
-    }
-
-    &-percent {
-      font-size: 10px;
-      font-weight: 400;
-      opacity: 0.6;
-      margin-left: 4px;
-    }
-  }
-
-  &__trades {
-    display: flex;
-    gap: 6px;
-    font-size: 9px;
-    color: #5f7289;
-    margin-top: 3px;
-    align-items: center;
-  }
-
-  &__stake {
-    color: #7f8fa3;
-  }
-
-  &__footer {
-    display: flex;
-    gap: 6px;
-    padding-top: 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.04);
-    flex-shrink: 0;
-  }
-
-  &__btn {
-    flex: 1;
-    padding: 6px 0;
-    border: none;
-    border-radius: 30px;
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-    cursor: pointer;
-    transition: all 0.15s;
-
-    &--dismiss {
-      background: #262e3a;
-      color: #b3c2d4;
-
-      &:hover {
-        background: #323c4b;
-        color: #eef2f8;
-      }
-    }
-
-    &--stop {
-      background: #e35f5f;
-      color: #fff;
-
-      &:hover {
-        background: #d14a4a;
-        transform: scale(0.97);
-      }
-    }
-  }
-}
-
-@keyframes tpSlFadeIn {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-
-@keyframes tpSlSlideUp {
-  from {
-    opacity: 0;
-    transform: translateY(16px) scale(0.96);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}
-
-// ============================================================
-// L→Digit Waiting Banner
-// ============================================================
-.auto-trades-l-digit-waiting {
-  background: #1a1a1a;
-  border: 2px solid #f5b342;
-  border-radius: 8px;
-  padding: 12px 16px;
-  margin: 12px 0;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: #e0e0e0;
-
-  &__icon {
-    font-size: 20px;
-  }
-
-  strong {
-    color: #ffffff;
-  }
-}
-
-// ============================================================
-// L→Digit Badge in Markets
-// ============================================================
-.auto-trades-market {
-  &--l-digit-active {
-    border-color: #4caf84;
-    box-shadow: 0 0 20px rgba(76, 175, 132, 0.15);
-  }
-
-  &--l-digit-waiting {
-    border-color: #f5b342;
-    box-shadow: 0 0 20px rgba(245, 179, 66, 0.1);
-  }
-
-  &__badge--l-digit {
-    background: #4caf84;
-    color: #fff;
-  }
-
-  &__badge--waiting {
-    background: #f5b342;
-    color: #1a1a1a;
-  }
-
-  &__waiting-status {
-    background: #1a1a1a;
-    border-left: 3px solid #f5b342;
-    padding: 8px 12px;
-    margin-top: 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    color: #e0e0e0;
-    line-height: 1.4;
-
-    small {
-      color: #8fa0b5;
-    }
-  }
-}
-
-// ============================================================
-// Markets Waiting Badge
-// ============================================================
-.auto-trades-markets {
-  &__waiting-badge {
-    background: #f5b342;
-    color: #1a1a1a;
-    font-size: 10px;
-    font-weight: 700;
-    padding: 2px 10px;
-    border-radius: 20px;
-    margin-left: 8px;
-    letter-spacing: 0.3px;
-    text-transform: uppercase;
-  }
-
-  &__l-digit-badge {
-    font-size: 10px;
-    font-weight: 600;
-    padding: 2px 10px;
-    border-radius: 20px;
-    margin-left: 8px;
-    letter-spacing: 0.3px;
-    background: #262e3a;
-    color: #8fa0b5;
-
-    &--active {
-      background: #4caf84;
-      color: #fff;
-    }
-
-    &--waiting {
-      background: #f5b342;
-      color: #1a1a1a;
-    }
-  }
 }
