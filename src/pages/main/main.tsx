@@ -257,7 +257,7 @@ const Loader: React.FC<LoaderProps> = ({
                             className="loader-logo-text"
                             style={{ textShadow: '0 0 30px rgba(0, 255, 0, 0.4)' }}
                         >
-                            RAM
+                            RAMZ
                         </text>
                         <text 
                             x="100" 
@@ -409,6 +409,9 @@ const Loader: React.FC<LoaderProps> = ({
                 <div className="loader-time-remaining">
                     <span className="loader-time-text">
                         {progress < 100 ? `⏳ ${Math.ceil((100 - progress) / (100 / totalDuration))}s` : '🚀 Launching...'}
+                    </span>
+                     <span className="loader-time-text">
+                        {progress < 100 ? `⏳ ${Math.ceil((100 - progress) / (100 / totalDuration))}s` : 'RAMZFX...'}
                     </span>
                 </div>
             </div>
