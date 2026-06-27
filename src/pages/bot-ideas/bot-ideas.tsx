@@ -89,7 +89,6 @@ const BotIdeas = observer(() => {
             if (!silent) setLoading(false);
         } catch {
             if (attempt < 3) {
-                // Stay in loading state while retrying (handles API startup race)
                 setTimeout(() => fetchIdeas(attempt + 1, silent), 1000);
                 return;
             }
@@ -230,7 +229,6 @@ const BotIdeas = observer(() => {
     };
 
     const detachBot = async (id: number) => {
-        // eslint-disable-next-line no-alert
         if (!window.confirm('Remove the attached bot from this idea?')) return;
         setDetachingId(id);
         setAttachError(null);
@@ -255,7 +253,6 @@ const BotIdeas = observer(() => {
     };
 
     const deleteIdea = async (id: number) => {
-        // eslint-disable-next-line no-alert
         if (!window.confirm('Delete this idea? This cannot be undone.')) return;
         setDeletingId(id);
         setActionError(null);
@@ -283,33 +280,60 @@ const BotIdeas = observer(() => {
                 <BotPitchForm onIdeaSubmitted={handleIdeaSubmitted} />
 
                 <section className='bi-ideas-list'>
-                    <h3 className='bi-ideas-list__heading'>Community Bot Ideas</h3>
+                    <div className='bi-ideas-list__header'>
+                        <h3 className='bi-ideas-list__heading'>📊 Community Bot Ideas</h3>
+                        <div className='bi-ideas-list__filters'>
+                            <button className='bi-ideas-list__filter-btn bi-ideas-list__filter-btn--active'>
+                                🔥 All
+                            </button>
+                            <button className='bi-ideas-list__filter-btn'>⚡ Trending</button>
+                            <button className='bi-ideas-list__filter-btn'>⭐ Top Rated</button>
+                            <button className='bi-ideas-list__filter-btn'>✨ New</button>
+                        </div>
+                    </div>
 
-                    {loading && <p className='bi-ideas-list__status'>Loading ideas…</p>}
+                    {loading && (
+                        <div className='bi-ideas-list__loading'>
+                            <div className='bi-ideas-list__loading-spinner'></div>
+                            <p className='bi-ideas-list__status'>Loading community strategies…</p>
+                        </div>
+                    )}
+                    
                     {error && (
                         <div className='bi-ideas-list__error-block'>
                             <p className='bi-ideas-list__status bi-ideas-list__status--error'>{error}</p>
                             <button className='bi-ideas-list__retry-btn' onClick={() => fetchIdeas()}>
-                                Retry
+                                🔄 Retry
                             </button>
                         </div>
                     )}
+                    
                     {!loading && !error && ideas.length === 0 && (
-                        <p className='bi-ideas-list__status'>No ideas yet. Be the first to submit one!</p>
+                        <div className='bi-ideas-list__empty'>
+                            <span className='bi-ideas-list__empty-icon'>🚀</span>
+                            <p className='bi-ideas-list__status'>No strategies yet. Be the first to share your bot idea!</p>
+                            <p className='bi-ideas-list__empty-sub'>Share your trading strategy with the community</p>
+                        </div>
                     )}
 
                     {ideas.length > 0 && (
                         <div className='bi-ideas-list__grid'>
                             {ideas.map(idea => {
                                 const isOwner = client.is_logged_in && client.loginid === idea.submitted_by;
-                                const isDeveloper =
-                                    client.is_logged_in && !!idea.developed_by && client.loginid === idea.developed_by;
+                                const isDeveloper = client.is_logged_in && !!idea.developed_by && client.loginid === idea.developed_by;
                                 const canManageBot = isOwner || isDeveloper;
                                 const isEditing = editingId === idea.id;
+                                const profitRate = idea.total_runs > 0 ? (idea.profits / idea.total_runs * 100) : 0;
+                                const isProfitable = profitRate >= 50;
+                                
                                 return (
-                                    <div key={idea.id} className='bi-idea-card'>
+                                    <div key={idea.id} className={`bi-idea-card ${isProfitable ? 'bi-idea-card--profitable' : ''}`}>
                                         {isEditing ? (
-                                            <>
+                                            <div className='bi-idea-card__edit-mode'>
+                                                <div className='bi-idea-card__edit-header'>
+                                                    <span className='bi-idea-card__edit-icon'>✏️</span>
+                                                    <span className='bi-idea-card__edit-title'>Edit Strategy</span>
+                                                </div>
                                                 <input
                                                     className='bi-idea-card__edit-input'
                                                     value={editName}
@@ -321,21 +345,23 @@ const BotIdeas = observer(() => {
                                                     value={editStrategy}
                                                     onChange={e => setEditStrategy(e.target.value)}
                                                     rows={4}
+                                                    placeholder='Describe your strategy in detail...'
                                                 />
-                                                <p className='bi-idea-card__edit-hint'>
-                                                    {editStrategy.trim().length}/{MIN_STRATEGY_LENGTH} characters
-                                                    minimum
-                                                </p>
-                                                {actionError && (
-                                                    <p className='bi-idea-card__edit-error'>{actionError}</p>
-                                                )}
+                                                <div className='bi-idea-card__edit-footer'>
+                                                    <span className={`bi-idea-card__edit-hint ${editStrategy.trim().length >= MIN_STRATEGY_LENGTH ? 'bi-idea-card__edit-hint--valid' : ''}`}>
+                                                        {editStrategy.trim().length}/{MIN_STRATEGY_LENGTH} characters minimum
+                                                    </span>
+                                                    {actionError && (
+                                                        <p className='bi-idea-card__edit-error'>{actionError}</p>
+                                                    )}
+                                                </div>
                                                 <div className='bi-idea-card__actions'>
                                                     <button
                                                         className='bi-idea-card__action-btn bi-idea-card__action-btn--save'
                                                         onClick={() => saveEdit(idea.id)}
                                                         disabled={savingId === idea.id}
                                                     >
-                                                        {savingId === idea.id ? 'Saving…' : 'Save'}
+                                                        {savingId === idea.id ? 'Saving…' : '💾 Save'}
                                                     </button>
                                                     <button
                                                         className='bi-idea-card__action-btn bi-idea-card__action-btn--cancel'
@@ -345,57 +371,95 @@ const BotIdeas = observer(() => {
                                                         Cancel
                                                     </button>
                                                 </div>
-                                            </>
+                                            </div>
                                         ) : (
                                             <>
+                                                <div className='bi-idea-card__badge'>
+                                                    {profitRate > 0 && (
+                                                        <span className={`bi-idea-card__badge-profit ${profitRate >= 70 ? 'bi-idea-card__badge-profit--high' : ''}`}>
+                                                            📈 {profitRate.toFixed(0)}% Win Rate
+                                                        </span>
+                                                    )}
+                                                    {idea.has_bot_xml && (
+                                                        <span className='bi-idea-card__badge-bot'>
+                                                            🤖 Bot Ready
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                
                                                 <div className='bi-idea-card__header'>
-                                                    <span className='bi-idea-card__name'>{idea.bot_name}</span>
+                                                    <div className='bi-idea-card__name-wrapper'>
+                                                        <span className='bi-idea-card__name'>{idea.bot_name}</span>
+                                                        {isOwner && <span className='bi-idea-card__owner-tag'>👤 Owner</span>}
+                                                    </div>
                                                     <span className='bi-idea-card__date'>
-                                                        {formatDate(idea.submitted_at)}
+                                                        📅 {formatDate(idea.submitted_at)}
                                                     </span>
                                                 </div>
+                                                
                                                 <p className='bi-idea-card__submitter'>
-                                                    Submitted by <strong>{idea.submitted_by}</strong>
-                                                    {isOwner && <span className='bi-idea-card__owner-tag'> (you)</span>}
+                                                    👤 Submitted by <strong>{idea.submitted_by}</strong>
                                                 </p>
+                                                
                                                 <p className='bi-idea-card__desc'>{idea.strategy_description}</p>
+                                                
                                                 <div className='bi-idea-card__stats'>
-                                                    <span className='bi-idea-card__stat bi-idea-card__stat--runs'>
-                                                        🔄 {idea.total_runs ?? 0} Runs
-                                                    </span>
-                                                    <span className='bi-idea-card__stat bi-idea-card__stat--profit'>
-                                                        ✅ {idea.profits} Wins · +{formatMoney(idea.profit_amount)}
-                                                    </span>
-                                                    <span className='bi-idea-card__stat bi-idea-card__stat--loss'>
-                                                        ❌ {idea.losses} Losses · -{formatMoney(idea.loss_amount)}
-                                                    </span>
+                                                    <div className='bi-idea-card__stat bi-idea-card__stat--runs'>
+                                                        <span className='bi-idea-card__stat-icon'>🔄</span>
+                                                        <span className='bi-idea-card__stat-value'>{idea.total_runs ?? 0}</span>
+                                                        <span className='bi-idea-card__stat-label'>Runs</span>
+                                                    </div>
+                                                    <div className='bi-idea-card__stat bi-idea-card__stat--profit'>
+                                                        <span className='bi-idea-card__stat-icon'>✅</span>
+                                                        <span className='bi-idea-card__stat-value'>{idea.profits}</span>
+                                                        <span className='bi-idea-card__stat-label'>Wins</span>
+                                                        <span className='bi-idea-card__stat-amount'>+{formatMoney(idea.profit_amount)}</span>
+                                                    </div>
+                                                    <div className='bi-idea-card__stat bi-idea-card__stat--loss'>
+                                                        <span className='bi-idea-card__stat-icon'>❌</span>
+                                                        <span className='bi-idea-card__stat-value'>{idea.losses}</span>
+                                                        <span className='bi-idea-card__stat-label'>Losses</span>
+                                                        <span className='bi-idea-card__stat-amount'>-{formatMoney(idea.loss_amount)}</span>
+                                                    </div>
                                                 </div>
-                                                <StarRating profits={idea.profits} losses={idea.losses} />
+
+                                                <div className='bi-idea-card__rating-wrapper'>
+                                                    <StarRating profits={idea.profits} losses={idea.losses} />
+                                                    {idea.total_runs > 0 && (
+                                                        <span className='bi-idea-card__runs-label'>
+                                                            {idea.total_runs} total runs
+                                                        </span>
+                                                    )}
+                                                </div>
+
                                                 {idea.has_bot_xml && (
-                                                    <>
+                                                    <div className='bi-idea-card__attachment-wrapper'>
                                                         <p className='bi-idea-card__attachment'>
                                                             📎 XML bot attached
                                                             {idea.bot_xml_filename ? `: ${idea.bot_xml_filename}` : ''}
                                                         </p>
                                                         <p className='bi-idea-card__developer'>
-                                                            Developed by <strong>{DEVELOPER_DISPLAY_NAME}</strong>
+                                                            👨‍💻 Developed by <strong>{DEVELOPER_DISPLAY_NAME}</strong>
                                                             {isDeveloper && !isOwner && (
                                                                 <span className='bi-idea-card__owner-tag'> (you)</span>
                                                             )}
                                                         </p>
-                                                    </>
+                                                    </div>
                                                 )}
+                                                
                                                 {!idea.has_bot_xml && client.is_logged_in && (
                                                     <p className='bi-idea-card__attachment bi-idea-card__attachment--empty'>
                                                         🛠 No bot attached yet — any developer can contribute one.
                                                     </p>
                                                 )}
+                                                
                                                 {loadError && loadingId === null && (
                                                     <p className='bi-idea-card__edit-error'>{loadError}</p>
                                                 )}
                                                 {attachError && (
                                                     <p className='bi-idea-card__edit-error'>{attachError}</p>
                                                 )}
+                                                
                                                 <div className='bi-idea-card__actions'>
                                                     {idea.has_bot_xml && (
                                                         <button
@@ -437,14 +501,14 @@ const BotIdeas = observer(() => {
                                                                 className='bi-idea-card__action-btn bi-idea-card__action-btn--edit'
                                                                 onClick={() => startEdit(idea)}
                                                             >
-                                                                Edit
+                                                                ✏️ Edit
                                                             </button>
                                                             <button
                                                                 className='bi-idea-card__action-btn bi-idea-card__action-btn--delete'
                                                                 onClick={() => deleteIdea(idea.id)}
                                                                 disabled={deletingId === idea.id}
                                                             >
-                                                                {deletingId === idea.id ? 'Deleting…' : 'Delete'}
+                                                                {deletingId === idea.id ? 'Deleting…' : '🗑 Delete'}
                                                             </button>
                                                         </>
                                                     )}
@@ -462,4 +526,4 @@ const BotIdeas = observer(() => {
     );
 });
 
-export default BotIdeas; 
+export default BotIdeas;
