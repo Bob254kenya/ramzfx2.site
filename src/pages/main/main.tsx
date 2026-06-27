@@ -57,31 +57,59 @@ interface LoaderProps {
     progress?: number;
     message?: string;
     showProgress?: boolean;
+    totalDuration?: number; // Total duration in seconds
 }
 
 const Loader: React.FC<LoaderProps> = ({ 
     progress: externalProgress, 
     message = 'Loading...', 
-    showProgress = true 
+    showProgress = true,
+    totalDuration = 15 // Default 15 seconds
 }) => {
     const [internalProgress, setInternalProgress] = useState(0);
+    const [currentMessage, setCurrentMessage] = useState(message);
     const progress = externalProgress !== undefined ? externalProgress : internalProgress;
+
+    // Progress messages based on percentage
+    const getProgressMessage = (progressValue: number): string => {
+        if (progressValue < 10) return 'Initializing system...';
+        if (progressValue < 20) return 'Loading core modules...';
+        if (progressValue < 30) return 'Connecting to servers...';
+        if (progressValue < 40) return 'Loading RAMFX engine...';
+        if (progressValue < 50) return 'Configuring trading tools...';
+        if (progressValue < 60) return 'Loading bot strategies...';
+        if (progressValue < 70) return 'Setting up workspace...';
+        if (progressValue < 80) return 'Optimizing performance...';
+        if (progressValue < 90) return 'Finalizing configuration...';
+        if (progressValue < 100) return 'Almost ready...';
+        return 'Ready!';
+    };
 
     useEffect(() => {
         if (externalProgress === undefined) {
+            const startTime = Date.now();
+            const totalMs = totalDuration * 1000;
+            
             const interval = setInterval(() => {
-                setInternalProgress(prev => {
-                    if (prev >= 90) {
-                        clearInterval(interval);
-                        return 90;
-                    }
-                    return prev + Math.random() * 15;
-                });
-            }, 200);
+                const elapsed = Date.now() - startTime;
+                const calculatedProgress = Math.min((elapsed / totalMs) * 100, 99);
+                
+                setInternalProgress(calculatedProgress);
+                setCurrentMessage(getProgressMessage(calculatedProgress));
+                
+                if (calculatedProgress >= 99) {
+                    clearInterval(interval);
+                    // Set to 100% when complete
+                    setTimeout(() => {
+                        setInternalProgress(100);
+                        setCurrentMessage('Ready!');
+                    }, 100);
+                }
+            }, 50); // Update every 50ms for smooth animation
 
             return () => clearInterval(interval);
         }
-    }, [externalProgress]);
+    }, [externalProgress, totalDuration]);
 
     return (
         <div className="loader-overlay">
@@ -199,12 +227,6 @@ const Loader: React.FC<LoaderProps> = ({
                                     dur="4s" 
                                     repeatCount="indefinite"
                                 />
-                                <animate 
-                                    attributeName="cx" 
-                                    values="172;172;172" 
-                                    dur="4s" 
-                                    repeatCount="indefinite"
-                                />
                             </circle>
                             <circle 
                                 cx="100" 
@@ -314,7 +336,7 @@ const Loader: React.FC<LoaderProps> = ({
                 </div>
 
                 {/* Loading Message */}
-                <p className="loader-text">{message}</p>
+                <p className="loader-text">{currentMessage}</p>
                 
                 {/* Progress Bar */}
                 {showProgress && (
@@ -330,6 +352,13 @@ const Loader: React.FC<LoaderProps> = ({
                         </span>
                     </div>
                 )}
+                
+                {/* Time Remaining */}
+                <div className="loader-time-remaining">
+                    <span className="loader-time-text">
+                        {progress < 100 ? `Loading... ${Math.round((100 - progress) / (100 / 15))}s remaining` : 'Ready!'}
+                    </span>
+                </div>
             </div>
         </div>
     );
@@ -496,7 +525,7 @@ const AppWrapper = observer(() => {
     const [left_tab_shadow, setLeftTabShadow] = useState<boolean>(false);
     const [right_tab_shadow, setRightTabShadow] = useState<boolean>(false);
 
-    // Loader states
+    // Loader states - forced 15 seconds
     const [showGlobalLoader, setShowGlobalLoader] = useState<boolean>(true);
     const [loaderProgress, setLoaderProgress] = useState<number>(0);
     const [loaderMessage, setLoaderMessage] = useState<string>('Initializing...');
@@ -531,47 +560,62 @@ const AppWrapper = observer(() => {
     };
     const active_hash_tab = GetHashedValue(active_tab);
 
-    // Loader progress simulation
+    // Force 15-second loader
     useEffect(() => {
-        if (is_loading) {
-            setShowGlobalLoader(true);
-            setLoaderMessage('Loading Bot Builder...');
+        // Show loader immediately
+        setShowGlobalLoader(true);
+        setLoaderMessage('Initializing RAMFX System...');
+        
+        // Progress steps for 15 seconds
+        const progressSteps = [
+            { time: 1, progress: 5, message: 'Loading core modules...' },
+            { time: 2, progress: 10, message: 'Connecting to servers...' },
+            { time: 3, progress: 20, message: 'Loading RAMFX engine...' },
+            { time: 4, progress: 30, message: 'Configuring trading tools...' },
+            { time: 5, progress: 40, message: 'Loading bot strategies...' },
+            { time: 6, progress: 50, message: 'Setting up workspace...' },
+            { time: 7, progress: 55, message: 'Optimizing performance...' },
+            { time: 8, progress: 65, message: 'Loading algorithms...' },
+            { time: 9, progress: 75, message: 'Initializing AI models...' },
+            { time: 10, progress: 80, message: 'Finalizing configuration...' },
+            { time: 11, progress: 85, message: 'Loading user data...' },
+            { time: 12, progress: 90, message: 'Almost ready...' },
+            { time: 13, progress: 93, message: 'Finalizing setup...' },
+            { time: 14, progress: 96, message: 'Preparing workspace...' },
+            { time: 15, progress: 100, message: 'Ready!' },
+        ];
+
+        let stepIndex = 0;
+        const startTime = Date.now();
+        const totalDuration = 15000; // 15 seconds in milliseconds
+
+        const interval = setInterval(() => {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min((elapsed / totalDuration) * 100, 100);
             
-            const progressSteps = [
-                { progress: 10, message: 'Initializing modules...' },
-                { progress: 25, message: 'Loading resources...' },
-                { progress: 40, message: 'Setting up workspace...' },
-                { progress: 55, message: 'Loading blocks...' },
-                { progress: 70, message: 'Configuring tools...' },
-                { progress: 85, message: 'Finalizing setup...' },
-            ];
+            // Update message based on progress
+            const currentStep = progressSteps.find(step => progress <= step.progress);
+            if (currentStep) {
+                setLoaderMessage(currentStep.message);
+            } else {
+                setLoaderMessage('Loading...');
+            }
+            
+            setLoaderProgress(progress);
+            
+            // When complete, hide loader after a brief delay
+            if (progress >= 100) {
+                clearInterval(interval);
+                setLoaderMessage('Ready!');
+                setTimeout(() => {
+                    setShowGlobalLoader(false);
+                    setLoaderProgress(0);
+                }, 800);
+            }
+        }, 50); // Update every 50ms for smooth animation
 
-            let stepIndex = 0;
-            const interval = setInterval(() => {
-                if (stepIndex < progressSteps.length) {
-                    setLoaderProgress(progressSteps[stepIndex].progress);
-                    setLoaderMessage(progressSteps[stepIndex].message);
-                    stepIndex++;
-                } else {
-                    clearInterval(interval);
-                }
-            }, 800);
-
-            return () => clearInterval(interval);
-        }
-    }, [is_loading]);
-
-    // Hide loader when Blockly is loaded
-    useEffect(() => {
-        if (!is_loading && showGlobalLoader) {
-            setLoaderProgress(100);
-            setLoaderMessage('Ready!');
-            setTimeout(() => {
-                setShowGlobalLoader(false);
-                setLoaderProgress(0);
-            }, 600);
-        }
-    }, [is_loading]);
+        return () => clearInterval(interval);
+    }, []); // Run once on mount
 
     // Set up modal state change listener
     useEffect(() => {
@@ -833,12 +877,13 @@ const AppWrapper = observer(() => {
     
     return (
         <React.Fragment>
-            {/* Global Loader */}
+            {/* Global Loader - Forced 15 seconds */}
             {showGlobalLoader && (
                 <Loader 
                     progress={loaderProgress} 
                     message={loaderMessage}
                     showProgress={true}
+                    totalDuration={15}
                 />
             )}
 
