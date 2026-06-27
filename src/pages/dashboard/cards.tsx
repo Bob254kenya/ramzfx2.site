@@ -22,30 +22,9 @@ type TCardProps = {
 
 type TCardArray = {
     id: string;
-    icon_name: string;
-    icon: React.ReactElement;
+    label: string;
     content: React.ReactElement;
     callback: () => void;
-};
-
-const DashboardActionIcon = ({ name, alt }: { name: string; alt: string }) => {
-    const [has_load_error, setHasLoadError] = React.useState(false);
-
-    if (has_load_error) {
-        return (
-            <img className='tab__dashboard__table__icon' src='/assets/icons/IcDashboard.svg' alt='' aria-label={alt} />
-        );
-    }
-
-    return (
-        <img
-            className='tab__dashboard__table__icon'
-            src={`/assets/icons/${name}.svg`}
-            alt=''
-            aria-label={alt}
-            onError={() => setHasLoadError(true)}
-        />
-    );
 };
 
 const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => {
@@ -71,8 +50,7 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
     const actions: TCardArray[] = [
         {
             id: 'my-computer',
-            icon_name: 'IcMyComputer',
-            icon: <DashboardActionIcon name='IcMyComputer' alt={localize('My computer')} />,
+            label: is_mobile ? localize('Local') : localize('My computer'),
             content: is_mobile ? <Localize i18n_default_text='Local' /> : <Localize i18n_default_text='My computer' />,
             callback: () => {
                 openFileLoader();
@@ -82,8 +60,7 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
         },
         {
             id: 'google-drive',
-            icon_name: 'IcGoogleDriveDbot',
-            icon: <DashboardActionIcon name='IcGoogleDriveDbot' alt={localize('Google Drive')} />,
+            label: localize('Google Drive'),
             content: <Localize i18n_default_text='Google Drive' />,
             callback: () => {
                 openGoogleDriveDialog();
@@ -93,8 +70,7 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
         },
         {
             id: 'bot-builder',
-            icon_name: 'IcBotBuilder',
-            icon: <DashboardActionIcon name='IcBotBuilder' alt={localize('Bot Builder')} />,
+            label: localize('Bot Builder'),
             content: <Localize i18n_default_text='Bot Builder' />,
             callback: () => {
                 setActiveTab(DBOT_TABS.BOT_BUILDER);
@@ -104,8 +80,7 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
         },
         {
             id: 'quick-strategy',
-            icon_name: 'IcQuickStrategy',
-            icon: <DashboardActionIcon name='IcQuickStrategy' alt={localize('Quick strategy')} />,
+            label: localize('Quick strategy'),
             content: <Localize i18n_default_text='Quick strategy' />,
             callback: () => {
                 setActiveTab(DBOT_TABS.BOT_BUILDER);
@@ -129,8 +104,8 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
                     })}
                     id='tab__dashboard__table__tiles'
                 >
-                    {actions.map(icons => {
-                        const { icon, content, callback, id, icon_name } = icons;
+                    {actions.map(action => {
+                        const { content, callback, id, label } = action;
                         return (
                             <div
                                 key={id}
@@ -144,13 +119,18 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
                                     })}
                                     width='8rem'
                                     height='8rem'
-                                    data-icon={icon_name}
                                     id={id}
                                     onClick={() => {
                                         callback();
                                     }}
                                 >
-                                    {icon}
+                                    <Text 
+                                        color='prominent' 
+                                        size={is_mobile ? 'sm' : 'md'}
+                                        weight='bold'
+                                    >
+                                        {label}
+                                    </Text>
                                 </div>
                                 <Text color='prominent' size={is_mobile ? 'xxs' : 'xs'}>
                                     {content}
