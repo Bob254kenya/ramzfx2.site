@@ -52,11 +52,293 @@ import Analysistool from '../analysistool';
 import Scanner from '../scanner';
 import './main.scss';
 
+// ==================== LOADER COMPONENT ====================
+interface LoaderProps {
+    progress?: number;
+    message?: string;
+    showProgress?: boolean;
+}
+
+const Loader: React.FC<LoaderProps> = ({ 
+    progress: externalProgress, 
+    message = 'Loading...', 
+    showProgress = true 
+}) => {
+    const [internalProgress, setInternalProgress] = useState(0);
+    const progress = externalProgress !== undefined ? externalProgress : internalProgress;
+
+    useEffect(() => {
+        if (externalProgress === undefined) {
+            const interval = setInterval(() => {
+                setInternalProgress(prev => {
+                    if (prev >= 90) {
+                        clearInterval(interval);
+                        return 90;
+                    }
+                    return prev + Math.random() * 15;
+                });
+            }, 200);
+
+            return () => clearInterval(interval);
+        }
+    }, [externalProgress]);
+
+    return (
+        <div className="loader-overlay">
+            <div className="loader-container">
+                {/* RAMFX SVG Logo with Spinning Animation */}
+                <div className="loader-logo-wrapper">
+                    <svg 
+                        className="loader-logo-spin"
+                        width="140" 
+                        height="140" 
+                        viewBox="0 0 200 200" 
+                        fill="none" 
+                        xmlns="http://www.w3.org/2000/svg"
+                    >
+                        {/* Outer Glow Ring */}
+                        <circle 
+                            cx="100" 
+                            cy="100" 
+                            r="92" 
+                            stroke="#00ff00" 
+                            strokeWidth="1" 
+                            opacity="0.1"
+                        />
+                        
+                        {/* Progress Ring */}
+                        <circle 
+                            cx="100" 
+                            cy="100" 
+                            r="92" 
+                            stroke="#00ff00" 
+                            strokeWidth="3" 
+                            strokeDasharray="578.05" 
+                            strokeDashoffset={578.05 - (578.05 * Math.min(progress, 100) / 100)}
+                            opacity="0.9"
+                            className="loader-progress-ring"
+                            strokeLinecap="round"
+                        />
+                        
+                        {/* Inner Ring */}
+                        <circle 
+                            cx="100" 
+                            cy="100" 
+                            r="70" 
+                            stroke="#00ff88" 
+                            strokeWidth="1" 
+                            opacity="0.2"
+                        />
+                        
+                        {/* RAMFX Text Logo */}
+                        <text 
+                            x="100" 
+                            y="82" 
+                            textAnchor="middle" 
+                            fill="#00ff00" 
+                            fontSize="44" 
+                            fontWeight="bold" 
+                            fontFamily="'Courier New', monospace"
+                            letterSpacing="4"
+                            className="loader-logo-text"
+                            style={{ textShadow: '0 0 20px rgba(0, 255, 0, 0.3)' }}
+                        >
+                            RAM
+                        </text>
+                        <text 
+                            x="100" 
+                            y="128" 
+                            textAnchor="middle" 
+                            fill="#00ff88" 
+                            fontSize="30" 
+                            fontWeight="bold" 
+                            fontFamily="'Courier New', monospace"
+                            letterSpacing="6"
+                            className="loader-logo-text"
+                            style={{ textShadow: '0 0 20px rgba(0, 255, 88, 0.3)' }}
+                        >
+                            FX
+                        </text>
+                        
+                        {/* Center Dot */}
+                        <circle 
+                            cx="100" 
+                            cy="100" 
+                            r="4" 
+                            fill="#00ff00" 
+                            className="loader-center-dot"
+                        >
+                            <animate 
+                                attributeName="r" 
+                                values="3;6;3" 
+                                dur="1.5s" 
+                                repeatCount="indefinite"
+                            />
+                            <animate 
+                                attributeName="opacity" 
+                                values="0.5;1;0.5" 
+                                dur="1.5s" 
+                                repeatCount="indefinite"
+                            />
+                        </circle>
+                        
+                        {/* Orbiting Dots */}
+                        <g>
+                            <circle 
+                                cx="100" 
+                                cy="100" 
+                                r="5" 
+                                fill="#00ff00"
+                                opacity="0.9"
+                            >
+                                <animateTransform 
+                                    attributeName="transform" 
+                                    type="rotate" 
+                                    from="0 100 100" 
+                                    to="360 100 100" 
+                                    dur="4s" 
+                                    repeatCount="indefinite"
+                                />
+                                <animate 
+                                    attributeName="cx" 
+                                    values="172;172;172" 
+                                    dur="4s" 
+                                    repeatCount="indefinite"
+                                />
+                            </circle>
+                            <circle 
+                                cx="100" 
+                                cy="100" 
+                                r="4" 
+                                fill="#00ff88"
+                                opacity="0.7"
+                            >
+                                <animateTransform 
+                                    attributeName="transform" 
+                                    type="rotate" 
+                                    from="120 100 100" 
+                                    to="480 100 100" 
+                                    dur="4s" 
+                                    repeatCount="indefinite"
+                                />
+                            </circle>
+                            <circle 
+                                cx="100" 
+                                cy="100" 
+                                r="4" 
+                                fill="#00ffcc"
+                                opacity="0.5"
+                            >
+                                <animateTransform 
+                                    attributeName="transform" 
+                                    type="rotate" 
+                                    from="240 100 100" 
+                                    to="600 100 100" 
+                                    dur="4s" 
+                                    repeatCount="indefinite"
+                                />
+                            </circle>
+                        </g>
+                        
+                        {/* Decorative Lines */}
+                        <line 
+                            x1="100" 
+                            y1="12" 
+                            x2="100" 
+                            y2="28" 
+                            stroke="#00ff00" 
+                            strokeWidth="2" 
+                            opacity="0.6"
+                            className="loader-top-line"
+                        >
+                            <animate 
+                                attributeName="opacity" 
+                                values="0.3;0.8;0.3" 
+                                dur="2s" 
+                                repeatCount="indefinite"
+                            />
+                        </line>
+                        <line 
+                            x1="100" 
+                            y1="172" 
+                            x2="100" 
+                            y2="188" 
+                            stroke="#00ff00" 
+                            strokeWidth="2" 
+                            opacity="0.6"
+                            className="loader-bottom-line"
+                        >
+                            <animate 
+                                attributeName="opacity" 
+                                values="0.3;0.8;0.3" 
+                                dur="2s" 
+                                begin="1s" 
+                                repeatCount="indefinite"
+                            />
+                        </line>
+                        <line 
+                            x1="12" 
+                            y1="100" 
+                            x2="28" 
+                            y2="100" 
+                            stroke="#00ff00" 
+                            strokeWidth="2" 
+                            opacity="0.4"
+                        >
+                            <animate 
+                                attributeName="opacity" 
+                                values="0.2;0.6;0.2" 
+                                dur="2.5s" 
+                                begin="0.5s" 
+                                repeatCount="indefinite"
+                            />
+                        </line>
+                        <line 
+                            x1="172" 
+                            y1="100" 
+                            x2="188" 
+                            y2="100" 
+                            stroke="#00ff00" 
+                            strokeWidth="2" 
+                            opacity="0.4"
+                        >
+                            <animate 
+                                attributeName="opacity" 
+                                values="0.2;0.6;0.2" 
+                                dur="2.5s" 
+                                begin="1.5s" 
+                                repeatCount="indefinite"
+                            />
+                        </line>
+                    </svg>
+                </div>
+
+                {/* Loading Message */}
+                <p className="loader-text">{message}</p>
+                
+                {/* Progress Bar */}
+                {showProgress && (
+                    <div className="loader-progress-bar-wrapper">
+                        <div className="loader-progress-track">
+                            <div 
+                                className="loader-progress-fill"
+                                style={{ width: `${Math.min(progress, 100)}%` }}
+                            />
+                        </div>
+                        <span className="loader-progress-percentage">
+                            {Math.round(Math.min(progress, 100))}%
+                        </span>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
 // ==================== SOCIAL POPUP COMPONENT ====================
 const SocialPopup: React.FC = () => {
     const [isVisible, setIsVisible] = useState(true);
 
-    // Add keyframes animation to document head
     React.useEffect(() => {
         const styleSheet = document.createElement("style");
         styleSheet.textContent = `
@@ -80,261 +362,69 @@ const SocialPopup: React.FC = () => {
 
     if (!isVisible) return null;
 
-    // Handle close button click with proper event prevention
     const handleClose = (e: React.MouseEvent<HTMLButtonElement>) => {
         e.preventDefault();
         e.stopPropagation();
         setIsVisible(false);
     };
 
-    // Handle link clicks to prevent any issues
     const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>, url: string) => {
         e.preventDefault();
         e.stopPropagation();
         window.open(url, '_blank', 'noopener,noreferrer');
     };
 
-    const popupContainerStyle: React.CSSProperties = {
-        position: 'fixed',
-        bottom: '25px',
-        right: '25px',
-        zIndex: 9999,
-        animation: 'slideInRight 0.4s ease-out',
-        fontFamily: "'Courier New', 'Orbitron', monospace",
-    };
-
-    const contentStyle: React.CSSProperties = {
-        background: 'linear-gradient(135deg, #0a0a0a 0%, #111111 100%)',
-        border: '2px solid #00ff00',
-        borderRadius: '16px',
-        padding: '20px',
-        minWidth: '250px',
-        boxShadow: '0 0 30px rgba(0, 255, 0, 0.3), inset 0 0 20px rgba(0, 255, 0, 0.05)',
-        position: 'relative',
-        backdropFilter: 'blur(10px)',
-        transition: 'all 0.3s ease',
-    };
-
-    const closeButtonStyle: React.CSSProperties = {
-        position: 'absolute',
-        top: '10px',
-        right: '10px',
-        background: '#ff0044',
-        color: 'white',
-        border: 'none',
-        borderRadius: '50%',
-        width: '26px',
-        height: '26px',
-        cursor: 'pointer',
-        fontSize: '12px',
-        fontWeight: 'bold',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        transition: 'all 0.2s ease',
-        zIndex: 10000,
-    };
-
-    const titleStyle: React.CSSProperties = {
-        color: '#00ff00',
-        margin: '0 0 18px 0',
-        textAlign: 'center',
-        fontSize: '0.9rem',
-        letterSpacing: '2px',
-        textTransform: 'uppercase',
-        fontWeight: 'bold',
-        textShadow: '0 0 8px #00ff00',
-    };
-
-    const linksContainerStyle: React.CSSProperties = {
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '10px',
-    };
-
-    const linkStyle: React.CSSProperties = {
-        color: '#00ff00',
-        textDecoration: 'none',
-        padding: '8px 14px',
-        border: '1px solid rgba(0, 255, 0, 0.3)',
-        borderRadius: '10px',
-        transition: 'all 0.25s ease',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        fontSize: '0.85rem',
-        fontFamily: 'monospace',
-        fontWeight: 500,
-        background: 'rgba(0, 0, 0, 0.4)',
-        backdropFilter: 'blur(4px)',
-    };
-
     return (
-        <div style={popupContainerStyle} onClick={(e) => e.stopPropagation()}>
-            <div style={contentStyle}>
+        <div className="social-popup" onClick={(e) => e.stopPropagation()}>
+            <div className="social-content">
                 <button 
-                    style={closeButtonStyle}
+                    className="social-close"
                     onClick={handleClose}
-                    onMouseEnter={(e) => {
-                        e.currentTarget.style.transform = 'scale(1.1)';
-                        e.currentTarget.style.background = '#ff3355';
-                        e.currentTarget.style.boxShadow = '0 0 10px #ff0044';
-                    }}
-                    onMouseLeave={(e) => {
-                        e.currentTarget.style.transform = 'scale(1)';
-                        e.currentTarget.style.background = '#ff0044';
-                        e.currentTarget.style.boxShadow = 'none';
-                    }}
                     type="button"
                 >
                     ✕
                 </button>
-                <h3 style={titleStyle}>CONNECT WITH US</h3>
-                <div style={linksContainerStyle}>
+                <h3>CONNECT WITH US</h3>
+                <div className="social-links">
                     <a 
                         href="#"
                         onClick={(e) => handleLinkClick(e, "https://wa.me/+254757261120")}
-                        style={linkStyle}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
-                            e.currentTarget.style.transform = 'translateX(6px)';
-                            e.currentTarget.style.borderColor = '#00ff00';
-                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 255, 0, 0.4)';
-                            e.currentTarget.style.textShadow = '0 0 4px #00ff00';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
-                            e.currentTarget.style.transform = 'translateX(0)';
-                            e.currentTarget.style.borderColor = 'rgba(0, 255, 0, 0.3)';
-                            e.currentTarget.style.boxShadow = 'none';
-                            e.currentTarget.style.textShadow = 'none';
-                        }}
                     >
                         📱 WhatsApp
                     </a>
                     <a 
                         href="#"
                         onClick={(e) => handleLinkClick(e, "https://t.me/+YDUwvuuVDYg5NjE0")}
-                        style={linkStyle}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
-                            e.currentTarget.style.transform = 'translateX(6px)';
-                            e.currentTarget.style.borderColor = '#00ff00';
-                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 255, 0, 0.4)';
-                            e.currentTarget.style.textShadow = '0 0 4px #00ff00';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
-                            e.currentTarget.style.transform = 'translateX(0)';
-                            e.currentTarget.style.borderColor = 'rgba(0, 255, 0, 0.3)';
-                            e.currentTarget.style.boxShadow = 'none';
-                            e.currentTarget.style.textShadow = 'none';
-                        }}
                     >
                         ✈️ Telegram
                     </a>
                     <a 
                         href="#"
                         onClick={(e) => handleLinkClick(e, "https://www.youtube.com/@ceoramz")}
-                        style={linkStyle}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
-                            e.currentTarget.style.transform = 'translateX(6px)';
-                            e.currentTarget.style.borderColor = '#00ff00';
-                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 255, 0, 0.4)';
-                            e.currentTarget.style.textShadow = '0 0 4px #00ff00';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
-                            e.currentTarget.style.transform = 'translateX(0)';
-                            e.currentTarget.style.borderColor = 'rgba(0, 255, 0, 0.3)';
-                            e.currentTarget.style.boxShadow = 'none';
-                            e.currentTarget.style.textShadow = 'none';
-                        }}
                     >
                         ▶️ YouTube
                     </a>
                     <a 
                         href="#"
                         onClick={(e) => handleLinkClick(e, "https://tiktok.com/@ceoramz")}
-                        style={linkStyle}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
-                            e.currentTarget.style.transform = 'translateX(6px)';
-                            e.currentTarget.style.borderColor = '#00ff00';
-                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 255, 0, 0.4)';
-                            e.currentTarget.style.textShadow = '0 0 4px #00ff00';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
-                            e.currentTarget.style.transform = 'translateX(0)';
-                            e.currentTarget.style.borderColor = 'rgba(0, 255, 0, 0.3)';
-                            e.currentTarget.style.boxShadow = 'none';
-                            e.currentTarget.style.textShadow = 'none';
-                        }}
                     >
                         🎵 TikTok
                     </a>
                     <a 
                         href="#"
                         onClick={(e) => handleLinkClick(e, "https://www.instagram.com/ramztrader.site?igsh=aDY1aGFiMGpobHJi")}
-                        style={linkStyle}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
-                            e.currentTarget.style.transform = 'translateX(6px)';
-                            e.currentTarget.style.borderColor = '#00ff00';
-                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 255, 0, 0.4)';
-                            e.currentTarget.style.textShadow = '0 0 4px #00ff00';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
-                            e.currentTarget.style.transform = 'translateX(0)';
-                            e.currentTarget.style.borderColor = 'rgba(0, 255, 0, 0.3)';
-                            e.currentTarget.style.boxShadow = 'none';
-                            e.currentTarget.style.textShadow = 'none';
-                        }}
                     >
                         📷 Instagram
                     </a>
                     <a 
                         href="#"
                         onClick={(e) => handleLinkClick(e, "https://www.facebook.com/profile.php?id=61573399294689")}
-                        style={linkStyle}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
-                            e.currentTarget.style.transform = 'translateX(6px)';
-                            e.currentTarget.style.borderColor = '#00ff00';
-                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 255, 0, 0.4)';
-                            e.currentTarget.style.textShadow = '0 0 4px #00ff00';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
-                            e.currentTarget.style.transform = 'translateX(0)';
-                            e.currentTarget.style.borderColor = 'rgba(0, 255, 0, 0.3)';
-                            e.currentTarget.style.boxShadow = 'none';
-                            e.currentTarget.style.textShadow = 'none';
-                        }}
                     >
                         💬 Discord
                     </a>
                     <a 
                         href="#"
                         onClick={(e) => handleLinkClick(e, "https://www.instagram.com/ramztrader.site?igsh=aDY1aGFiMGpobHJi")}
-                        style={linkStyle}
-                        onMouseEnter={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 255, 0, 0.12)';
-                            e.currentTarget.style.transform = 'translateX(6px)';
-                            e.currentTarget.style.borderColor = '#00ff00';
-                            e.currentTarget.style.boxShadow = '0 0 12px rgba(0, 255, 0, 0.4)';
-                            e.currentTarget.style.textShadow = '0 0 4px #00ff00';
-                        }}
-                        onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'rgba(0, 0, 0, 0.4)';
-                            e.currentTarget.style.transform = 'translateX(0)';
-                            e.currentTarget.style.borderColor = 'rgba(0, 255, 0, 0.3)';
-                            e.currentTarget.style.boxShadow = 'none';
-                            e.currentTarget.style.textShadow = 'none';
-                        }}
                     >
                         🐦 Twitter
                     </a>
@@ -377,7 +467,7 @@ const AppWrapper = observer(() => {
         [key: string]: string;
     };
     const { clear } = summary_card;
-const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER } = DBOT_TABS;
+    const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER } = DBOT_TABS;
     const init_render = React.useRef(true);
     const hash = [
         'bot_ideas',
@@ -406,17 +496,16 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
     const [left_tab_shadow, setLeftTabShadow] = useState<boolean>(false);
     const [right_tab_shadow, setRightTabShadow] = useState<boolean>(false);
 
+    // Loader states
+    const [showGlobalLoader, setShowGlobalLoader] = useState<boolean>(true);
+    const [loaderProgress, setLoaderProgress] = useState<number>(0);
+    const [loaderMessage, setLoaderMessage] = useState<string>('Initializing...');
+
     // Trade type modal state
     const [tradeTypeModalState, setTradeTypeModalState] = useState(getModalState());
 
     /**
      * Helper function to get modal props with enhanced type safety and clear documentation
-     *
-     * Props serve distinct purposes:
-     * - current_trade_type: Technical identifier for API/internal use (format: "category/type")
-     * - current_trade_type_display_name: Human-readable name for UI display
-     *
-     * This separation ensures proper data flow between technical systems and user interface
      */
     const getTradeTypeModalProps = () => {
         const { tradeTypeData } = tradeTypeModalState;
@@ -424,17 +513,10 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
         return {
             is_visible: tradeTypeModalState.isVisible,
             trade_type_display_name: tradeTypeData?.displayName || '',
-
-            // Technical identifier for internal/API use (e.g., "callput/callput")
-            // Used by backend systems and technical integrations
             current_trade_type: tradeTypeData?.currentTradeType
                 ? `${tradeTypeData.currentTradeType.tradeTypeCategory}/${tradeTypeData.currentTradeType.tradeType}`
                 : 'N/A',
-
-            // Human-readable display name for UI (e.g., "Rise/Fall")
-            // Used for user-facing text and modal content
             current_trade_type_display_name: tradeTypeData?.currentTradeTypeDisplayName || 'N/A',
-
             onConfirm: handleTradeTypeConfirm,
             onCancel: handleTradeTypeCancel,
         };
@@ -449,19 +531,61 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
     };
     const active_hash_tab = GetHashedValue(active_tab);
 
+    // Loader progress simulation
+    useEffect(() => {
+        if (is_loading) {
+            setShowGlobalLoader(true);
+            setLoaderMessage('Loading Bot Builder...');
+            
+            const progressSteps = [
+                { progress: 10, message: 'Initializing modules...' },
+                { progress: 25, message: 'Loading resources...' },
+                { progress: 40, message: 'Setting up workspace...' },
+                { progress: 55, message: 'Loading blocks...' },
+                { progress: 70, message: 'Configuring tools...' },
+                { progress: 85, message: 'Finalizing setup...' },
+            ];
+
+            let stepIndex = 0;
+            const interval = setInterval(() => {
+                if (stepIndex < progressSteps.length) {
+                    setLoaderProgress(progressSteps[stepIndex].progress);
+                    setLoaderMessage(progressSteps[stepIndex].message);
+                    stepIndex++;
+                } else {
+                    clearInterval(interval);
+                }
+            }, 800);
+
+            return () => clearInterval(interval);
+        }
+    }, [is_loading]);
+
+    // Hide loader when Blockly is loaded
+    useEffect(() => {
+        if (!is_loading && showGlobalLoader) {
+            setLoaderProgress(100);
+            setLoaderMessage('Ready!');
+            setTimeout(() => {
+                setShowGlobalLoader(false);
+                setLoaderProgress(0);
+            }, 600);
+        }
+    }, [is_loading]);
+
     // Set up modal state change listener
-    React.useEffect(() => {
+    useEffect(() => {
         setModalStateChangeCallback(new_state => {
             setTradeTypeModalState(new_state);
         });
     }, [is_loading]);
 
     // Reset URL parameter processing when location changes
-    React.useEffect(() => {
+    useEffect(() => {
         resetUrlParamProcessing();
     }, [location.search]);
 
-    React.useEffect(() => {
+    useEffect(() => {
         const el_dashboard = document.getElementById('id-dbot-dashboard');
         const el_last_tab = document.getElementById('id-analysistool');
 
@@ -501,7 +625,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
         };
     }, []);
 
-    React.useEffect(() => {
+    useEffect(() => {
         const is_recoverable_trading_module = active_trading_module === 'auto_trades';
 
         if (connectionStatus === CONNECTION_STATUS.OPENED) {
@@ -551,7 +675,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
         }
     };
 
-    React.useEffect(() => {
+    useEffect(() => {
         let pollTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
         // Handle URL trade type parameters when switching to Bot Builder tab
@@ -606,7 +730,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
         };
     }, [active_tab, is_loading]);
 
-    React.useEffect(() => {
+    useEffect(() => {
         updateTabShadowsHeight();
 
         if (is_open) {
@@ -633,7 +757,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
         }
     }, [active_tab]);
 
-    React.useEffect(() => {
+    useEffect(() => {
         const trashcan_init_id = setTimeout(() => {
             if (active_tab === BOT_BUILDER && Blockly?.derivWorkspace?.trashcan) {
                 const trashcanY = window.innerHeight - 250;
@@ -709,6 +833,15 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
     
     return (
         <React.Fragment>
+            {/* Global Loader */}
+            {showGlobalLoader && (
+                <Loader 
+                    progress={loaderProgress} 
+                    message={loaderMessage}
+                    showProgress={true}
+                />
+            )}
+
             <div className='main'>
                 <div
                     className={classNames('main__container', {
@@ -717,7 +850,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
                     })}
                 >
                     <div>
-                        {!isDesktop && left_tab_shadow && <span className='tabs-shadow tabs-shadow--left' />}{' '}
+                        {!isDesktop && left_tab_shadow && <span className='tabs-shadow tabs-shadow--left' />}
                         <Tabs active_index={active_tab} className='main__tabs' onTabItemClick={handleTabChange} top>
                             {show_bot_ideas && (
                                 <div
@@ -846,7 +979,7 @@ const { BOT_BUILDER, BOT_IDEAS, DASHBOARD, AUTO_TRADES, MANUAL_TRADING, SCANNER 
                                 <Analysistool />
                             </div>
                         </Tabs>
-                        {!isDesktop && right_tab_shadow && <span className='tabs-shadow tabs-shadow--right' />}{' '}
+                        {!isDesktop && right_tab_shadow && <span className='tabs-shadow tabs-shadow--right' />}
                     </div>
                 </div>
             </div>
