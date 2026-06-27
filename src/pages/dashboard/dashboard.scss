@@ -499,3 +499,16 @@
         margin-inline-start: 0.4rem;
     }
 }
+.tab__dashboard__table__block {
+    transition: all 0.3s ease;
+}
+
+.tab__dashboard__table__block:hover {
+    transform: translateY(-4px);
+}
+
+/* For accessibility - ensure text contrast */
+.tab__dashboard__table__block .text-white {
+    color: #ffffff;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
