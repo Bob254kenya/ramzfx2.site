@@ -854,21 +854,31 @@ const AutoTrades = observer(() => {
         'RUNLOW',
     ];
 
-    // ─── Market Config State ────────────────────────────────────────────────
+    // ─── UNIFIED CONFIG STATE ──────────────────────────────────────────────
 
-    // Market 1 Config
-    const [m1Stake, setM1Stake] = useState(() => {
-        try { return localStorage.getItem('auto_trades_m1_stake') || '1'; } catch { return '1'; }
+    // Shared stake, martingale, TP, SL, and martingale strategy
+    const [sharedStake, setSharedStake] = useState(() => {
+        try { return localStorage.getItem('auto_trades_shared_stake') || '1'; } catch { return '1'; }
     });
-    const [m1Martingale, setM1Martingale] = useState(() => {
-        try { return localStorage.getItem('auto_trades_m1_martingale') || '2'; } catch { return '2'; }
+    const [sharedMartingale, setSharedMartingale] = useState(() => {
+        try { return localStorage.getItem('auto_trades_shared_martingale') || '2'; } catch { return '2'; }
     });
-    const [m1TakeProfit, setM1TakeProfit] = useState(() => {
-        try { return localStorage.getItem('auto_trades_m1_takeProfit') || '100'; } catch { return '100'; }
+    const [sharedTakeProfit, setSharedTakeProfit] = useState(() => {
+        try { return localStorage.getItem('auto_trades_shared_takeProfit') || '100'; } catch { return '100'; }
     });
-    const [m1StopLoss, setM1StopLoss] = useState(() => {
-        try { return localStorage.getItem('auto_trades_m1_stopLoss') || '100'; } catch { return '100'; }
+    const [sharedStopLoss, setSharedStopLoss] = useState(() => {
+        try { return localStorage.getItem('auto_trades_shared_stopLoss') || '100'; } catch { return '100'; }
     });
+    const [sharedMartingaleMode, setSharedMartingaleMode] = useState<MartingaleModeType>(() => {
+        try { return normalizeMartingaleMode(localStorage.getItem('auto_trades_shared_martingaleMode')); } catch { return 'after_one_loss'; }
+    });
+    const [sharedConsecutiveLossCount, setSharedConsecutiveLossCount] = useState(getInitialConsecutiveLossThreshold);
+    const [sharedConsecutiveLossCountInput, setSharedConsecutiveLossCountInput] = useState(() =>
+        String(getInitialConsecutiveLossThreshold())
+    );
+
+    // ─── Market 1 Config ──────────────────────────────────────────────────
+
     const [m1TradeType, setM1TradeType] = useState<TradeType>(() => {
         const v = localStorage.getItem('auto_trades_m1_tradeType');
         return VALID_TRADE_TYPES.includes(v as TradeType) ? (v as TradeType) : 'DIGITOVER';
@@ -898,29 +908,11 @@ const AutoTrades = observer(() => {
         const saved = localStorage.getItem('auto_trades_m1_strategyTemplate');
         return STRATEGY_TEMPLATE_IDS.includes(saved as StrategyTemplate) ? (saved as StrategyTemplate) : 'STANDARD';
     });
-    const [m1MartingaleMode, setM1MartingaleMode] = useState<MartingaleModeType>(() => {
-        try { return normalizeMartingaleMode(localStorage.getItem('auto_trades_m1_martingaleMode')); } catch { return 'after_one_loss'; }
-    });
-    const [m1ConsecutiveLossCount, setM1ConsecutiveLossCount] = useState(getInitialConsecutiveLossThreshold);
-    const [m1ConsecutiveLossCountInput, setM1ConsecutiveLossCountInput] = useState(() =>
-        String(getInitialConsecutiveLossThreshold())
-    );
 
-    // Market 2 Config
+    // ─── Market 2 Config ──────────────────────────────────────────────────
+
     const [m2Enabled, setM2Enabled] = useState(() => {
         try { return localStorage.getItem('auto_trades_m2_enabled') === 'true'; } catch { return false; }
-    });
-    const [m2Stake, setM2Stake] = useState(() => {
-        try { return localStorage.getItem('auto_trades_m2_stake') || '1'; } catch { return '1'; }
-    });
-    const [m2Martingale, setM2Martingale] = useState(() => {
-        try { return localStorage.getItem('auto_trades_m2_martingale') || '2'; } catch { return '2'; }
-    });
-    const [m2TakeProfit, setM2TakeProfit] = useState(() => {
-        try { return localStorage.getItem('auto_trades_m2_takeProfit') || '100'; } catch { return '100'; }
-    });
-    const [m2StopLoss, setM2StopLoss] = useState(() => {
-        try { return localStorage.getItem('auto_trades_m2_stopLoss') || '100'; } catch { return '100'; }
     });
     const [m2TradeType, setM2TradeType] = useState<TradeType>(() => {
         const v = localStorage.getItem('auto_trades_m2_tradeType');
@@ -947,13 +939,6 @@ const AutoTrades = observer(() => {
     const [m2StrategyMode, setM2StrategyMode] = useState<StrategyMode>(() => {
         try { return (localStorage.getItem('auto_trades_m2_strategyMode') as StrategyMode) || 'STANDARD'; } catch { return 'STANDARD'; }
     });
-    const [m2MartingaleMode, setM2MartingaleMode] = useState<MartingaleModeType>(() => {
-        try { return normalizeMartingaleMode(localStorage.getItem('auto_trades_m2_martingaleMode')); } catch { return 'after_one_loss'; }
-    });
-    const [m2ConsecutiveLossCount, setM2ConsecutiveLossCount] = useState(getInitialConsecutiveLossThreshold);
-    const [m2ConsecutiveLossCountInput, setM2ConsecutiveLossCountInput] = useState(() =>
-        String(getInitialConsecutiveLossThreshold())
-    );
 
     // ─── Trading Mode ────────────────────────────────────────────────────────
 
@@ -1041,14 +1026,20 @@ const AutoTrades = observer(() => {
     const tradingModeRef = useRef<TradingMode>('market1_only');
     const m2EnabledRef = useRef(false);
 
-    // ─── Market Config Refs ──────────────────────────────────────────────
+    // ─── Shared Config Refs ──────────────────────────────────────────────
 
-    // Market 1 Config Refs
-    const m1ConfigRef = useRef({
+    const sharedConfigRef = useRef({
         stake: 1,
         martingale: 2,
         takeProfit: 100,
         stopLoss: 100,
+        martingaleMode: 'after_one_loss' as MartingaleModeType,
+        consecutiveLossThreshold: 2,
+    });
+
+    // ─── Market Config Refs ──────────────────────────────────────────────
+
+    const m1ConfigRef = useRef({
         tradeType: 'DIGITOVER' as TradeType,
         barrier: 4,
         predictionBeforeLoss: 4,
@@ -1058,17 +1049,10 @@ const AutoTrades = observer(() => {
         inverseMode: false,
         strategyMode: 'STANDARD' as StrategyMode,
         strategyTemplate: 'STANDARD' as StrategyTemplate,
-        martingaleMode: 'after_one_loss' as MartingaleModeType,
-        consecutiveLossThreshold: 2,
     });
 
-    // Market 2 Config Refs
     const m2ConfigRef = useRef({
         enabled: false,
-        stake: 1,
-        martingale: 2,
-        takeProfit: 100,
-        stopLoss: 100,
         tradeType: 'DIGITUNDER' as TradeType,
         barrier: 5,
         predictionBeforeLoss: 4,
@@ -1077,18 +1061,25 @@ const AutoTrades = observer(() => {
         analysisTicks: 1,
         inverseMode: false,
         strategyMode: 'STANDARD' as StrategyMode,
-        martingaleMode: 'after_one_loss' as MartingaleModeType,
-        consecutiveLossThreshold: 2,
     });
 
-    // ─── Effect: Sync configs to refs ────────────────────────────────────
+    // ─── Effect: Sync shared config to ref ───────────────────────────────
+
+    useEffect(() => {
+        sharedConfigRef.current = {
+            stake: Number(sharedStake) || 1,
+            martingale: Math.max(1.01, Number(sharedMartingale) || 2),
+            takeProfit: Number(sharedTakeProfit) || 100,
+            stopLoss: Number(sharedStopLoss) || 100,
+            martingaleMode: sharedMartingaleMode,
+            consecutiveLossThreshold: clampConsecutiveLossThreshold(sharedConsecutiveLossCount),
+        };
+    }, [sharedStake, sharedMartingale, sharedTakeProfit, sharedStopLoss, sharedMartingaleMode, sharedConsecutiveLossCount]);
+
+    // ─── Effect: Sync M1 config to ref ───────────────────────────────────
 
     useEffect(() => {
         m1ConfigRef.current = {
-            stake: Number(m1Stake) || 1,
-            martingale: Math.max(1.01, Number(m1Martingale) || 2),
-            takeProfit: Number(m1TakeProfit) || 100,
-            stopLoss: Number(m1StopLoss) || 100,
             tradeType: m1TradeType,
             barrier: getDigitNumber(m1Barrier, 4),
             predictionBeforeLoss: getDigitNumber(m1PredictionBeforeLoss, 4),
@@ -1098,18 +1089,14 @@ const AutoTrades = observer(() => {
             inverseMode: m1InverseMode,
             strategyMode: m1StrategyMode,
             strategyTemplate: m1StrategyTemplate,
-            martingaleMode: m1MartingaleMode,
-            consecutiveLossThreshold: clampConsecutiveLossThreshold(m1ConsecutiveLossCount),
         };
-    }, [m1Stake, m1Martingale, m1TakeProfit, m1StopLoss, m1TradeType, m1Barrier, m1PredictionBeforeLoss, m1PredictionAfterLoss, m1Streak, m1AnalysisTicks, m1InverseMode, m1StrategyMode, m1StrategyTemplate, m1MartingaleMode, m1ConsecutiveLossCount]);
+    }, [m1TradeType, m1Barrier, m1PredictionBeforeLoss, m1PredictionAfterLoss, m1Streak, m1AnalysisTicks, m1InverseMode, m1StrategyMode, m1StrategyTemplate]);
+
+    // ─── Effect: Sync M2 config to ref ───────────────────────────────────
 
     useEffect(() => {
         m2ConfigRef.current = {
             enabled: m2Enabled,
-            stake: Number(m2Stake) || 1,
-            martingale: Math.max(1.01, Number(m2Martingale) || 2),
-            takeProfit: Number(m2TakeProfit) || 100,
-            stopLoss: Number(m2StopLoss) || 100,
             tradeType: m2TradeType,
             barrier: getDigitNumber(m2Barrier, 5),
             predictionBeforeLoss: getDigitNumber(m2PredictionBeforeLoss, 4),
@@ -1118,10 +1105,54 @@ const AutoTrades = observer(() => {
             analysisTicks: Math.min(10, Math.max(1, Number(m2AnalysisTicks) || 1)),
             inverseMode: m2InverseMode,
             strategyMode: m2StrategyMode,
-            martingaleMode: m2MartingaleMode,
-            consecutiveLossThreshold: clampConsecutiveLossThreshold(m2ConsecutiveLossCount),
         };
-    }, [m2Enabled, m2Stake, m2Martingale, m2TakeProfit, m2StopLoss, m2TradeType, m2Barrier, m2PredictionBeforeLoss, m2PredictionAfterLoss, m2Streak, m2AnalysisTicks, m2InverseMode, m2StrategyMode, m2MartingaleMode, m2ConsecutiveLossCount]);
+    }, [m2Enabled, m2TradeType, m2Barrier, m2PredictionBeforeLoss, m2PredictionAfterLoss, m2Streak, m2AnalysisTicks, m2InverseMode, m2StrategyMode]);
+
+    // ─── Effect: Save shared config ──────────────────────────────────────
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('auto_trades_shared_stake', sharedStake);
+            localStorage.setItem('auto_trades_shared_martingale', sharedMartingale);
+            localStorage.setItem('auto_trades_shared_takeProfit', sharedTakeProfit);
+            localStorage.setItem('auto_trades_shared_stopLoss', sharedStopLoss);
+            localStorage.setItem('auto_trades_shared_martingaleMode', sharedMartingaleMode);
+            localStorage.setItem('auto_trades_shared_consecutiveLossCount', String(sharedConsecutiveLossCount));
+        } catch { /* Ignore */ }
+    }, [sharedStake, sharedMartingale, sharedTakeProfit, sharedStopLoss, sharedMartingaleMode, sharedConsecutiveLossCount]);
+
+    // ─── Effect: Save M1 config ──────────────────────────────────────────
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('auto_trades_m1_tradeType', m1TradeType);
+            localStorage.setItem('auto_trades_m1_barrier', m1Barrier);
+            localStorage.setItem('auto_trades_m1_predictionBeforeLoss', m1PredictionBeforeLoss);
+            localStorage.setItem('auto_trades_m1_predictionAfterLoss', m1PredictionAfterLoss);
+            localStorage.setItem('auto_trades_m1_streak', m1Streak);
+            localStorage.setItem('auto_trades_m1_analysisTicks', m1AnalysisTicks);
+            localStorage.setItem('auto_trades_m1_inverseMode', String(m1InverseMode));
+            localStorage.setItem('auto_trades_m1_strategyMode', m1StrategyMode);
+            localStorage.setItem('auto_trades_m1_strategyTemplate', m1StrategyTemplate);
+        } catch { /* Ignore */ }
+    }, [m1TradeType, m1Barrier, m1PredictionBeforeLoss, m1PredictionAfterLoss, m1Streak, m1AnalysisTicks, m1InverseMode, m1StrategyMode, m1StrategyTemplate]);
+
+    // ─── Effect: Save M2 config ──────────────────────────────────────────
+
+    useEffect(() => {
+        try {
+            localStorage.setItem('auto_trades_m2_tradeType', m2TradeType);
+            localStorage.setItem('auto_trades_m2_barrier', m2Barrier);
+            localStorage.setItem('auto_trades_m2_predictionBeforeLoss', m2PredictionBeforeLoss);
+            localStorage.setItem('auto_trades_m2_predictionAfterLoss', m2PredictionAfterLoss);
+            localStorage.setItem('auto_trades_m2_streak', m2Streak);
+            localStorage.setItem('auto_trades_m2_analysisTicks', m2AnalysisTicks);
+            localStorage.setItem('auto_trades_m2_inverseMode', String(m2InverseMode));
+            localStorage.setItem('auto_trades_m2_strategyMode', m2StrategyMode);
+        } catch { /* Ignore */ }
+    }, [m2TradeType, m2Barrier, m2PredictionBeforeLoss, m2PredictionAfterLoss, m2Streak, m2AnalysisTicks, m2InverseMode, m2StrategyMode]);
+
+    // ─── Effect: Save trading mode ───────────────────────────────────────
 
     useEffect(() => {
         tradingModeRef.current = tradingMode;
@@ -1132,48 +1163,7 @@ const AutoTrades = observer(() => {
         } catch { /* Ignore */ }
     }, [tradingMode, m2Enabled]);
 
-    // ─── Save Market 1 Config ─────────────────────────────────────────────
-
-    useEffect(() => {
-        try {
-            localStorage.setItem('auto_trades_m1_stake', m1Stake);
-            localStorage.setItem('auto_trades_m1_martingale', m1Martingale);
-            localStorage.setItem('auto_trades_m1_takeProfit', m1TakeProfit);
-            localStorage.setItem('auto_trades_m1_stopLoss', m1StopLoss);
-            localStorage.setItem('auto_trades_m1_tradeType', m1TradeType);
-            localStorage.setItem('auto_trades_m1_barrier', m1Barrier);
-            localStorage.setItem('auto_trades_m1_predictionBeforeLoss', m1PredictionBeforeLoss);
-            localStorage.setItem('auto_trades_m1_predictionAfterLoss', m1PredictionAfterLoss);
-            localStorage.setItem('auto_trades_m1_streak', m1Streak);
-            localStorage.setItem('auto_trades_m1_analysisTicks', m1AnalysisTicks);
-            localStorage.setItem('auto_trades_m1_inverseMode', String(m1InverseMode));
-            localStorage.setItem('auto_trades_m1_strategyMode', m1StrategyMode);
-            localStorage.setItem('auto_trades_m1_strategyTemplate', m1StrategyTemplate);
-            localStorage.setItem('auto_trades_m1_martingaleMode', m1MartingaleMode);
-            localStorage.setItem('auto_trades_m1_consecutiveLossCount', String(m1ConsecutiveLossCount));
-        } catch { /* Ignore */ }
-    }, [m1Stake, m1Martingale, m1TakeProfit, m1StopLoss, m1TradeType, m1Barrier, m1PredictionBeforeLoss, m1PredictionAfterLoss, m1Streak, m1AnalysisTicks, m1InverseMode, m1StrategyMode, m1StrategyTemplate, m1MartingaleMode, m1ConsecutiveLossCount]);
-
-    // ─── Save Market 2 Config ─────────────────────────────────────────────
-
-    useEffect(() => {
-        try {
-            localStorage.setItem('auto_trades_m2_stake', m2Stake);
-            localStorage.setItem('auto_trades_m2_martingale', m2Martingale);
-            localStorage.setItem('auto_trades_m2_takeProfit', m2TakeProfit);
-            localStorage.setItem('auto_trades_m2_stopLoss', m2StopLoss);
-            localStorage.setItem('auto_trades_m2_tradeType', m2TradeType);
-            localStorage.setItem('auto_trades_m2_barrier', m2Barrier);
-            localStorage.setItem('auto_trades_m2_predictionBeforeLoss', m2PredictionBeforeLoss);
-            localStorage.setItem('auto_trades_m2_predictionAfterLoss', m2PredictionAfterLoss);
-            localStorage.setItem('auto_trades_m2_streak', m2Streak);
-            localStorage.setItem('auto_trades_m2_analysisTicks', m2AnalysisTicks);
-            localStorage.setItem('auto_trades_m2_inverseMode', String(m2InverseMode));
-            localStorage.setItem('auto_trades_m2_strategyMode', m2StrategyMode);
-            localStorage.setItem('auto_trades_m2_martingaleMode', m2MartingaleMode);
-            localStorage.setItem('auto_trades_m2_consecutiveLossCount', String(m2ConsecutiveLossCount));
-        } catch { /* Ignore */ }
-    }, [m2Stake, m2Martingale, m2TakeProfit, m2StopLoss, m2TradeType, m2Barrier, m2PredictionBeforeLoss, m2PredictionAfterLoss, m2Streak, m2AnalysisTicks, m2InverseMode, m2StrategyMode, m2MartingaleMode, m2ConsecutiveLossCount]);
+    // ─── Effect: Save markets ─────────────────────────────────────────────
 
     useEffect(() => {
         selectedMarketsRef.current = selectedMarkets;
@@ -1272,27 +1262,28 @@ const AutoTrades = observer(() => {
 
     const getActiveConfig = useCallback((symbol: string): {
         config: typeof m1ConfigRef.current;
+        sharedConfig: typeof sharedConfigRef.current;
         isMarket2: boolean;
         isRecovery: boolean;
     } => {
         const state = marketStatesRef.current[symbol];
-        if (!state) return { config: m1ConfigRef.current, isMarket2: false, isRecovery: false };
+        if (!state) return { config: m1ConfigRef.current, sharedConfig: sharedConfigRef.current, isMarket2: false, isRecovery: false };
 
         // Check if we're in recovery mode and M2 is enabled
         if (tradingModeRef.current === 'recovery_mode' && m2EnabledRef.current) {
             if (state.recoveryActive) {
                 // RECOVERY ACTIVE → Market 2 ONLY
-                return { config: m2ConfigRef.current, isMarket2: true, isRecovery: true };
+                return { config: m2ConfigRef.current, sharedConfig: sharedConfigRef.current, isMarket2: true, isRecovery: true };
             }
             // Recovery mode but NOT active → Market 1
-            return { config: m1ConfigRef.current, isMarket2: false, isRecovery: false };
+            return { config: m1ConfigRef.current, sharedConfig: sharedConfigRef.current, isMarket2: false, isRecovery: false };
         }
 
         if (tradingModeRef.current === 'market2_only' && m2EnabledRef.current) {
-            return { config: m2ConfigRef.current, isMarket2: true, isRecovery: false };
+            return { config: m2ConfigRef.current, sharedConfig: sharedConfigRef.current, isMarket2: true, isRecovery: false };
         }
 
-        return { config: m1ConfigRef.current, isMarket2: false, isRecovery: false };
+        return { config: m1ConfigRef.current, sharedConfig: sharedConfigRef.current, isMarket2: false, isRecovery: false };
     }, []);
 
     const getActiveTradeType = useCallback((symbol: string): TradeType => {
@@ -1392,9 +1383,9 @@ const AutoTrades = observer(() => {
 
     const executeTrade = useCallback(
         async (symbol: string, stakeAmount: number, lastResult: 'win' | 'loss' | null): Promise<number> => {
-            const { config, isMarket2, isRecovery } = getActiveConfig(symbol);
+            const { config, sharedConfig } = getActiveConfig(symbol);
             const ct = config.tradeType;
-            const bar = getActiveBarrier(symbol, lastResult, isMarket2 ? 0 : consecutiveLossRef.current);
+            const bar = getActiveBarrier(symbol, lastResult, 0);
             const tradeStartTime = Math.floor(Date.now() / 1000);
             const verificationId = `${symbol}_${tradeStartTime}_${Math.random().toString(36).substring(2, 11)}`;
             const abortController = new AbortController();
@@ -1468,14 +1459,14 @@ const AutoTrades = observer(() => {
         const state = marketStatesRef.current[symbol];
         if (!state) return;
 
-        const { config, isRecovery } = getActiveConfig(symbol);
-        const { martingale: mult, takeProfit: tp, stopLoss: sl, stake: baseStake } = config;
+        const { config, sharedConfig, isRecovery } = getActiveConfig(symbol);
+        const { martingale: mult, takeProfit: tp, stopLoss: sl, stake: baseStake } = sharedConfig;
 
         totalPnlRef.current = parseFloat((totalPnlRef.current + profit).toFixed(2));
         totalTradesRef.current++;
 
-        const martingaleMode = isMarket2 ? m2ConfigRef.current.martingaleMode : m1ConfigRef.current.martingaleMode;
-        const consecutiveLossThreshold = isMarket2 ? m2ConfigRef.current.consecutiveLossThreshold : m1ConfigRef.current.consecutiveLossThreshold;
+        const martingaleMode = sharedConfig.martingaleMode;
+        const consecutiveLossThreshold = sharedConfig.consecutiveLossThreshold;
         const currentConsecutiveLosses = isMarket2 ? state.market2ConsecutiveLosses : consecutiveLossRef.current;
 
         const nextMartingaleState = getNextMartingaleState({
@@ -1498,6 +1489,7 @@ const AutoTrades = observer(() => {
             state.consecutive = profit >= 0 ? 0 : state.consecutive + 1;
         }
 
+        // ALWAYS use the calculated next stake from martingale
         nextStakeRef.current = nextMartingaleState.nextStake;
         state.lastResult = nextMartingaleState.lastResult;
         state.tradeCount++;
@@ -1520,7 +1512,8 @@ const AutoTrades = observer(() => {
                 state.consecutive = 0;
                 consecutiveLossRef.current = 0;
                 previousContractResultRef.current = null;
-                nextStakeRef.current = m2ConfigRef.current.stake;
+                // Reset stake to M2 base stake when entering recovery
+                nextStakeRef.current = sharedConfigRef.current.stake;
 
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
@@ -1540,7 +1533,8 @@ const AutoTrades = observer(() => {
                 state.consecutive = 0;
                 consecutiveLossRef.current = 0;
                 previousContractResultRef.current = null;
-                nextStakeRef.current = m1ConfigRef.current.stake;
+                // Reset stake to M1 base stake when recovery completes
+                nextStakeRef.current = sharedConfigRef.current.stake;
 
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
@@ -1551,7 +1545,8 @@ const AutoTrades = observer(() => {
                     timestamp: Date.now(),
                 });
             } else if (profit < 0 && isMarket2) {
-                // Loss on Market 2 → Stay on Market 2
+                // Loss on Market 2 → Stay on Market 2, continue martingale
+                // Keep the martingale stake that was already set
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
                     condition: `🔴 LOSS on Market 2 — Continuing recovery on Market 2`,
@@ -1564,7 +1559,7 @@ const AutoTrades = observer(() => {
                 // Win on Market 1 → Reset everything (recovery not active)
                 consecutiveLossRef.current = 0;
                 previousContractResultRef.current = null;
-                nextStakeRef.current = m1ConfigRef.current.stake;
+                nextStakeRef.current = sharedConfigRef.current.stake;
                 state.consecutive = 0;
                 state.recoveryActive = false;
                 state.recoveryStartTime = null;
@@ -1582,16 +1577,17 @@ const AutoTrades = observer(() => {
                     consecutiveLossRef.current = 0;
                     previousContractResultRef.current = null;
                 }
-                nextStakeRef.current = config.stake;
+                nextStakeRef.current = sharedConfigRef.current.stake;
             }
+            // On loss, keep the martingale stake that was already set
         }
 
         refreshDisplays();
 
         // ─── TP/SL Check ──────────────────────────────────────────────────
 
-        const currentTP = isMarket2 ? m2ConfigRef.current.takeProfit : m1ConfigRef.current.takeProfit;
-        const currentSL = isMarket2 ? m2ConfigRef.current.stopLoss : m1ConfigRef.current.stopLoss;
+        const currentTP = sharedConfigRef.current.takeProfit;
+        const currentSL = sharedConfigRef.current.stopLoss;
 
         if ((totalPnlRef.current >= currentTP || totalPnlRef.current <= -currentSL) && runningRef.current) {
             setShowTPSLNotification(true);
@@ -2124,7 +2120,7 @@ const AutoTrades = observer(() => {
     // ─── Session Management ──────────────────────────────────────────────
 
     const resetSession = useCallback(() => {
-        const baseStake = m1ConfigRef.current.stake;
+        const baseStake = sharedConfigRef.current.stake;
         nextStakeRef.current = baseStake;
         globalTradingRef.current = false;
         previousContractResultRef.current = null;
@@ -2184,8 +2180,8 @@ const AutoTrades = observer(() => {
         });
         setIsRunning(false);
         clearDataRecoveryLoading();
-        setCurrentStakeDisplay(m1ConfigRef.current.stake);
-        nextStakeRef.current = m1ConfigRef.current.stake;
+        setCurrentStakeDisplay(sharedConfigRef.current.stake);
+        nextStakeRef.current = sharedConfigRef.current.stake;
         dashboard.setActiveTradingModule(null);
         setShowTPSLNotification(false);
         recordDiagnosticEvent('auto_trades.stop_trading', {
@@ -2391,7 +2387,7 @@ const AutoTrades = observer(() => {
 
     const pnlPositive = totalPnl > 0;
     const pnlNegative = totalPnl < 0;
-    const baseStakeNum = Number(m1Stake) || 1;
+    const baseStakeNum = Number(sharedStake) || 1;
     const martingaleActive = currentStakeDisplay > baseStakeNum;
     const selectedMarketDisplayStates = selectedMarkets.map(
         market => marketDisplays.find(display => display.symbol === market.symbol) ?? marketStatesRef.current[market.symbol]
@@ -2529,9 +2525,104 @@ const AutoTrades = observer(() => {
                                 )}
                             </div>
 
+                            {/* Shared Stake/Martingale/TP/SL Section */}
+                            <div className='auto-trades-card auto-trades-card--shared'>
+                                <h2 className='auto-trades-card__title'>💰 Stake & Risk Management</h2>
+                                <p className='auto-trades-card__subtitle'>Applies to both Market 1 and Market 2</p>
+                                <div className='auto-trades-config'>
+                                    <div className='auto-trades-config__group'>
+                                        <div className='auto-trades-config__field'>
+                                            <label>Stake ({currency || 'USD'})</label>
+                                            <Input 
+                                                type='number' 
+                                                min='0.35' 
+                                                step='0.01' 
+                                                value={sharedStake} 
+                                                onChange={e => setSharedStake(e.target.value)} 
+                                                disabled={isRunning} 
+                                            />
+                                        </div>
+                                        <div className='auto-trades-config__field'>
+                                            <label>Martingale ×</label>
+                                            <Input 
+                                                type='number' 
+                                                min='1.01' 
+                                                step='0.5' 
+                                                value={sharedMartingale} 
+                                                onChange={e => setSharedMartingale(e.target.value)} 
+                                                disabled={isRunning} 
+                                            />
+                                        </div>
+                                        <div className='auto-trades-config__field'>
+                                            <label>Take Profit ({currency || 'USD'})</label>
+                                            <Input 
+                                                type='number' 
+                                                min='0' 
+                                                step='1' 
+                                                value={sharedTakeProfit} 
+                                                onChange={e => setSharedTakeProfit(e.target.value)} 
+                                                disabled={isRunning} 
+                                            />
+                                        </div>
+                                        <div className='auto-trades-config__field'>
+                                            <label>Stop Loss ({currency || 'USD'})</label>
+                                            <Input 
+                                                type='number' 
+                                                min='0' 
+                                                step='1' 
+                                                value={sharedStopLoss} 
+                                                onChange={e => setSharedStopLoss(e.target.value)} 
+                                                disabled={isRunning} 
+                                            />
+                                        </div>
+                                    </div>
+
+                                    <div className='auto-trades-config__group'>
+                                        <div className='auto-trades-martingale-selector'>
+                                            <label>Martingale Strategy</label>
+                                            <select
+                                                className='auto-trades-martingale-selector__select'
+                                                value={sharedMartingaleMode}
+                                                onChange={e => setSharedMartingaleMode(normalizeMartingaleMode(e.target.value))}
+                                                disabled={isRunning}
+                                            >
+                                                <option value='no_martingale'>No Martingale</option>
+                                                <option value='after_one_loss'>After 1 loss</option>
+                                                <option value='after_two_losses'>After 2 losses</option>
+                                                <option value='custom_consecutive_loss_trigger'>Custom loss count</option>
+                                            </select>
+                                        </div>
+                                        {sharedMartingaleMode === 'custom_consecutive_loss_trigger' && (
+                                            <div className='auto-trades-config__field' style={{ marginTop: '0.5rem' }}>
+                                                <label>Consecutive losses before martingale</label>
+                                                <Input
+                                                    type='number'
+                                                    min='1'
+                                                    max='10'
+                                                    step='1'
+                                                    value={sharedConsecutiveLossCountInput}
+                                                    onChange={e => {
+                                                        const val = e.target.value.replace(/[^\d]/g, '').slice(0, 2);
+                                                        setSharedConsecutiveLossCountInput(val);
+                                                    }}
+                                                    onBlur={() => setSharedConsecutiveLossCount(clampConsecutiveLossThreshold(sharedConsecutiveLossCountInput || 2))}
+                                                    disabled={isRunning}
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    {martingaleActive && isRunning && (
+                                        <div className='auto-trades-config__martingale-active'>
+                                            <span>⚡ Martingale active: {currentStakeDisplay.toFixed(2)} {currency}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
                             {/* Market 1 Config */}
                             <div className='auto-trades-card auto-trades-card--m1'>
-                                <h2 className='auto-trades-card__title'>📈 Market 1</h2>
+                                <h2 className='auto-trades-card__title'>📈 Market 1 Strategy</h2>
                                 <div className='auto-trades-config'>
                                     <div className='auto-trades-config__group'>
                                         <div className='auto-trades-strategy-selector'>
@@ -2698,67 +2789,13 @@ const AutoTrades = observer(() => {
                                             </button>
                                         </div>
                                     )}
-
-                                    <div className='auto-trades-config__group'>
-                                        <div className='auto-trades-config__field'>
-                                            <label>Stake ({currency || 'USD'})</label>
-                                            <Input type='number' min='0.35' step='0.01' value={m1Stake} onChange={e => setM1Stake(e.target.value)} disabled={isRunning} />
-                                        </div>
-                                        <div className='auto-trades-config__field'>
-                                            <label>Martingale ×</label>
-                                            <Input type='number' min='1.01' step='0.5' value={m1Martingale} onChange={e => setM1Martingale(e.target.value)} disabled={isRunning} />
-                                        </div>
-                                        <div className='auto-trades-config__field'>
-                                            <label>Take Profit ({currency || 'USD'})</label>
-                                            <Input type='number' min='0' step='1' value={m1TakeProfit} onChange={e => setM1TakeProfit(e.target.value)} disabled={isRunning} />
-                                        </div>
-                                        <div className='auto-trades-config__field'>
-                                            <label>Stop Loss ({currency || 'USD'})</label>
-                                            <Input type='number' min='0' step='1' value={m1StopLoss} onChange={e => setM1StopLoss(e.target.value)} disabled={isRunning} />
-                                        </div>
-                                    </div>
-
-                                    <div className='auto-trades-config__group'>
-                                        <div className='auto-trades-martingale-selector'>
-                                            <label>Martingale Strategy</label>
-                                            <select
-                                                className='auto-trades-martingale-selector__select'
-                                                value={m1MartingaleMode}
-                                                onChange={e => setM1MartingaleMode(normalizeMartingaleMode(e.target.value))}
-                                                disabled={isRunning}
-                                            >
-                                                <option value='no_martingale'>No Martingale</option>
-                                                <option value='after_one_loss'>After 1 loss</option>
-                                                <option value='after_two_losses'>After 2 losses</option>
-                                                <option value='custom_consecutive_loss_trigger'>Custom loss count</option>
-                                            </select>
-                                        </div>
-                                        {m1MartingaleMode === 'custom_consecutive_loss_trigger' && (
-                                            <div className='auto-trades-config__field' style={{ marginTop: '0.5rem' }}>
-                                                <label>Consecutive losses before martingale</label>
-                                                <Input
-                                                    type='number'
-                                                    min='1'
-                                                    max='10'
-                                                    step='1'
-                                                    value={m1ConsecutiveLossCountInput}
-                                                    onChange={e => {
-                                                        const val = e.target.value.replace(/[^\d]/g, '').slice(0, 2);
-                                                        setM1ConsecutiveLossCountInput(val);
-                                                    }}
-                                                    onBlur={() => setM1ConsecutiveLossCount(clampConsecutiveLossThreshold(m1ConsecutiveLossCountInput || 2))}
-                                                    disabled={isRunning}
-                                                />
-                                            </div>
-                                        )}
-                                    </div>
                                 </div>
                             </div>
 
                             {/* Market 2 Config */}
                             <div className='auto-trades-card auto-trades-card--m2'>
                                 <h2 className='auto-trades-card__title'>
-                                    📊 Market 2
+                                    📊 Market 2 Strategy
                                     <button
                                         className={classNames('auto-trades-toggle', m2Enabled && 'auto-trades-toggle--active')}
                                         onClick={() => setM2Enabled(prev => !prev)}
@@ -2908,60 +2945,6 @@ const AutoTrades = observer(() => {
                                                 </button>
                                             </div>
                                         )}
-
-                                        <div className='auto-trades-config__group'>
-                                            <div className='auto-trades-config__field'>
-                                                <label>Stake ({currency || 'USD'})</label>
-                                                <Input type='number' min='0.35' step='0.01' value={m2Stake} onChange={e => setM2Stake(e.target.value)} disabled={isRunning} />
-                                            </div>
-                                            <div className='auto-trades-config__field'>
-                                                <label>Martingale ×</label>
-                                                <Input type='number' min='1.01' step='0.5' value={m2Martingale} onChange={e => setM2Martingale(e.target.value)} disabled={isRunning} />
-                                            </div>
-                                            <div className='auto-trades-config__field'>
-                                                <label>Take Profit ({currency || 'USD'})</label>
-                                                <Input type='number' min='0' step='1' value={m2TakeProfit} onChange={e => setM2TakeProfit(e.target.value)} disabled={isRunning} />
-                                            </div>
-                                            <div className='auto-trades-config__field'>
-                                                <label>Stop Loss ({currency || 'USD'})</label>
-                                                <Input type='number' min='0' step='1' value={m2StopLoss} onChange={e => setM2StopLoss(e.target.value)} disabled={isRunning} />
-                                            </div>
-                                        </div>
-
-                                        <div className='auto-trades-config__group'>
-                                            <div className='auto-trades-martingale-selector'>
-                                                <label>Martingale Strategy</label>
-                                                <select
-                                                    className='auto-trades-martingale-selector__select'
-                                                    value={m2MartingaleMode}
-                                                    onChange={e => setM2MartingaleMode(normalizeMartingaleMode(e.target.value))}
-                                                    disabled={isRunning}
-                                                >
-                                                    <option value='no_martingale'>No Martingale</option>
-                                                    <option value='after_one_loss'>After 1 loss</option>
-                                                    <option value='after_two_losses'>After 2 losses</option>
-                                                    <option value='custom_consecutive_loss_trigger'>Custom loss count</option>
-                                                </select>
-                                            </div>
-                                            {m2MartingaleMode === 'custom_consecutive_loss_trigger' && (
-                                                <div className='auto-trades-config__field' style={{ marginTop: '0.5rem' }}>
-                                                    <label>Consecutive losses before martingale</label>
-                                                    <Input
-                                                        type='number'
-                                                        min='1'
-                                                        max='10'
-                                                        step='1'
-                                                        value={m2ConsecutiveLossCountInput}
-                                                        onChange={e => {
-                                                            const val = e.target.value.replace(/[^\d]/g, '').slice(0, 2);
-                                                            setM2ConsecutiveLossCountInput(val);
-                                                        }}
-                                                        onBlur={() => setM2ConsecutiveLossCount(clampConsecutiveLossThreshold(m2ConsecutiveLossCountInput || 2))}
-                                                        disabled={isRunning}
-                                                    />
-                                                </div>
-                                            )}
-                                        </div>
                                     </div>
                                 )}
                                 {!m2Enabled && (
@@ -2992,6 +2975,11 @@ const AutoTrades = observer(() => {
                                 {isRunning && (
                                     <span className='auto-trades-markets__mode-badge'>
                                         {isM2Only ? '📊 M2 Only' : isRecoveryMode ? '🔄 Recovery' : '📈 M1'}
+                                    </span>
+                                )}
+                                {martingaleActive && isRunning && (
+                                    <span className='auto-trades-markets__martingale-badge'>
+                                        ⚡ Martingale: {currentStakeDisplay.toFixed(2)} {currency}
                                     </span>
                                 )}
                             </h2>
@@ -3213,8 +3201,8 @@ const AutoTrades = observer(() => {
                 <TPSLNotification
                     isOpen={showTPSLNotification}
                     onClose={() => setShowTPSLNotification(false)}
-                    takeProfit={Number(m1TakeProfit)}
-                    stopLoss={Number(m1StopLoss)}
+                    takeProfit={Number(sharedTakeProfit)}
+                    stopLoss={Number(sharedStopLoss)}
                     currency={currency || 'USD'}
                     totalPnl={totalPnl}
                     totalTrades={totalTrades}
