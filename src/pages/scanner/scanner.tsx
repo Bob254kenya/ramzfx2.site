@@ -301,6 +301,12 @@ const Scanner = observer(() => {
     const [scrollingText, setScrollingText] = useState('');
     const [isWorking, setIsWorking] = useState(false);
     const [sessionProfit, setSessionProfit] = useState(0);
+    const [showTPSLPopup, setShowTPSLPopup] = useState(false);
+    const [tpSlSettings, setTpSlSettings] = useState({
+        stopLoss: DEFAULT_STOP_LOSS,
+        takeProfit: DEFAULT_TAKE_PROFIT,
+        isActive: false
+    });
     const subscriptionRef = useRef<{ unsubscribe?: () => void } | null>(null);
     const requestVersionRef = useRef(0);
     const ticksRef = useRef<TTickPoint[]>([]);
@@ -616,6 +622,8 @@ const Scanner = observer(() => {
                     ...previous,
                     `STOP LOSS REACHED! P/L: ${sessionProfitRef.current.toFixed(2)} ${currency}`,
                 ]);
+                setShowTPSLPopup(true);
+                setTpSlSettings(prev => ({ ...prev, isActive: true, stopLoss: String(stopLossRef.current) }));
                 stopTrading();
                 return;
             }
@@ -626,6 +634,8 @@ const Scanner = observer(() => {
                     ...previous,
                     `TAKE PROFIT REACHED! P/L: ${sessionProfitRef.current.toFixed(2)} ${currency}`,
                 ]);
+                setShowTPSLPopup(true);
+                setTpSlSettings(prev => ({ ...prev, isActive: true, takeProfit: String(takeProfitRef.current) }));
                 stopTrading();
                 return;
             }
@@ -642,6 +652,8 @@ const Scanner = observer(() => {
                         ...previous,
                         `${runsToCheckRef.current} runs complete with profit > 0.1: ${sessionProfitRef.current.toFixed(2)} ${currency}`,
                     ]);
+                    setShowTPSLPopup(true);
+                    setTpSlSettings(prev => ({ ...prev, isActive: true }));
                     stopTrading();
                     return;
                 }
@@ -724,18 +736,24 @@ const Scanner = observer(() => {
                         ...previous,
                         `STOP LOSS REACHED! P/L: ${totalProfit.toFixed(2)} ${currency}`,
                     ]);
+                    setShowTPSLPopup(true);
+                    setTpSlSettings(prev => ({ ...prev, isActive: true, stopLoss: String(stopLossRef.current) }));
                     stopTrading();
                 } else if (totalProfit >= takeProfitRef.current) {
                     setTerminalDashboard(previous => [
                         ...previous,
                         `TAKE PROFIT REACHED! P/L: ${totalProfit.toFixed(2)} ${currency}`,
                     ]);
+                    setShowTPSLPopup(true);
+                    setTpSlSettings(prev => ({ ...prev, isActive: true, takeProfit: String(takeProfitRef.current) }));
                     stopTrading();
                 } else if (completedRunsRef.current >= runsToCheckRef.current && totalProfit > 0.1) {
                     setTerminalDashboard(previous => [
                         ...previous,
                         `${runsToCheckRef.current} runs complete with profit > 0.1: ${totalProfit.toFixed(2)} ${currency}`,
                     ]);
+                    setShowTPSLPopup(true);
+                    setTpSlSettings(prev => ({ ...prev, isActive: true }));
                     stopTrading();
                 }
             } catch (error) {
@@ -765,6 +783,8 @@ const Scanner = observer(() => {
                     ...previous,
                     `STOP LOSS REACHED! P/L: ${sessionProfitRef.current.toFixed(2)} ${currency}`,
                 ]);
+                setShowTPSLPopup(true);
+                setTpSlSettings(prev => ({ ...prev, isActive: true, stopLoss: String(stopLossRef.current) }));
                 stopTrading();
                 return;
             }
@@ -775,6 +795,8 @@ const Scanner = observer(() => {
                     ...previous,
                     `TAKE PROFIT REACHED! P/L: ${sessionProfitRef.current.toFixed(2)} ${currency}`,
                 ]);
+                setShowTPSLPopup(true);
+                setTpSlSettings(prev => ({ ...prev, isActive: true, takeProfit: String(takeProfitRef.current) }));
                 stopTrading();
                 return;
             }
@@ -791,6 +813,8 @@ const Scanner = observer(() => {
                         ...previous,
                         `${runsToCheckRef.current} runs complete with profit > 0.1: ${sessionProfitRef.current.toFixed(2)} ${currency}`,
                     ]);
+                    setShowTPSLPopup(true);
+                    setTpSlSettings(prev => ({ ...prev, isActive: true }));
                     stopTrading();
                     return;
                 }
@@ -840,18 +864,24 @@ const Scanner = observer(() => {
                         ...previous,
                         `STOP LOSS REACHED! P/L: ${totalProfit.toFixed(2)} ${currency}`,
                     ]);
+                    setShowTPSLPopup(true);
+                    setTpSlSettings(prev => ({ ...prev, isActive: true, stopLoss: String(stopLossRef.current) }));
                     stopTrading();
                 } else if (totalProfit >= takeProfitRef.current) {
                     setTerminalDashboard(previous => [
                         ...previous,
                         `TAKE PROFIT REACHED! P/L: ${totalProfit.toFixed(2)} ${currency}`,
                     ]);
+                    setShowTPSLPopup(true);
+                    setTpSlSettings(prev => ({ ...prev, isActive: true, takeProfit: String(takeProfitRef.current) }));
                     stopTrading();
                 } else if (completedRunsRef.current >= runsToCheckRef.current && totalProfit > 0.1) {
                     setTerminalDashboard(previous => [
                         ...previous,
                         `${runsToCheckRef.current} runs complete with profit > 0.1: ${totalProfit.toFixed(2)} ${currency}`,
                     ]);
+                    setShowTPSLPopup(true);
+                    setTpSlSettings(prev => ({ ...prev, isActive: true }));
                     stopTrading();
                 }
             } catch (error) {
@@ -893,6 +923,8 @@ const Scanner = observer(() => {
             tradeActiveRef.current = true;
             tradeInFlightRef.current = false;
             setSessionProfit(0);
+            setShowTPSLPopup(false);
+            setTpSlSettings({ stopLoss: String(stopLoss), takeProfit: String(takeProfit), isActive: false });
 
             // Store primary and recovery signals for Over & Under strategy
             if (strategyRef.current === 'Over & Under' && firstSignal.recoveryBarrier && firstSignal.recoveryContractType && firstSignal.recoveryLabel) {
@@ -1064,6 +1096,11 @@ const Scanner = observer(() => {
         setPopupOpen(false);
     };
 
+    const handleCloseTPSLPopup = () => {
+        setShowTPSLPopup(false);
+        setTpSlSettings(prev => ({ ...prev, isActive: false }));
+    };
+
     const handleMarketChange = (symbol: string) => {
         stopTrading();
         setSelectedSymbol(symbol);
@@ -1164,6 +1201,7 @@ const Scanner = observer(() => {
                 </div>
             </div>
             
+            {/* Main Analysis/Trading Popup */}
             <div className='popup popup--reduced' style={{ display: popupOpen ? 'block' : 'none' }}>
                 <div className='popup-content'>
                     <div className='popup-header'>
@@ -1194,6 +1232,92 @@ const Scanner = observer(() => {
                                     {line ?? ''}
                                 </p>
                             ))}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {/* TP/SL Popup */}
+            <div className='popup popup--tp-sl' style={{ display: showTPSLPopup ? 'block' : 'none' }}>
+                <div className='popup-content'>
+                    <div className='popup-header'>
+                        <h3>🎯 TAKE PROFIT & STOP LOSS</h3>
+                        <button className='close-btn' type='button' onClick={handleCloseTPSLPopup}>
+                            ✕
+                        </button>
+                    </div>
+                    <div className='tp-sl-settings'>
+                        <div className='setting-row'>
+                            <label>🛑 STOP LOSS (SL)</label>
+                            <input 
+                                className='tp-sl-input'
+                                type='text'
+                                value={tpSlSettings.stopLoss}
+                                onChange={(e) => setTpSlSettings(prev => ({ ...prev, stopLoss: cleanMoneyInput(e.target.value) }))}
+                                placeholder='Enter Stop Loss'
+                            />
+                            <span className='currency-label'>{currency}</span>
+                        </div>
+                        <div className='setting-row'>
+                            <label>🎯 TAKE PROFIT (TP)</label>
+                            <input 
+                                className='tp-sl-input'
+                                type='text'
+                                value={tpSlSettings.takeProfit}
+                                onChange={(e) => setTpSlSettings(prev => ({ ...prev, takeProfit: cleanMoneyInput(e.target.value) }))}
+                                placeholder='Enter Take Profit'
+                            />
+                            <span className='currency-label'>{currency}</span>
+                        </div>
+                        <div className='tp-sl-status'>
+                            <span className={`status-badge ${tpSlSettings.isActive ? 'active' : 'inactive'}`}>
+                                {tpSlSettings.isActive ? '✅ ACTIVE' : '⏹️ INACTIVE'}
+                            </span>
+                        </div>
+                        <div className='tp-sl-actions'>
+                            <button 
+                                className='update-btn' 
+                                type='button'
+                                onClick={() => {
+                                    const newSL = Number(tpSlSettings.stopLoss);
+                                    const newTP = Number(tpSlSettings.takeProfit);
+                                    if (newSL > 0 && newTP > 0) {
+                                        stopLossRef.current = newSL;
+                                        takeProfitRef.current = newTP;
+                                        setTpSlSettings(prev => ({ ...prev, isActive: true }));
+                                        setTerminalDashboard(prev => [
+                                            ...prev,
+                                            `🔄 TP/SL Updated: SL=${newSL} ${currency}, TP=${newTP} ${currency}`
+                                        ]);
+                                        handleCloseTPSLPopup();
+                                    } else {
+                                        setTerminalDashboard(prev => [
+                                            ...prev,
+                                            '❌ Error: Please enter valid SL and TP values'
+                                        ]);
+                                    }
+                                }}
+                            >
+                                💾 UPDATE TP/SL
+                            </button>
+                            <button 
+                                className='reset-btn' 
+                                type='button'
+                                onClick={() => {
+                                    setTpSlSettings({
+                                        stopLoss: DEFAULT_STOP_LOSS,
+                                        takeProfit: DEFAULT_TAKE_PROFIT,
+                                        isActive: false
+                                    });
+                                    setTerminalDashboard(prev => [
+                                        ...prev,
+                                        '🔄 TP/SL Reset to default values'
+                                    ]);
+                                    handleCloseTPSLPopup();
+                                }}
+                            >
+                                🔄 RESET
+                            </button>
                         </div>
                     </div>
                 </div>
