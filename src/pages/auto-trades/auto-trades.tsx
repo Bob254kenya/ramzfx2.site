@@ -433,12 +433,12 @@ const evaluateLDigitCondition = (
         case 'over_to_under':
             if (lDigitStrategy.thresholdDigit === undefined) return false;
             return recentDigits.length >= lDigitStrategy.lookbackTicks && 
-                   recentDigits.every(d => d > lDigitStrategy.thresholdDigit);
+                   recentDigits.every(d => d > lDigitStrategy.thresholdDigit!);
         
         case 'under_to_over':
             if (lDigitStrategy.thresholdDigit === undefined) return false;
             return recentDigits.length >= lDigitStrategy.lookbackTicks && 
-                   recentDigits.every(d => d < lDigitStrategy.thresholdDigit);
+                   recentDigits.every(d => d < lDigitStrategy.thresholdDigit!);
         
         case 'match_to_diff':
             if (lDigitStrategy.barrierDigit === undefined) return false;
@@ -711,9 +711,9 @@ interface MarketState {
     specialEntryReady: boolean;
     trailingTriggerCount: number;
     // L→Digit recovery state
-    lDigitRecoveryActive: boolean;      // True when recovery mode is active (after loss)
-    lDigitWaitingForPattern: boolean;   // True when waiting for pattern match
-    lDigitPatternMatched: boolean;      // True when pattern matched and trading with L strategy
+    lDigitRecoveryActive: boolean;
+    lDigitWaitingForPattern: boolean;
+    lDigitPatternMatched: boolean;
     lDigitOriginalTradeType: TradeType | null;
     lDigitRecoveryStartTime: number | null;
 }
@@ -1659,22 +1659,30 @@ const AutoTrades = observer(() => {
             globalTradingRef.current = false;
 
             // ── L→Digit RECOVERY LOGIC ──────────────────────────────────────
+            // Think of this as: Market 1 = original strategy, Market 2 = L→Digit recovery.
+            // After a loss, we EXCLUSIVELY trade Market 2 (L→Digit) until a win.
+            // After a win on Market 2, we return to Market 1 (original strategy).
             const lDigitEnabled = lDigitStrategyRef.current.enabled;
 
             if (profit < 0 && lDigitEnabled) {
-                // LOSS → Activate recovery mode
+                // LOSS → Activate Market 2 (L→Digit recovery mode)
                 state.lDigitRecoveryActive = true;
                 state.lDigitWaitingForPattern = true;
                 state.lDigitPatternMatched = false;
                 state.lDigitOriginalTradeType = originalTradeTypeRef.current;
                 state.lDigitRecoveryStartTime = Date.now();
-                // Keep trade type as original while waiting
+                // Keep trade type ref as original while waiting for L→Digit pattern
                 tradeTypeRef.current = originalTradeTypeRef.current;
-                state.consecutive = 0;
+
+                // ── CRITICAL: Reset consecutive on ALL markets to prevent any
+                // stale Market 1 signal from firing before pattern is confirmed ──
+                Object.keys(marketStatesRef.current).forEach(sym => {
+                    marketStatesRef.current[sym].consecutive = 0;
+                });
 
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `🔴 LOSS — L→Digit RECOVERY ACTIVATED: waiting for ${lDigitStrategyRef.current.patternType} pattern (${lDigitStrategyRef.current.lookbackTicks} ticks)`,
+                    condition: `🔴 LOSS — Switching to Market 2 (L→Digit RECOVERY): waiting for ${lDigitStrategyRef.current.patternType} pattern (${lDigitStrategyRef.current.lookbackTicks} ticks). Market 1 BLOCKED.`,
                     digits: `[${state.lastDigits.slice(-lDigitStrategyRef.current.lookbackTicks).join(', ')}]`,
                     result: false,
                     source: 'l-digit-recovery-waiting',
@@ -1682,10 +1690,10 @@ const AutoTrades = observer(() => {
                 });
                 
                 refreshDisplays();
-                return; // Wait for pattern
+                return; // Wait for pattern — do NOT fall through to normal flow
             }
 
-            // ── WIN while recovery waiting → DISABLE recovery ──────────────
+            // ── WIN while recovery waiting → DISABLE recovery, back to Market 1 ──
             if (profit >= 0 && state.lDigitWaitingForPattern) {
                 state.lDigitRecoveryActive = false;
                 state.lDigitWaitingForPattern = false;
@@ -1696,7 +1704,7 @@ const AutoTrades = observer(() => {
 
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `✅ WIN — L→Digit RECOVERY DISABLED (${originalTradeTypeRef.current})`,
+                    condition: `✅ WIN — Returning to Market 1 (${originalTradeTypeRef.current}). L→Digit RECOVERY DISABLED.`,
                     digits: '',
                     result: true,
                     source: 'l-digit-recovery-disabled',
@@ -1704,7 +1712,7 @@ const AutoTrades = observer(() => {
                 });
             }
 
-            // ── WIN while actively trading with L strategy ─────────────────
+            // ── WIN while actively trading with L strategy (Market 2) ──────
             if (profit >= 0 && state.lDigitPatternMatched) {
                 state.lDigitRecoveryActive = false;
                 state.lDigitWaitingForPattern = false;
@@ -1715,7 +1723,7 @@ const AutoTrades = observer(() => {
 
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `✅ WIN — L→Digit RECOVERY COMPLETE, restored ${originalTradeTypeRef.current}`,
+                    condition: `✅ WIN on Market 2 — L→Digit RECOVERY COMPLETE. Returning to Market 1 (${originalTradeTypeRef.current}).`,
                     digits: '',
                     result: true,
                     source: 'l-digit-recovery-complete',
@@ -1723,12 +1731,11 @@ const AutoTrades = observer(() => {
                 });
             }
 
-            // ── LOSS without L→Digit enabled ───────────────────────────────
+            // ── LOSS without L→Digit enabled — normal martingale flow ───────
             if (profit < 0 && !lDigitEnabled) {
-                // Normal martingale flow
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `🔴 LOSS — L→Digit recovery DISABLED (${originalTradeTypeRef.current})`,
+                    condition: `🔴 LOSS — L→Digit recovery DISABLED, continuing with Market 1 (${originalTradeTypeRef.current})`,
                     digits: '',
                     result: false,
                     source: 'l-digit-disabled',
@@ -1736,7 +1743,7 @@ const AutoTrades = observer(() => {
                 });
             }
 
-            // ── Reset recovery state if it was active and we got a win ────
+            // ── Safety: Reset recovery state on win if still flagged active ──
             if (profit >= 0 && state.lDigitRecoveryActive) {
                 state.lDigitRecoveryActive = false;
                 state.lDigitWaitingForPattern = false;
@@ -1750,7 +1757,7 @@ const AutoTrades = observer(() => {
                 refreshDisplays();
             }
 
-            // ── TP/SL Notification ──────────────────────────────────────────
+            // ── TP/SL check ─────────────────────────────────────────────────
             if ((totalPnlRef.current >= tp || totalPnlRef.current <= -sl) && runningRef.current) {
                 setShowTPSLNotification(true);
                 runningRef.current = false;
@@ -1792,8 +1799,23 @@ const AutoTrades = observer(() => {
         [getActiveDigitBarrier]
     );
 
+    // ── FIX 4: tryExecuteSignal hard guard ─────────────────────────────────
+    // This is the final safety net. Even if a caller forgets to check recovery
+    // state, this guard prevents any trade from firing while L→Digit is waiting
+    // for its pattern (Market 2 not yet confirmed).
     const tryExecuteSignal = useCallback(
         (symbol: string, state: MarketState, signalReady: boolean) => {
+            // HARD GUARD: while waiting for L→Digit pattern, NOTHING trades.
+            // Only the lDigitPatternMatched branch in handleTick is allowed through,
+            // because at that point lDigitWaitingForPattern is already set to false.
+            if (
+                lDigitStrategyRef.current.enabled &&
+                state.lDigitWaitingForPattern &&
+                !state.lDigitPatternMatched
+            ) {
+                return;
+            }
+
             if (
                 runningRef.current &&
                 signalReady &&
@@ -1825,6 +1847,7 @@ const AutoTrades = observer(() => {
         [executeTrade, handleAfterTrade, refreshDisplays]
     );
 
+    // ── FIX 3: handleCandle — block ALL candle signals during L→Digit recovery ──
     const handleCandle = useCallback(
         (symbol: string, candle: any) => {
             if (!selectedMarketSymbolsRef.current.has(symbol)) return;
@@ -1841,13 +1864,18 @@ const AutoTrades = observer(() => {
             state.candleDirection = close > open ? 1 : close < open ? -1 : 0;
 
             const ct = tradeTypeRef.current;
-            
-            // Check if L→Digit recovery blocks trading
-            const recoveryBlocked = lDigitStrategyRef.current.enabled && 
-                (state.lDigitWaitingForPattern || state.lDigitRecoveryActive);
+
+            // Block candle-confirmed trades while L→Digit recovery is in effect.
+            // All three flags block: waiting for pattern, recovery active (but pattern
+            // not yet confirmed in tick handler), and pattern matched (tick handler owns it).
+            const recoveryBlocked =
+                lDigitStrategyRef.current.enabled &&
+                (state.lDigitWaitingForPattern ||
+                    state.lDigitRecoveryActive ||
+                    state.lDigitPatternMatched);
 
             let signalReady = false;
-            if (!recoveryBlocked || state.lDigitPatternMatched) {
+            if (!recoveryBlocked) {
                 signalReady =
                     isCandleConfirmedTradeType(ct) &&
                     state.consecutive >= streakRef.current &&
@@ -1857,7 +1885,6 @@ const AutoTrades = observer(() => {
             }
             
             tryExecuteSignal(symbol, state, signalReady);
-
             refreshDisplays();
         },
         [refreshDisplays, tryExecuteSignal]
@@ -1887,7 +1914,9 @@ const AutoTrades = observer(() => {
             const isRecoveryWaiting = lDigitEnabled && state.lDigitWaitingForPattern && !state.lDigitPatternMatched;
             const isRecoveryActive = lDigitEnabled && state.lDigitPatternMatched;
 
-            // ── RECOVERY WAITING ────────────────────────────────────────────
+            // ── BRANCH 1: RECOVERY WAITING (Market 2 — pattern not yet confirmed) ──
+            // Only update digits/directions and check for pattern match.
+            // NO trading allowed here.
             if (isRecoveryWaiting) {
                 const lastDigit = getLastDigitFromQuote(quote, symbol, pip);
                 state.lastDigits = [...state.lastDigits.slice(-9), lastDigit];
@@ -1912,14 +1941,13 @@ const AutoTrades = observer(() => {
                     );
 
                     if (newTradeType) {
-                        // Pattern matched → switch to L strategy
+                        // Pattern matched → switch to Market 2 trade type
                         state.lDigitPatternMatched = true;
                         state.lDigitWaitingForPattern = false;
                         state.lDigitRecoveryActive = true;
                         tradeTypeRef.current = newTradeType;
                         ct = newTradeType;
 
-                        // Set streak for the new trade type
                         const targetLen = getEffectiveSignalStreak({
                             trade_type: newTradeType,
                             configured_streak: streakRef.current,
@@ -1928,7 +1956,7 @@ const AutoTrades = observer(() => {
 
                         conditionNotifierStore.setCondition({
                             market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                            condition: `🟢 L→Digit RECOVERY: pattern matched — trading ${newTradeType}`,
+                            condition: `🟢 Market 2 CONFIRMED: L→Digit pattern matched (${lDigitStrategyRef.current.patternType}) — now trading ${newTradeType}`,
                             digits: `[${state.lastDigits.slice(-lDigitStrategyRef.current.lookbackTicks).join(', ')}]`,
                             result: true,
                             source: 'l-digit-recovery-matched',
@@ -1944,17 +1972,17 @@ const AutoTrades = observer(() => {
 
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `⏳ L→Digit RECOVERY WAITING: ${lDigitStrategyRef.current.patternType} — need ${lDigitStrategyRef.current.lookbackTicks} ticks`,
+                    condition: `⏳ Market 2 WAITING: ${lDigitStrategyRef.current.patternType} — need ${lDigitStrategyRef.current.lookbackTicks} consecutive ticks. Market 1 BLOCKED.`,
                     digits: `[${state.lastDigits.slice(-lDigitStrategyRef.current.lookbackTicks).join(', ')}]`,
                     result: false,
                     source: 'l-digit-recovery-waiting',
                     timestamp: Date.now(),
                 });
                 refreshDisplays();
-                return;
+                return; // Early return — Market 1 must not fire
             }
 
-            // ── RECOVERY ACTIVE (trading with L strategy) ──────────────────
+            // ── BRANCH 2: RECOVERY ACTIVE (Market 2 — pattern confirmed, trading L strategy) ──
             if (isRecoveryActive) {
                 const targetLen = getEffectiveSignalStreak({
                     trade_type: ct,
@@ -1989,7 +2017,7 @@ const AutoTrades = observer(() => {
 
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `🔴 L→Digit RECOVERY ACTIVE (${ct}): streak ${state.consecutive}/${targetLen}`,
+                    condition: `🔴 Market 2 ACTIVE (${ct}): streak ${state.consecutive}/${targetLen}`,
                     digits: IS_DIRECTION_TYPE[ct]
                         ? `[${state.directionHistory.slice(-targetLen).map(d => (d === 1 ? '↑' : d === -1 ? '↓' : '—')).join(', ')}]`
                         : `[${state.lastDigits.slice(-targetLen).join(', ')}]`,
@@ -2000,10 +2028,10 @@ const AutoTrades = observer(() => {
 
                 tryExecuteSignal(symbol, state, signalReady);
                 refreshDisplays();
-                return;
+                return; // Early return — Market 1 must not fire
             }
 
-            // ── NORMAL TRADING (no L→Digit recovery active) ──────────────
+            // ── BRANCH 3: NORMAL TRADING (Market 1 — no L→Digit recovery active) ──
             const targetLen = getEffectiveSignalStreak({
                 trade_type: ct,
                 configured_streak: streakRef.current,
@@ -2163,7 +2191,19 @@ const AutoTrades = observer(() => {
                 });
             }
 
-            tryExecuteSignal(symbol, state, signalReady);
+            // ── FIX 2: Block Market 1 trading while L→Digit recovery is in effect ──
+            // lDigitWaitingForPattern or lDigitRecoveryActive means we are post-loss
+            // and exclusively in Market 2 mode. lDigitPatternMatched means Branch 2
+            // above already owns execution and returned early — this line is never
+            // reached in that case, but we guard it anyway for safety.
+            const lDigitBlocksNormalTrade =
+                lDigitStrategyRef.current.enabled &&
+                (state.lDigitWaitingForPattern || state.lDigitPatternMatched || state.lDigitRecoveryActive);
+
+            if (!lDigitBlocksNormalTrade) {
+                tryExecuteSignal(symbol, state, signalReady);
+            }
+
             refreshDisplays();
         },
         [clearDataRecoveryLoading, getActiveDigitBarrier, isPatternDigit, refreshDisplays, tryExecuteSignal]
@@ -2701,13 +2741,13 @@ const AutoTrades = observer(() => {
         const label = inv ? INVERSE_LABELS[tradeType] : TRADE_TYPE_LABELS[tradeType];
         
         if (hasRecoveryWaiting && isRunning) {
-            return `⏳ L→Digit RECOVERY: ${lDigitText} | WAITING for pattern — NO TRADING until pattern matches`;
+            return `⏳ Market 2 WAITING: ${lDigitText} | NO TRADING until pattern matches`;
         } else if (hasRecoveryActive && isRunning) {
-            return `🔴 L→Digit RECOVERY ACTIVE: ${lDigitText} | Trading with ${label}`;
+            return `🔴 Market 2 ACTIVE: ${lDigitText} | Trading with ${label}`;
         } else if (lDigitStrategy.enabled && isLossActive && !hasRecoveryActive && !hasRecoveryWaiting) {
             return `⚡ L→Digit RECOVERY: ${lDigitText} | Ready to activate after next loss`;
         } else if (lDigitStrategy.enabled && !isLossActive) {
-            return `⚡ L→Digit RECOVERY: ${lDigitText} | Will activate after loss, then wait for pattern`;
+            return `⚡ L→Digit RECOVERY: ${lDigitText} | Market 1 active — will switch to Market 2 after loss`;
         }
         
         if (tradeType === 'DIGITOVER')
@@ -2770,11 +2810,11 @@ const AutoTrades = observer(() => {
                             />
                             <span className='auto-trades-status__label'>
                                 {hasRecoveryWaiting && isRunning
-                                    ? '⏳ L→Digit Recovery Waiting'
+                                    ? '⏳ Market 2 Waiting'
                                     : isDataLoading
                                       ? 'Loading data'
                                       : isRunning
-                                        ? 'Trading'
+                                        ? hasRecoveryActive ? '🔴 Market 2 Active' : 'Trading'
                                         : isConnected
                                           ? 'Live data'
                                           : selectedMarketSymbols.length === 0
@@ -2789,8 +2829,18 @@ const AutoTrades = observer(() => {
                         <div className='auto-trades-l-digit-waiting'>
                             <span className='auto-trades-l-digit-waiting__icon'>⏳</span>
                             <span>
-                                <strong>L→Digit Recovery Active:</strong> Waiting for pattern to match — 
-                                <strong> NO TRADING </strong> until pattern is confirmed
+                                <strong>Market 2 (L→Digit Recovery) Waiting:</strong> Scanning for pattern — 
+                                <strong> Market 1 BLOCKED.</strong> No trades until pattern confirmed.
+                            </span>
+                        </div>
+                    )}
+
+                    {hasRecoveryActive && isRunning && (
+                        <div className='auto-trades-l-digit-waiting' style={{ background: 'rgba(255,60,60,0.08)', borderColor: '#ff3c3c' }}>
+                            <span className='auto-trades-l-digit-waiting__icon'>🔴</span>
+                            <span>
+                                <strong>Market 2 (L→Digit Recovery) ACTIVE:</strong> Trading with L→Digit strategy — 
+                                <strong> Market 1 BLOCKED.</strong> Will return to Market 1 after win.
                             </span>
                         </div>
                     )}
@@ -3072,14 +3122,14 @@ const AutoTrades = observer(() => {
                                 <div className='auto-trades-l-digit-section'>
                                     <div className='auto-trades-l-digit-section__header'>
                                         <span className='auto-trades-l-digit-section__icon'>🔄</span>
-                                        <span className='auto-trades-l-digit-section__title'>L→Digit Recovery</span>
+                                        <span className='auto-trades-l-digit-section__title'>Market 2 — L→Digit Recovery</span>
                                         <span className={classNames('auto-trades-l-digit-section__badge', {
                                             'auto-trades-l-digit-section__badge--active': lDigitStrategy.enabled && hasRecoveryActive && isRunning,
                                             'auto-trades-l-digit-section__badge--waiting': lDigitStrategy.enabled && hasRecoveryWaiting && isRunning,
                                             'auto-trades-l-digit-section__badge--ready': lDigitStrategy.enabled && isLossActive && !hasRecoveryActive && !hasRecoveryWaiting && isRunning,
                                         })}>
                                             {lDigitStrategy.enabled && isRunning 
-                                                ? (hasRecoveryActive ? 'ACTIVE' : hasRecoveryWaiting ? 'WAITING' : isLossActive ? 'READY' : 'ON') 
+                                                ? (hasRecoveryActive ? 'M2 ACTIVE' : hasRecoveryWaiting ? 'M2 WAITING' : isLossActive ? 'READY' : 'ON') 
                                                 : 'OFF'}
                                         </span>
                                     </div>
@@ -3093,57 +3143,21 @@ const AutoTrades = observer(() => {
                                                 if (value === 'disabled') {
                                                     setLDigitStrategy({ enabled: false, patternType: 'odd_to_even', lookbackTicks: 5 });
                                                 } else if (value === 'odd_to_even') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'odd_to_even',
-                                                        lookbackTicks: 5,
-                                                    });
+                                                    setLDigitStrategy({ enabled: true, patternType: 'odd_to_even', lookbackTicks: 5 });
                                                 } else if (value === 'even_to_odd') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'even_to_odd',
-                                                        lookbackTicks: 5,
-                                                    });
+                                                    setLDigitStrategy({ enabled: true, patternType: 'even_to_odd', lookbackTicks: 5 });
                                                 } else if (value === 'over_to_under') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'over_to_under',
-                                                        lookbackTicks: 5,
-                                                        thresholdDigit: 4,
-                                                    });
+                                                    setLDigitStrategy({ enabled: true, patternType: 'over_to_under', lookbackTicks: 5, thresholdDigit: 4 });
                                                 } else if (value === 'under_to_over') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'under_to_over',
-                                                        lookbackTicks: 5,
-                                                        thresholdDigit: 4,
-                                                    });
+                                                    setLDigitStrategy({ enabled: true, patternType: 'under_to_over', lookbackTicks: 5, thresholdDigit: 4 });
                                                 } else if (value === 'match_to_diff') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'match_to_diff',
-                                                        lookbackTicks: 5,
-                                                        barrierDigit: 4,
-                                                    });
+                                                    setLDigitStrategy({ enabled: true, patternType: 'match_to_diff', lookbackTicks: 5, barrierDigit: 4 });
                                                 } else if (value === 'diff_to_match') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'diff_to_match',
-                                                        lookbackTicks: 5,
-                                                        barrierDigit: 4,
-                                                    });
+                                                    setLDigitStrategy({ enabled: true, patternType: 'diff_to_match', lookbackTicks: 5, barrierDigit: 4 });
                                                 } else if (value === 'rise_to_fall') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'rise_to_fall',
-                                                        lookbackTicks: 5,
-                                                    });
+                                                    setLDigitStrategy({ enabled: true, patternType: 'rise_to_fall', lookbackTicks: 5 });
                                                 } else if (value === 'fall_to_rise') {
-                                                    setLDigitStrategy({
-                                                        enabled: true,
-                                                        patternType: 'fall_to_rise',
-                                                        lookbackTicks: 5,
-                                                    });
+                                                    setLDigitStrategy({ enabled: true, patternType: 'fall_to_rise', lookbackTicks: 5 });
                                                 }
                                             }}
                                             disabled={isRunning}
@@ -3237,10 +3251,11 @@ const AutoTrades = observer(() => {
                                             )}
                                             
                                             <p className='auto-trades-l-digit-section__hint'>
-                                                🔄 <strong>RECOVERY MODE ONLY:</strong> Activates AFTER a loss<br />
-                                                ⏳ <strong>NO TRADING</strong> while waiting for pattern<br />
-                                                🎯 After pattern matches, trades with opposite contract type<br />
-                                                ✅ Resets to original contract type AFTER a win
+                                                📌 <strong>Market 1</strong> = your configured strategy (trades normally)<br />
+                                                📌 <strong>Market 2</strong> = L→Digit Recovery (activates AFTER a loss)<br />
+                                                ⏳ After loss: Market 1 BLOCKED, Market 2 waits for pattern<br />
+                                                🎯 Pattern matched: Market 2 trades with opposite contract type<br />
+                                                ✅ Win on Market 2: Returns to Market 1
                                             </p>
                                         </div>
                                     )}
@@ -3409,17 +3424,17 @@ const AutoTrades = observer(() => {
                                 {isConnected && <span className='auto-trades-markets__live-badge'>● LIVE</span>}
                                 {hasRecoveryWaiting && isRunning && (
                                     <span className='auto-trades-markets__waiting-badge'>
-                                        ⏳ L→DIGIT RECOVERY
+                                        ⏳ M2 WAITING
                                     </span>
                                 )}
-                                {lDigitStrategy.enabled && (
-                                    <span className={classNames('auto-trades-markets__l-digit-badge', {
-                                        'auto-trades-markets__l-digit-badge--active': hasRecoveryActive && isRunning,
-                                        'auto-trades-markets__l-digit-badge--waiting': hasRecoveryWaiting && isRunning,
-                                    })}>
-                                        {hasRecoveryActive && isRunning ? '🔄 L→Digit ACTIVE' : 
-                                         hasRecoveryWaiting && isRunning ? '⏳ L→Digit WAITING' : 
-                                         '🔄 L→Digit On'}
+                                {hasRecoveryActive && isRunning && (
+                                    <span className='auto-trades-markets__waiting-badge' style={{ background: 'rgba(255,60,60,0.15)', color: '#ff3c3c' }}>
+                                        🔴 M2 ACTIVE
+                                    </span>
+                                )}
+                                {lDigitStrategy.enabled && !hasRecoveryWaiting && !hasRecoveryActive && (
+                                    <span className={classNames('auto-trades-markets__l-digit-badge')}>
+                                        🔄 M2 Ready
                                     </span>
                                 )}
                             </h2>
@@ -3452,7 +3467,8 @@ const AutoTrades = observer(() => {
                                             : isCandleMatch(tradeType, m.candleDirection));
 
                                     const isWaiting = lDigitStrategyRef.current.enabled && m.lDigitWaitingForPattern;
-                                    const isReady = !isWaiting &&
+                                    const isM2Active = lDigitStrategyRef.current.enabled && m.lDigitPatternMatched;
+                                    const isReady = !isWaiting && !isM2Active &&
                                         (((usingSpecialStrategy ? m.specialEntryReady : m.consecutive >= streakNum) &&
                                             candleReady) ||
                                             m.trading);
@@ -3467,7 +3483,7 @@ const AutoTrades = observer(() => {
                                                 'auto-trades-market--loss': m.lastResult === 'loss' && !m.trading,
                                                 'auto-trades-market--loading': isMarketLoading,
                                                 'auto-trades-market--recovering': isMarketRecovering,
-                                                'auto-trades-market--l-digit-active': m.lDigitPatternMatched,
+                                                'auto-trades-market--l-digit-active': isM2Active,
                                                 'auto-trades-market--l-digit-waiting': isWaiting,
                                             })}
                                         >
@@ -3495,7 +3511,11 @@ const AutoTrades = observer(() => {
                                                     )}
                                                     {isWaiting && isRunning ? (
                                                         <div className='auto-trades-market__badge auto-trades-market__badge--waiting'>
-                                                            ⏳WAIT
+                                                            ⏳M2 WAIT
+                                                        </div>
+                                                    ) : isM2Active && isRunning ? (
+                                                        <div className='auto-trades-market__badge auto-trades-market__badge--l-digit'>
+                                                            🔴M2
                                                         </div>
                                                     ) : (
                                                         <div
@@ -3503,14 +3523,11 @@ const AutoTrades = observer(() => {
                                                                 'auto-trades-market__badge--ready':
                                                                     isReady && isRunning,
                                                                 'auto-trades-market__badge--trading': m.trading,
-                                                                'auto-trades-market__badge--l-digit': m.lDigitPatternMatched,
                                                             })}
                                                         >
                                                             {m.trading
                                                                 ? 'BUYING'
-                                                                : m.lDigitPatternMatched
-                                                                  ? 'L→D'
-                                                                  : isReady && isRunning
+                                                                : isReady && isRunning
                                                                     ? 'READY'
                                                                     : m.consecutive > 0
                                                                       ? `${m.consecutive}`
@@ -3532,17 +3549,26 @@ const AutoTrades = observer(() => {
                                                 </div>
                                             )}
 
-                                            {/* L→Digit Recovery Waiting Status */}
+                                            {/* Market 2 Waiting Status */}
                                             {isWaiting && (
                                                 <div className='auto-trades-market__waiting-status'>
-                                                    ⏳ L→Digit Recovery: {lDigitStrategy.patternType}
+                                                    ⏳ Market 2 Waiting: {lDigitStrategy.patternType}
                                                     <br />
                                                     <small>
-                                                        Current: [{m.lastDigits.slice(-lDigitStrategy.lookbackTicks).join(', ')}]
+                                                        [{m.lastDigits.slice(-lDigitStrategy.lookbackTicks).join(', ')}]
                                                         {m.lastDigits.length >= lDigitStrategy.lookbackTicks && 
                                                             ` → ${evaluateLDigitCondition(lDigitStrategy, m.lastDigits, m.directionHistory, activeBarrier) ? '✅ MATCHED!' : '❌ Not yet'}`
                                                         }
                                                     </small>
+                                                </div>
+                                            )}
+
+                                            {/* Market 2 Active Status */}
+                                            {isM2Active && (
+                                                <div className='auto-trades-market__waiting-status' style={{ color: '#ff3c3c' }}>
+                                                    🔴 Market 2 Active: {tradeTypeRef.current}
+                                                    <br />
+                                                    <small>streak {m.consecutive}/{streakNum}</small>
                                                 </div>
                                             )}
 
@@ -3566,7 +3592,7 @@ const AutoTrades = observer(() => {
                                                 </div>
                                             )}
 
-                                            {/* Progress indicators - hide when waiting */}
+                                            {/* Progress indicators */}
                                             {isRunning && !isWaiting && (
                                                 <div className='auto-trades-market__dots'>
                                                     {Array.from({ length: streakNum }).map((_, i) => (
@@ -3618,7 +3644,7 @@ const AutoTrades = observer(() => {
                                                 </div>
                                             )}
 
-                                            {/* Percentage visualization for Percentage Mode */}
+                                            {/* Percentage visualization */}
                                             {strategyMode === 'PERCENTAGE' && (
                                                 <div className='auto-trades-market__percentages'>
                                                     {(() => {
@@ -3676,7 +3702,6 @@ const AutoTrades = observer(() => {
                                                         );
                                                     })()}
 
-                                                    {/* Individual digit percentages */}
                                                     {!isDirection && Object.keys(m.digitPercentages).length > 0 && (
                                                         <div className='auto-trades-market__digit-bars'>
                                                             {[...Array(10)].map((_, d) => {
@@ -3692,10 +3717,8 @@ const AutoTrades = observer(() => {
                                                                             className={classNames(
                                                                                 'auto-trades-market__digit-num',
                                                                                 {
-                                                                                    'auto-trades-market__digit-num--hot':
-                                                                                        isHot,
-                                                                                    'auto-trades-market__digit-num--cold':
-                                                                                        isCold,
+                                                                                    'auto-trades-market__digit-num--hot': isHot,
+                                                                                    'auto-trades-market__digit-num--cold': isCold,
                                                                                 }
                                                                             )}
                                                                         >
@@ -3706,10 +3729,8 @@ const AutoTrades = observer(() => {
                                                                                 className={classNames(
                                                                                     'auto-trades-market__digit-bar-fill',
                                                                                     {
-                                                                                        'auto-trades-market__digit-bar-fill--hot':
-                                                                                            isHot,
-                                                                                        'auto-trades-market__digit-bar-fill--cold':
-                                                                                            isCold,
+                                                                                        'auto-trades-market__digit-bar-fill--hot': isHot,
+                                                                                        'auto-trades-market__digit-bar-fill--cold': isCold,
                                                                                     }
                                                                                 )}
                                                                                 style={{ width: `${pct}%` }}
