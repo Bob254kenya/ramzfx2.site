@@ -103,6 +103,18 @@ const PASTEL_COLORS = {
 // Choose your preferred color scheme here
 const COLORS = CARD_COLORS; // Change to PROFESSIONAL_COLORS or PASTEL_COLORS as needed
 
+// Motivational quotes for the rotating display
+const MOTIVATIONAL_QUOTES = [
+    "Discipline beats emotion every trade.",
+    "Patience creates profitable trading opportunities.",
+    "Trust your strategy, always execute.",
+    "Small gains build lasting wealth.",
+    "Risk less, earn much more.",
+    "Consistency beats luck every time.",
+    "Trade smart, never chase losses.",
+    "Focus, analyze, execute, repeat, succeed."
+];
+
 const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => {
     const { dashboard, load_modal, quick_strategy } = useStore();
     const { toggleLoadModal, setActiveTabIndex } = load_modal;
@@ -111,6 +123,10 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
     const { setFormVisibility } = quick_strategy;
 
     const [hoveredCard, setHoveredCard] = React.useState<string | null>(null);
+    const [currentQuoteIndex, setCurrentQuoteIndex] = React.useState(0);
+    const [displayedText, setDisplayedText] = React.useState('');
+    const [isDeleting, setIsDeleting] = React.useState(false);
+    const [charIndex, setCharIndex] = React.useState(0);
 
     const openFileLoader = () => {
         toggleLoadModal();
@@ -165,6 +181,40 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
         },
     ];
 
+    // Typing animation effect
+    React.useEffect(() => {
+        const currentQuote = MOTIVATIONAL_QUOTES[currentQuoteIndex];
+        
+        if (!isDeleting && charIndex < currentQuote.length) {
+            // Typing
+            const timeout = setTimeout(() => {
+                setDisplayedText(prev => prev + currentQuote[charIndex]);
+                setCharIndex(prev => prev + 1);
+            }, 80); // Speed of typing
+            
+            return () => clearTimeout(timeout);
+        } else if (isDeleting && charIndex > 0) {
+            // Deleting
+            const timeout = setTimeout(() => {
+                setDisplayedText(prev => prev.slice(0, -1));
+                setCharIndex(prev => prev - 1);
+            }, 40); // Speed of deleting
+            
+            return () => clearTimeout(timeout);
+        } else if (!isDeleting && charIndex === currentQuote.length) {
+            // Pause after typing complete
+            const timeout = setTimeout(() => {
+                setIsDeleting(true);
+            }, 3000); // Display full text for 3 seconds
+            
+            return () => clearTimeout(timeout);
+        } else if (isDeleting && charIndex === 0) {
+            // Move to next quote after deletion
+            setIsDeleting(false);
+            setCurrentQuoteIndex((prev) => (prev + 1) % MOTIVATIONAL_QUOTES.length);
+        }
+    }, [charIndex, isDeleting, currentQuoteIndex]);
+
     return React.useMemo(
         () => (
             <div
@@ -172,6 +222,17 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
                     'tab__dashboard__table--minimized': has_dashboard_strategies && is_mobile,
                 })}
             >
+                {/* Motivational Quote Display */}
+                <div className="motivational-quote-container">
+                    <div className="motivational-quote-wrapper">
+                        <span className="greeting-text">👋 Hello Traders!</span>
+                        <span className="quote-text">
+                            {displayedText}
+                            <span className="cursor-blink">|</span>
+                        </span>
+                    </div>
+                </div>
+
                 <div
                     className={classNames('tab__dashboard__table__tiles', {
                         'tab__dashboard__table__tiles--minimized': has_dashboard_strategies && is_mobile,
@@ -279,7 +340,7 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
             </div>
         ),
         // eslint-disable-next-line react-hooks/exhaustive-deps
-        [is_dialog_open, has_dashboard_strategies, hoveredCard]
+        [is_dialog_open, has_dashboard_strategies, hoveredCard, displayedText]
     );
 });
 
