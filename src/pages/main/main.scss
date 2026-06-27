@@ -1413,3 +1413,426 @@
         width: 250px;
     }
 }
+// ==============================================
+// LOADER STYLES WITH FLOATING ELEMENTS
+// ==============================================
+
+.loader-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.95);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999;
+    overflow: hidden;
+}
+
+// Floating Background Elements
+.loader-background {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.floating-item {
+    position: absolute;
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    animation: floatAround 20s ease-in-out infinite;
+    pointer-events: none;
+    white-space: nowrap;
+    text-shadow: 0 0 30px currentColor;
+    transform-origin: center;
+    transition: all 0.3s ease;
+    
+    .floating-item-content {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(0, 0, 0, 0.3);
+        padding: 4px 12px;
+        border-radius: 20px;
+        backdrop-filter: blur(2px);
+        border: 1px solid rgba(255, 255, 255, 0.05);
+        
+        .dollar-sign {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .trading-word {
+            font-size: 0.7em;
+            letter-spacing: 1px;
+            opacity: 0.8;
+        }
+    }
+}
+
+// Different float animations
+@keyframes floatAround {
+    0% {
+        transform: translate(0, 0) rotate(0deg) scale(1);
+        opacity: var(--opacity, 0.3);
+    }
+    25% {
+        transform: translate(50px, -80px) rotate(90deg) scale(1.1);
+        opacity: var(--opacity, 0.5);
+    }
+    50% {
+        transform: translate(-40px, -120px) rotate(180deg) scale(0.9);
+        opacity: var(--opacity, 0.4);
+    }
+    75% {
+        transform: translate(60px, -60px) rotate(270deg) scale(1.05);
+        opacity: var(--opacity, 0.6);
+    }
+    100% {
+        transform: translate(0, 0) rotate(360deg) scale(1);
+        opacity: var(--opacity, 0.3);
+    }
+}
+
+// Alternative float animation for variety
+@keyframes floatAround2 {
+    0% {
+        transform: translate(0, 0) rotate(0deg) scale(1);
+    }
+    33% {
+        transform: translate(-80px, -60px) rotate(120deg) scale(0.9);
+    }
+    66% {
+        transform: translate(60px, -100px) rotate(240deg) scale(1.1);
+    }
+    100% {
+        transform: translate(0, 0) rotate(360deg) scale(1);
+    }
+}
+
+.floating-item:nth-child(odd) {
+    animation-name: floatAround;
+}
+
+.floating-item:nth-child(even) {
+    animation-name: floatAround2;
+}
+
+.loader-container {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding: 30px;
+    z-index: 2;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 30px;
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(0, 255, 0, 0.1);
+    box-shadow: 0 0 60px rgba(0, 255, 0, 0.05);
+    min-width: 350px;
+}
+
+.loader-logo-wrapper {
+    position: relative;
+    width: 160px;
+    height: 160px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.loader-logo-spin {
+    animation: logoPulse 2s ease-in-out infinite;
+    
+    .loader-progress-ring {
+        transition: stroke-dashoffset 0.3s ease;
+        filter: drop-shadow(0 0 15px rgba(0, 255, 0, 0.3));
+    }
+    
+    .loader-logo-text {
+        font-family: 'Courier New', 'Orbitron', monospace;
+        letter-spacing: 2px;
+    }
+    
+    .loader-center-dot {
+        filter: drop-shadow(0 0 15px rgba(0, 255, 0, 0.8));
+    }
+}
+
+.loader-text {
+    color: #00ff00;
+    font-family: 'Courier New', 'Orbitron', monospace;
+    font-size: 1.2rem;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    animation: textPulse 1.5s ease-in-out infinite;
+    text-shadow: 0 0 30px rgba(0, 255, 0, 0.4);
+    margin: 0;
+    text-align: center;
+    min-height: 40px;
+    font-weight: bold;
+}
+
+.loader-progress-wrapper {
+    width: 100%;
+    padding: 0 10px;
+}
+
+.loader-progress-bar-wrapper {
+    width: 100%;
+    max-width: 400px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.loader-progress-track {
+    flex: 1;
+    height: 6px;
+    background: rgba(0, 255, 0, 0.08);
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: inset 0 0 20px rgba(0, 255, 0, 0.05);
+}
+
+.loader-progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #00ff00, #00ff88, #00ffcc, #00ff88, #00ff00);
+    background-size: 300% 100%;
+    border-radius: 6px;
+    transition: width 0.3s ease;
+    animation: progressGlow 3s linear infinite;
+    box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
+}
+
+.loader-progress-percentage {
+    color: #00ff00;
+    font-family: 'Courier New', monospace;
+    font-size: 1rem;
+    font-weight: bold;
+    min-width: 50px;
+    text-align: center;
+    text-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+    letter-spacing: 1px;
+}
+
+.loader-time-remaining {
+    margin-top: 5px;
+}
+
+.loader-time-text {
+    color: rgba(0, 255, 0, 0.6);
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+}
+
+// Animations
+@keyframes logoPulse {
+    0%, 100% {
+        transform: scale(1);
+        filter: drop-shadow(0 0 30px rgba(0, 255, 0, 0.2));
+    }
+    50% {
+        transform: scale(1.03);
+        filter: drop-shadow(0 0 60px rgba(0, 255, 0, 0.4));
+    }
+}
+
+@keyframes textPulse {
+    0%, 100% {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    50% {
+        opacity: 0.7;
+        transform: translateY(-3px);
+    }
+}
+
+@keyframes progressGlow {
+    0% {
+        background-position: 300% 0;
+    }
+    100% {
+        background-position: -300% 0;
+    }
+}
+
+// Responsive styles
+@media (max-width: 768px) {
+    .loader-container {
+        min-width: 280px;
+        padding: 20px;
+    }
+    
+    .loader-logo-wrapper {
+        width: 120px;
+        height: 120px;
+    }
+    
+    .loader-text {
+        font-size: 1rem;
+        letter-spacing: 2px;
+    }
+    
+    .loader-progress-bar-wrapper {
+        max-width: 280px;
+    }
+    
+    .floating-item {
+        .floating-item-content {
+            padding: 2px 8px;
+            
+            .dollar-sign {
+                font-size: 1em;
+            }
+            
+            .trading-word {
+                font-size: 0.6em;
+            }
+        }
+    }
+}
+
+// ==============================================
+// SOCIAL POPUP STYLES
+// ==============================================
+
+.social-popup {
+    position: fixed;
+    bottom: 25px;
+    right: 25px;
+    z-index: 1000;
+    animation: slideInRight 0.4s ease-out;
+    font-family: 'Courier New', 'Orbitron', monospace;
+
+    .social-content {
+        background: linear-gradient(135deg, #0a0a0a 0%, #111111 100%);
+        border: 2px solid #00ff00;
+        border-radius: 16px;
+        padding: 20px;
+        min-width: 250px;
+        box-shadow: 0 0 30px rgba(0, 255, 0, 0.3), inset 0 0 20px rgba(0, 255, 0, 0.05);
+        position: relative;
+        backdrop-filter: blur(10px);
+        transition: all 0.3s ease;
+
+        &:hover {
+            box-shadow: 0 0 40px rgba(0, 255, 0, 0.5);
+            border-color: #33ff33;
+        }
+
+        .social-close {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: #ff0044;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 26px;
+            height: 26px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10000;
+
+            &:hover {
+                transform: scale(1.1);
+                background: #ff3355;
+                box-shadow: 0 0 10px #ff0044;
+            }
+        }
+
+        h3 {
+            color: #00ff00;
+            margin: 0 0 18px 0;
+            text-align: center;
+            font-size: 0.9rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            font-weight: bold;
+            text-shadow: 0 0 8px #00ff00;
+            word-break: keep-all;
+        }
+
+        .social-links {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+
+            a {
+                color: #00ff00;
+                text-decoration: none;
+                padding: 8px 14px;
+                border: 1px solid rgba(0, 255, 0, 0.3);
+                border-radius: 10px;
+                transition: all 0.25s ease;
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                font-size: 0.85rem;
+                font-family: monospace;
+                font-weight: 500;
+                background: rgba(0, 0, 0, 0.4);
+                backdrop-filter: blur(4px);
+
+                &:hover {
+                    background: rgba(0, 255, 0, 0.12);
+                    transform: translateX(6px);
+                    border-color: #00ff00;
+                    box-shadow: 0 0 12px rgba(0, 255, 0, 0.4);
+                    text-shadow: 0 0 4px #00ff00;
+                }
+            }
+        }
+    }
+}
+
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(120px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@media (max-width: 768px) {
+    .social-popup {
+        bottom: 15px;
+        right: 15px;
+
+        .social-content {
+            padding: 16px;
+            min-width: 210px;
+
+            h3 {
+                font-size: 0.8rem;
+                margin-bottom: 14px;
+            }
+
+            .social-links a {
+                padding: 6px 12px;
+                font-size: 0.75rem;
+                gap: 10px;
+            }
+        }
+    }
+}
