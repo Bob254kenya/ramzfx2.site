@@ -4,7 +4,8 @@
 // 2. NO trading with original contract type during waiting period
 // 3. Black background styling for all L→Digit inputs
 // 4. Proper activation/deactivation on win/loss
-// 5. TP/SL notification popup card (200px × 250px, centered)
+// 5. TP/SL notification popup card (250px × 290px, centered)
+// 6. TP notification ONLY - no stop loss row displayed (only referenced)
 
 import { type ChangeEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import classNames from 'classnames';
@@ -823,7 +824,13 @@ const appendPercentageQuote = (
     rebuildPercentageAnalytics(symbol, state, trade_type);
 };
 
-// TP/SL Notification Component
+// ============================================================
+// TP/SL Notification Component - FIXED VERSION
+// Size: 250px × 290px (width +50, height +40 from original)
+// Shows ONLY Take Profit notification prominently
+// Stop Loss is only referenced, not displayed as a row
+// Rich emoji styling throughout
+// ============================================================
 const TPSLNotification: React.FC<{
     isOpen: boolean;
     onClose: () => void;
@@ -856,12 +863,13 @@ const TPSLNotification: React.FC<{
     return (
         <div className="tp-sl-overlay" onClick={onClose}>
             <div className="tp-sl-card" onClick={(e) => e.stopPropagation()}>
+                {/* Header with emoji */}
                 <div className="tp-sl-card__header">
                     <div className="tp-sl-card__icon">
-                        {tpHit ? '🎯' : slHit ? '🛑' : '📊'}
+                        {tpHit ? '🎯' : slHit ? '🛑' : '📈'}
                     </div>
                     <h3 className="tp-sl-card__title">
-                        {tpHit ? 'Take Profit Hit!' : slHit ? 'Stop Loss Hit!' : 'TP / SL Status'}
+                        {tpHit ? '🎯 Take Profit Hit!' : slHit ? '🛑 Stop Loss Hit!' : '📊 Profit Target'}
                     </h3>
                     <button className="tp-sl-card__close" onClick={onClose}>
                         ✕
@@ -869,49 +877,44 @@ const TPSLNotification: React.FC<{
                 </div>
 
                 <div className="tp-sl-card__body">
-                    <div className={classNames('tp-sl-card__row', 'tp-sl-card__row--tp', {
-                        'tp-sl-card__row--active': tpHit,
-                    })}>
+                    {/* ONLY Take Profit Row - prominently displayed */}
+                    <div 
+                        className={classNames('tp-sl-card__row', 'tp-sl-card__row--tp', {
+                            'tp-sl-card__row--active': tpHit,
+                        })}
+                    >
                         <div className="tp-sl-card__row-label">
                             <span>🎯 Take Profit</span>
                             <span className="tp-sl-card__row-badge">target</span>
                         </div>
                         <div className="tp-sl-card__row-value">
                             <span className="tp-sl-card__amount">
-                                {takeProfit} {currency}
+                                +{takeProfit} {currency}
                             </span>
                             <span className={classNames('tp-sl-card__status', {
                                 'tp-sl-card__status--hit': tpHit,
                                 'tp-sl-card__status--miss': !tpHit,
                             })}>
-                                {tpHit ? '✓ HIT' : 'pending'}
+                                {tpHit ? '✅ HIT' : '⏳ pending'}
                             </span>
+                        </div>
+                        {/* Progress bar for visual feedback */}
+                        <div className="tp-sl-card__progress">
+                            <div 
+                                className={classNames('tp-sl-card__progress-bar', {
+                                    'tp-sl-card__progress-bar--hit': tpHit,
+                                })}
+                                style={{ width: `${Math.min(100, (totalPnl / takeProfit) * 100)}%` }}
+                            />
                         </div>
                     </div>
 
-                    <div className={classNames('tp-sl-card__row', 'tp-sl-card__row--sl', {
-                        'tp-sl-card__row--active': slHit,
-                    })}>
-                        <div className="tp-sl-card__row-label">
-                            <span>🛑 Stop Loss</span>
-                            <span className="tp-sl-card__row-badge">limit</span>
-                        </div>
-                        <div className="tp-sl-card__row-value">
-                            <span className="tp-sl-card__amount">
-                                {stopLoss} {currency}
-                            </span>
-                            <span className={classNames('tp-sl-card__status', {
-                                'tp-sl-card__status--hit': slHit,
-                                'tp-sl-card__status--miss': !slHit,
-                            })}>
-                                {slHit ? '✗ HIT' : 'pending'}
-                            </span>
-                        </div>
-                    </div>
+                    {/* Stop Loss row - COMPLETELY HIDDEN (only referenced in summary) */}
 
+                    {/* Summary section with P&L and Stop Loss reference */}
                     <div className="tp-sl-card__summary">
                         <div className="tp-sl-card__pnl">
-                            <span className="tp-sl-card__pnl-label">P&L</span>
+                            <span className="tp-sl-card__pnl-label">💰 P&L</span>
                             <span className={classNames('tp-sl-card__pnl-value', {
                                 'tp-sl-card__pnl-value--profit': isProfit,
                                 'tp-sl-card__pnl-value--loss': isLoss,
@@ -924,16 +927,25 @@ const TPSLNotification: React.FC<{
                             </span>
                         </div>
                         <div className="tp-sl-card__trades">
-                            <span>{totalTrades} trade{totalTrades !== 1 ? 's' : ''}</span>
+                            <span>📊 {totalTrades} trade{totalTrades !== 1 ? 's' : ''}</span>
                             <span>•</span>
-                            <span className="tp-sl-card__stake">stake: {currentStake.toFixed(2)} {currency}</span>
+                            <span className="tp-sl-card__stake">💰 {currentStake.toFixed(2)} {currency}</span>
+                        </div>
+                        {/* Stop Loss reference (muted, informational only) */}
+                        <div className="tp-sl-card__sl-reference">
+                            <span>🛑 Stop Loss: {stopLoss} {currency}</span>
+                            <span className={classNames('tp-sl-card__sl-status', {
+                                'tp-sl-card__sl-status--active': slHit,
+                            })}>
+                                {slHit ? '⚠️ TRIGGERED' : '⏳ active'}
+                            </span>
                         </div>
                     </div>
                 </div>
 
                 <div className="tp-sl-card__footer">
                     <button className="tp-sl-card__btn tp-sl-card__btn--dismiss" onClick={onClose}>
-                        Dismiss
+                        ✕ Dismiss
                     </button>
                     {(tpHit || slHit) && onStopTrading && (
                         <button className="tp-sl-card__btn tp-sl-card__btn--stop" onClick={onStopTrading}>
