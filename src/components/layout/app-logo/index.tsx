@@ -11,7 +11,10 @@ export const AppLogo = () => {
 
     return (
         <a href='/' className='app-header__logo' aria-label={localize('Home')}>
-            <span className='powered-by-text'>RAMZ FX</span>
+            <span className='powered-by-text'>
+                <span className='logo-prefix'>Powered by</span>
+                <span className='logo-main'>RAMZ FX</span>
+            </span>
         </a>
     );
 };
