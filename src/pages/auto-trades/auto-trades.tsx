@@ -1521,7 +1521,6 @@ const AutoTrades = observer(() => {
         const currentConsecutiveLosses = isMarket2 ? state.market2ConsecutiveLosses : consecutiveLossRef.current;
 
         // ─── MARTINGALE - Applied IMMEDIATELY on EVERY loss ──────────────────────
-        // getNextMartingaleState now handles all logic including immediate application
         const nextMartingaleState = getNextMartingaleState({
             profit,
             current_stake: nextStakeRef.current,
@@ -1567,8 +1566,13 @@ const AutoTrades = observer(() => {
                 state.consecutive = 0;
                 consecutiveLossRef.current = 0;
                 previousContractResultRef.current = null;
-                // Reset stake to base when entering recovery
-                nextStakeRef.current = sharedConfigRef.current.stake;
+                
+                // IMPORTANT: Keep the martingale stake from the loss
+                // DO NOT reset to base stake - the martingale calculation already set nextStakeRef.current
+                // Only reset if martingale mode is 'no_martingale'
+                if (martingaleMode === 'no_martingale') {
+                    nextStakeRef.current = sharedConfigRef.current.stake;
+                }
 
                 Object.values(marketStatesRef.current).forEach(s => {
                     s.recoveryBlocked = true;
@@ -1577,14 +1581,14 @@ const AutoTrades = observer(() => {
 
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `🔴 LOSS — BLOCKING ALL MARKETS, switching to M2 with martingale`,
+                    condition: `🔴 LOSS — BLOCKING ALL MARKETS, switching to M2 with martingale (stake: ${nextStakeRef.current.toFixed(2)})`,
                     digits: '',
                     result: false,
                     source: 'recovery-loss',
                     timestamp: Date.now(),
                 });
                 
-                console.log(`[Recovery] LOSS - ALL MARKETS BLOCKED, M2 ACTIVE, martingale applied`);
+                console.log(`[Recovery] LOSS - ALL MARKETS BLOCKED, M2 ACTIVE, martingale applied, next stake: ${nextStakeRef.current.toFixed(2)}`);
             } else if (profit >= 0 && isMarket2) {
                 // WIN on M2 → UNBLOCK ALL MARKETS, return to M1
                 recoveryBlockedRef.current = false;
@@ -1598,6 +1602,7 @@ const AutoTrades = observer(() => {
                 state.consecutive = 0;
                 consecutiveLossRef.current = 0;
                 previousContractResultRef.current = null;
+                // Reset stake to base on successful recovery
                 nextStakeRef.current = sharedConfigRef.current.stake;
 
                 Object.values(marketStatesRef.current).forEach(s => {
@@ -1614,11 +1619,17 @@ const AutoTrades = observer(() => {
                     timestamp: Date.now(),
                 });
                 
-                console.log(`[Recovery] WIN on M2 - ALL MARKETS UNBLOCKED, M1 ACTIVE`);
+                console.log(`[Recovery] WIN on M2 - ALL MARKETS UNBLOCKED, M1 ACTIVE, stake reset to ${nextStakeRef.current.toFixed(2)}`);
             } else if (profit < 0 && isMarket2) {
                 // LOSS on M2 → Stay on M2 with martingale, ALL MARKETS remain BLOCKED
                 state.activeMarket = 'm2';
                 activeMarketRef.current = 'm2';
+                
+                // Keep the martingale stake (already set by nextMartingaleState)
+                // Only reset if martingale mode is 'no_martingale'
+                if (martingaleMode === 'no_martingale') {
+                    nextStakeRef.current = sharedConfigRef.current.stake;
+                }
                 
                 Object.values(marketStatesRef.current).forEach(s => {
                     s.recoveryBlocked = true;
@@ -1626,14 +1637,14 @@ const AutoTrades = observer(() => {
 
                 conditionNotifierStore.setCondition({
                     market: AUTO_MARKET_LOOKUP.get(symbol)?.label ?? symbol,
-                    condition: `🔴 LOSS on M2 — Continuing recovery on M2 (ALL MARKETS remain BLOCKED)`,
+                    condition: `🔴 LOSS on M2 — Continuing recovery on M2 (stake: ${nextStakeRef.current.toFixed(2)})`,
                     digits: '',
                     result: false,
                     source: 'recovery-m2-loss',
                     timestamp: Date.now(),
                 });
                 
-                console.log(`[Recovery] M2 LOSS - Staying on M2, ALL MARKETS remain BLOCKED`);
+                console.log(`[Recovery] M2 LOSS - Staying on M2, ALL MARKETS remain BLOCKED, next stake: ${nextStakeRef.current.toFixed(2)}`);
             } else if (profit >= 0 && !isMarket2) {
                 // WIN on M1 → Reset everything
                 recoveryBlockedRef.current = false;
@@ -1655,8 +1666,9 @@ const AutoTrades = observer(() => {
                 });
             }
         } else {
-            // Normal mode: reset on win
+            // Normal mode: reset on win, keep martingale on loss
             if (profit >= 0) {
+                // Reset on win
                 if (isMarket2) {
                     state.market2ConsecutiveLosses = 0;
                     state.market2LastResult = null;
@@ -1665,8 +1677,13 @@ const AutoTrades = observer(() => {
                     previousContractResultRef.current = null;
                 }
                 nextStakeRef.current = sharedConfigRef.current.stake;
+            } else {
+                // On loss, keep the martingale stake that was already set by getNextMartingaleState
+                // Only reset if martingale mode is 'no_martingale'
+                if (martingaleMode === 'no_martingale') {
+                    nextStakeRef.current = sharedConfigRef.current.stake;
+                }
             }
-            // On loss, keep the martingale stake that was already set by getNextMartingaleState
         }
 
         refreshDisplays();
