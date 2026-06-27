@@ -2533,7 +2533,7 @@ const AutoTrades = observer(() => {
                     {/* Header */}
                     <div className='auto-trades-page__header'>
                         <div>
-                            <h1 className='auto-trades-page__title'>Auto Trades</h1>
+                            <h1 className='auto-trades-page__title'> Ramzfx Auto Trades</h1>
                             <p className='auto-trades-page__subtitle'>
                                 {isM2Only ? 'Market 2 Only' : isRecoveryMode ? `🔄 Recovery Mode ${isRecoveryActive ? '(ALL MARKETS BLOCKED → M2 ONLY)' : '(M1 ACTIVE)'}` : 'Market 1 Only'}
                             </p>
