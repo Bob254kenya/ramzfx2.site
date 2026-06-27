@@ -105,14 +105,14 @@ const COLORS = CARD_COLORS; // Change to PROFESSIONAL_COLORS or PASTEL_COLORS as
 
 // Motivational quotes for the rotating display
 const MOTIVATIONAL_QUOTES = [
-    "Discipline beats emotion every trade.",
-    "Patience creates profitable trading opportunities.",
-    "Trust your strategy, always execute.",
-    "Small gains build lasting wealth.",
-    "Risk less, earn much more.",
-    "Consistency beats luck every time.",
-    "Trade smart, never chase losses.",
-    "Focus, analyze, execute, repeat, succeed."
+    "DISCIPLINE BEATS EMOTION EVERY TRADE.",
+    "PATIENCE CREATES PROFITABLE TRADING OPPORTUNITIES.",
+    "TRUST YOUR STRATEGY, ALWAYS EXECUTE.",
+    "SMALL GAINS BUILD LASTING WEALTH.",
+    "RISK LESS, EARN MUCH MORE.",
+    "CONSISTENCY BEATS LUCK EVERY TIME.",
+    "TRADE SMART, NEVER CHASE LOSSES.",
+    "FOCUS, ANALYZE, EXECUTE, REPEAT, SUCCEED."
 ];
 
 const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => {
@@ -225,7 +225,7 @@ const Cards = observer(({ is_mobile, has_dashboard_strategies }: TCardProps) => 
                 {/* Motivational Quote Display */}
                 <div className="motivational-quote-container">
                     <div className="motivational-quote-wrapper">
-                        <span className="greeting-text">👋 Hello Traders!</span>
+                        <span className="greeting-text">👋 HELLO TRADERS!</span>
                         <span className="quote-text">
                             {displayedText}
                             <span className="cursor-blink">|</span>
