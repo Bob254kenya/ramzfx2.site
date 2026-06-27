@@ -300,7 +300,8 @@ export const getNextMartingaleState = ({
     consecutive_losses: number;
     consecutive_loss_trigger: number;
 }) => {
-    if (!(profit < 0)) {
+    // If profit is positive, reset everything
+    if (profit >= 0) {
         return {
             consecutiveLosses: 0,
             lastResult: 'win' as const,
@@ -308,10 +309,12 @@ export const getNextMartingaleState = ({
         };
     }
 
+    // Loss occurred - increment consecutive losses
     const nextConsecutiveLosses = consecutive_losses + 1;
     const normalizedMode = normalizeMartingaleMode(martingale_mode);
     const normalizedTrigger = clampConsecutiveLossThreshold(consecutive_loss_trigger);
 
+    // No martingale - keep base stake
     if (normalizedMode === 'no_martingale') {
         return {
             consecutiveLosses: nextConsecutiveLosses,
@@ -320,15 +323,29 @@ export const getNextMartingaleState = ({
         };
     }
 
-    const shouldApplyMartingale =
-        normalizedMode === 'after_one_loss' ||
-        (normalizedMode === 'after_two_losses' && nextConsecutiveLosses >= 2) ||
-        (normalizedMode === 'custom_consecutive_loss_trigger' && nextConsecutiveLosses >= normalizedTrigger);
+    // Determine if martingale should be applied based on mode
+    let shouldApplyMartingale = false;
+    
+    if (normalizedMode === 'after_one_loss') {
+        // Apply martingale immediately after the first loss
+        shouldApplyMartingale = true;
+    } else if (normalizedMode === 'after_two_losses') {
+        // Apply martingale only after 2 consecutive losses
+        shouldApplyMartingale = nextConsecutiveLosses >= 2;
+    } else if (normalizedMode === 'custom_consecutive_loss_trigger') {
+        // Apply martingale after custom number of consecutive losses
+        shouldApplyMartingale = nextConsecutiveLosses >= normalizedTrigger;
+    }
+
+    // Calculate next stake
+    const nextStake = shouldApplyMartingale 
+        ? parseFloat((current_stake * multiplier).toFixed(2)) 
+        : base_stake;
 
     return {
         consecutiveLosses: nextConsecutiveLosses,
         lastResult: 'loss' as const,
-        nextStake: shouldApplyMartingale ? parseFloat((current_stake * multiplier).toFixed(2)) : base_stake,
+        nextStake: nextStake,
     };
 };
 
@@ -602,16 +619,12 @@ interface MarketState {
     trailingTriggerCount: number;
     alertActive: boolean;
     alertMessage: string;
-    // Recovery state - FIXED: globally blocks ALL markets during recovery
     recoveryActive: boolean;
     recoveryStartTime: number | null;
-    // Recovery blocking - when true, ALL markets are blocked
     recoveryBlocked: boolean;
-    // Market 2 specific
     market2Consecutive: number;
     market2LastResult: 'win' | 'loss' | null;
     market2ConsecutiveLosses: number;
-    // Active market tracking
     activeMarket: 'm1' | 'm2' | null;
 }
 
@@ -1032,7 +1045,6 @@ const AutoTrades = observer(() => {
     const tradingModeRef = useRef<TradingMode>('market1_only');
     const m2EnabledRef = useRef(false);
     const activeMarketRef = useRef<'m1' | 'm2' | null>(null);
-    // ADDED: Global recovery state
     const recoveryBlockedRef = useRef(false);
 
     // ─── Shared Config Refs ──────────────────────────────────────────────
@@ -1285,12 +1297,9 @@ const AutoTrades = observer(() => {
             isBlocked: false
         };
 
-        // Check if global recovery is active and blocking ALL markets
         const isRecoveryMode = tradingModeRef.current === 'recovery_mode' && m2EnabledRef.current;
         
         if (isRecoveryMode && recoveryBlockedRef.current) {
-            // ALL markets are BLOCKED during recovery until a win
-            // Only M2 can trade in recovery mode
             return { 
                 config: m2ConfigRef.current, 
                 sharedConfig: sharedConfigRef.current, 
@@ -1415,10 +1424,8 @@ const AutoTrades = observer(() => {
     }, []);
 
     // ─── EXECUTE TRADE ──────────────────────────────────────────────────────
-    // Only one contract at a time globally
     const executeTrade = useCallback(
         async (symbol: string, stakeAmount: number, lastResult: 'win' | 'loss' | null): Promise<number> => {
-            // Prevent multiple contracts
             if (globalTradingRef.current) {
                 console.warn('[AutoTrades] Trade already in progress, skipping');
                 return 0;
@@ -1442,7 +1449,6 @@ const AutoTrades = observer(() => {
             };
             if (BARRIER_NEEDED[ct]) params.barrier = String(bar);
 
-            // Set global trading flag
             globalTradingRef.current = true;
 
             try {
@@ -1498,7 +1504,7 @@ const AutoTrades = observer(() => {
     );
 
     // ─── After Trade Handler ──────────────────────────────────────────────
-
+    // FIXED: Martingale applied immediately after EVERY loss
     const handleAfterTrade = useCallback((symbol: string, profit: number, isMarket2: boolean) => {
         if (!runningRef.current) return;
         const state = marketStatesRef.current[symbol];
@@ -1514,7 +1520,8 @@ const AutoTrades = observer(() => {
         const consecutiveLossThreshold = sharedConfig.consecutiveLossThreshold;
         const currentConsecutiveLosses = isMarket2 ? state.market2ConsecutiveLosses : consecutiveLossRef.current;
 
-        // ─── MARTINGALE - Applied IMMEDIATELY on loss ──────────────────────
+        // ─── MARTINGALE - Applied IMMEDIATELY on EVERY loss ──────────────────────
+        // getNextMartingaleState now handles all logic including immediate application
         const nextMartingaleState = getNextMartingaleState({
             profit,
             current_stake: nextStakeRef.current,
@@ -1525,6 +1532,7 @@ const AutoTrades = observer(() => {
             consecutive_loss_trigger: consecutiveLossThreshold,
         });
 
+        // Update consecutive losses and last result
         if (isMarket2) {
             state.market2ConsecutiveLosses = nextMartingaleState.consecutiveLosses;
             state.market2LastResult = nextMartingaleState.lastResult;
@@ -1543,7 +1551,6 @@ const AutoTrades = observer(() => {
         globalTradingRef.current = false;
 
         // ─── RECOVERY MODE LOGIC ──────────────────────────────────────────
-        // CORRECTED: Block ALL markets on loss, unblock ALL on win
         const isRecoveryMode = tradingModeRef.current === 'recovery_mode' && m2EnabledRef.current;
 
         if (isRecoveryMode) {
@@ -1557,14 +1564,12 @@ const AutoTrades = observer(() => {
                 state.market2Consecutive = 0;
                 state.market2ConsecutiveLosses = 0;
                 state.market2LastResult = null;
-                // Reset M1 state
                 state.consecutive = 0;
                 consecutiveLossRef.current = 0;
                 previousContractResultRef.current = null;
-                // Reset M1 stake to base when entering recovery
+                // Reset stake to base when entering recovery
                 nextStakeRef.current = sharedConfigRef.current.stake;
 
-                // Update ALL markets to blocked state
                 Object.values(marketStatesRef.current).forEach(s => {
                     s.recoveryBlocked = true;
                     s.recoveryActive = true;
@@ -1593,10 +1598,8 @@ const AutoTrades = observer(() => {
                 state.consecutive = 0;
                 consecutiveLossRef.current = 0;
                 previousContractResultRef.current = null;
-                // Reset stake to base when recovery completes
                 nextStakeRef.current = sharedConfigRef.current.stake;
 
-                // Update ALL markets to unblocked state
                 Object.values(marketStatesRef.current).forEach(s => {
                     s.recoveryBlocked = false;
                     s.recoveryActive = false;
@@ -1617,7 +1620,6 @@ const AutoTrades = observer(() => {
                 state.activeMarket = 'm2';
                 activeMarketRef.current = 'm2';
                 
-                // Keep all markets blocked
                 Object.values(marketStatesRef.current).forEach(s => {
                     s.recoveryBlocked = true;
                 });
@@ -1633,7 +1635,7 @@ const AutoTrades = observer(() => {
                 
                 console.log(`[Recovery] M2 LOSS - Staying on M2, ALL MARKETS remain BLOCKED`);
             } else if (profit >= 0 && !isMarket2) {
-                // WIN on M1 → Reset everything (shouldn't happen in recovery since M1 is blocked)
+                // WIN on M1 → Reset everything
                 recoveryBlockedRef.current = false;
                 consecutiveLossRef.current = 0;
                 previousContractResultRef.current = null;
@@ -1647,7 +1649,6 @@ const AutoTrades = observer(() => {
                 state.activeMarket = 'm1';
                 activeMarketRef.current = 'm1';
 
-                // Update ALL markets
                 Object.values(marketStatesRef.current).forEach(s => {
                     s.recoveryBlocked = false;
                     s.recoveryActive = false;
@@ -1665,7 +1666,7 @@ const AutoTrades = observer(() => {
                 }
                 nextStakeRef.current = sharedConfigRef.current.stake;
             }
-            // On loss, keep the martingale stake that was already set
+            // On loss, keep the martingale stake that was already set by getNextMartingaleState
         }
 
         refreshDisplays();
@@ -1693,36 +1694,26 @@ const AutoTrades = observer(() => {
         signalReady: boolean,
         isMarket2: boolean
     ) => {
-        // CRITICAL: Check if recovery is active and ALL markets are blocked
         const isRecoveryMode = tradingModeRef.current === 'recovery_mode' && m2EnabledRef.current;
         
-        // If recovery mode is active and ALL markets are blocked
         if (isRecoveryMode && recoveryBlockedRef.current) {
-            // ONLY M2 can trade during recovery
             if (!isMarket2) {
-                // M1 is BLOCKED during recovery
                 return;
             }
-            // M2 is allowed to trade
         }
 
-        // If recovery mode is active but not blocked, ONLY M1 can trade
         if (isRecoveryMode && !recoveryBlockedRef.current && isMarket2) {
-            // M2 should not trade when recovery is not active
             return;
         }
 
-        // If market2_only mode, only allow M2
         if (tradingModeRef.current === 'market2_only' && !isMarket2) {
             return;
         }
 
-        // If market1_only mode, only allow M1
         if (tradingModeRef.current === 'market1_only' && isMarket2) {
             return;
         }
 
-        // Only allow one contract at a time globally
         if (globalTradingRef.current) {
             return;
         }
@@ -1773,7 +1764,6 @@ const AutoTrades = observer(() => {
             clearDataRecoveryLoading();
         }
 
-        // ─── Determine active market based on recovery state ──────────────
         const isRecoveryMode = tradingModeRef.current === 'recovery_mode' && m2EnabledRef.current;
         const isBlocked = isRecoveryMode && recoveryBlockedRef.current;
 
@@ -1782,7 +1772,6 @@ const AutoTrades = observer(() => {
         let isRecovery = false;
 
         if (isRecoveryMode && isBlocked) {
-            // ALL MARKETS BLOCKED → M2 ONLY
             activeConfig = m2ConfigRef.current;
             isMarket2 = true;
             isRecovery = true;
@@ -1790,7 +1779,6 @@ const AutoTrades = observer(() => {
             activeMarketRef.current = 'm2';
             state.recoveryBlocked = true;
         } else if (isRecoveryMode && !isBlocked) {
-            // Recovery mode with no block → M1 ONLY (M2 should not trade)
             activeConfig = m1ConfigRef.current;
             isMarket2 = false;
             isRecovery = true;
@@ -1798,7 +1786,6 @@ const AutoTrades = observer(() => {
             activeMarketRef.current = 'm1';
             state.recoveryBlocked = false;
         } else if (tradingModeRef.current === 'market2_only' && m2EnabledRef.current) {
-            // Market 2 Only mode
             activeConfig = m2ConfigRef.current;
             isMarket2 = true;
             isRecovery = false;
@@ -1806,7 +1793,6 @@ const AutoTrades = observer(() => {
             activeMarketRef.current = 'm2';
             state.recoveryBlocked = false;
         } else {
-            // Default: Market 1
             activeConfig = m1ConfigRef.current;
             isMarket2 = false;
             isRecovery = false;
@@ -1821,8 +1807,6 @@ const AutoTrades = observer(() => {
         const streak = activeConfig.streak;
         const strategyMode = activeConfig.strategyMode;
         const targetLen = getEffectiveSignalStreak({ trade_type: ct, configured_streak: streak });
-
-        // ─── Update state for active market ──────────────────────────────
 
         if (IS_DIRECTION_TYPE[ct]) {
             const prev = state.prevQuote;
@@ -1851,8 +1835,7 @@ const AutoTrades = observer(() => {
             }
         }
 
-        // ─── STRATEGY TEMPLATE EVALUATION (Market 1 only) ────────────────
-        // Skip during M2-only or when blocked
+        // ─── STRATEGY TEMPLATE EVALUATION ────────────────────────────────
         if (!isMarket2 && activeConfig.strategyTemplate !== 'STANDARD' && !isBlocked) {
             const evaluation = evaluateDigitStrategy(
                 activeConfig.strategyTemplate as DigitStrategyId,
@@ -1887,7 +1870,6 @@ const AutoTrades = observer(() => {
                 }
 
                 const signalReady = evaluation.entryReady;
-                // Check if blocked before executing
                 if (!isBlocked) {
                     tryExecuteSignal(symbol, state, signalReady, false);
                 }
@@ -1968,30 +1950,20 @@ const AutoTrades = observer(() => {
         }
 
         // ─── EXECUTE SIGNAL ────────────────────────────────────────────────
-        // ONLY execute if:
-        // 1. In recovery mode with ALL markets blocked → allow M2 only
-        // 2. In recovery mode with no block → allow M1 only
-        // 3. In market2_only mode → allow M2 only
-        // 4. In market1_only mode → allow M1 only
-        
         let shouldExecute = false;
         
         if (isRecoveryMode) {
             if (isBlocked) {
-                // ALL MARKETS blocked → ONLY M2
                 shouldExecute = isMarket2;
             } else {
-                // No block → ONLY M1
                 shouldExecute = !isMarket2;
             }
         } else if (tradingModeRef.current === 'market2_only') {
             shouldExecute = isMarket2;
         } else {
-            // market1_only
             shouldExecute = !isMarket2;
         }
 
-        // Also ensure we don't execute if there's already a contract in progress
         if (shouldExecute && !globalTradingRef.current) {
             tryExecuteSignal(symbol, state, signalReady, isMarket2);
         }
@@ -2670,7 +2642,7 @@ const AutoTrades = observer(() => {
                                 )}
                             </div>
 
-                            {/* Shared Stake/Martingale/TP/SL Section - IMPROVED STYLING */}
+                            {/* Shared Stake/Martingale/TP/SL Section */}
                             <div className='auto-trades-card auto-trades-card--shared'>
                                 <h2 className='auto-trades-card__title' style={{ color: '#ffffff', fontSize: '1.1rem' }}>💰 Stake &amp; Risk Management</h2>
                                 <p className='auto-trades-card__subtitle' style={{ color: '#a0a0a0', fontSize: '0.85rem' }}>Applies to both Market 1 and Market 2</p>
