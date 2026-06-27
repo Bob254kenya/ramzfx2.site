@@ -1,7 +1,6 @@
 @use 'components/shared/styles/mixins' as *;
 
 // ── Design tokens ────────────────────────────────────────────────────────────
-// Deep dark navy + muted crimson premium palette
 $at-bg-deep: #060c18;
 $at-bg-base: #080e1d;
 $at-bg-card: #0c1627;
@@ -174,7 +173,7 @@ $at-text-faint: #2c4060;
     }
 }
 
-// ── L→Digit Strategy Section Styles ────────────────────────────────────────
+// ── L→Digit Recovery Section Styles ────────────────────────────────────────
 
 .auto-trades-l-digit-section {
     background: linear-gradient(135deg, rgba(33, 33, 33, 0.95) 0%, rgba(25, 25, 25, 0.98) 100%);
@@ -224,6 +223,17 @@ $at-text-faint: #2c4060;
             color: white;
             animation: pulse 1.5s infinite;
             box-shadow: 0 0 8px rgba(255, 152, 0, 0.6);
+        }
+
+        &--waiting {
+            background: #f5b342;
+            color: #1a1a1a;
+            animation: pulse 0.8s infinite;
+        }
+
+        &--ready {
+            background: #4caf84;
+            color: white;
         }
     }
 
@@ -342,8 +352,7 @@ $at-text-faint: #2c4060;
         background: rgba(255, 152, 0, 0.08);
         border-radius: 0.6rem;
         border-left: 3px solid #ff9800;
-        line-height: 1.5;
-        font-style: italic;
+        line-height: 1.6;
 
         strong {
             color: #ffab40;
@@ -369,6 +378,12 @@ $at-text-faint: #2c4060;
         animation: badgePulse 1.5s infinite;
         box-shadow: 0 0 12px rgba(255, 152, 0, 0.4);
     }
+
+    &--waiting {
+        background: #f5b342;
+        color: #1a1a1a;
+        animation: badgePulse 0.8s infinite;
+    }
 }
 
 // Market card L→Digit active state
@@ -382,6 +397,12 @@ $at-text-faint: #2c4060;
         animation: badgePulse 1s infinite;
         box-shadow: 0 0 8px rgba(255, 152, 0, 0.4);
     }
+}
+
+.auto-trades-market--l-digit-waiting {
+    border: 2px solid #f5b342 !important;
+    box-shadow: 0 0 20px rgba(245, 179, 66, 0.15);
+    background: linear-gradient(135deg, rgba(245, 179, 66, 0.06), rgba(245, 179, 66, 0.01));
 }
 
 // ── Animations ───────────────────────────────────────────────────────────────
@@ -1595,10 +1616,6 @@ $at-text-faint: #2c4060;
 }
 
 // ── TP/SL Notification Styles ───────────────────────────────────────────────
-// Size: 250px × 290px (width +50, height +40 from original)
-// Shows ONLY Take Profit notification prominently
-// Stop Loss is only referenced, not displayed as a row
-// Rich emoji styling throughout
 
 .tp-sl-overlay {
     position: fixed;
@@ -1616,8 +1633,8 @@ $at-text-faint: #2c4060;
 }
 
 .tp-sl-card {
-    width: 250px;      // +50 from original
-    height: 290px;     // +40 from original
+    width: 250px;
+    height: 290px;
     background: linear-gradient(145deg, #1a1e28, #0f131c);
     border-radius: 20px;
     padding: 16px 16px 18px;
@@ -1628,7 +1645,6 @@ $at-text-faint: #2c4060;
     position: relative;
     overflow: hidden;
 
-    // Premium border glow
     &::before {
         content: '';
         position: absolute;
@@ -1703,7 +1719,6 @@ $at-text-faint: #2c4060;
         overflow: hidden;
     }
 
-    // TP Row - prominently styled
     &__row {
         background: linear-gradient(135deg, #0f1a18, #0a1412);
         border-radius: 14px;
@@ -1774,28 +1789,6 @@ $at-text-faint: #2c4060;
         }
     }
 
-    // Progress bar
-    &__progress {
-        margin-top: 8px;
-        height: 3px;
-        background: rgba(255, 255, 255, 0.06);
-        border-radius: 4px;
-        overflow: hidden;
-    }
-
-    &__progress-bar {
-        height: 100%;
-        background: linear-gradient(90deg, #4caf84, #66bb6a);
-        border-radius: 4px;
-        transition: width 0.5s ease;
-
-        &--hit {
-            background: linear-gradient(90deg, #4caf84, #2e7d5e);
-            animation: tpProgressPulse 1s ease-in-out infinite;
-        }
-    }
-
-    // Summary section
     &__summary {
         margin-top: 4px;
         padding-top: 8px;
@@ -1852,7 +1845,6 @@ $at-text-faint: #2c4060;
         color: #7f8fa3;
     }
 
-    // Stop Loss reference (muted, informational only)
     &__sl-reference {
         display: flex;
         justify-content: space-between;
@@ -1939,16 +1931,7 @@ $at-text-faint: #2c4060;
     }
 }
 
-@keyframes tpProgressPulse {
-    0%, 100% {
-        opacity: 1;
-    }
-    50% {
-        opacity: 0.6;
-    }
-}
-
-// ── L→Digit Waiting Banner ───────────────────────────────────────────────────
+// ── L→Digit Recovery Waiting Banner ─────────────────────────────────────────
 
 .auto-trades-l-digit-waiting {
     background: #1a1a1a;
