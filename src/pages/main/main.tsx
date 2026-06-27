@@ -886,7 +886,7 @@ const AppWrapper = observer(() => {
                                     label={
                                         <>
                                             <LabelPairedLightbulbCaptionRegularIcon height='24px' width='24px' fill='#c8a45d' />
-                                            <Localize i18n_default_text='Ramzfx Bot Ideas' />
+                                            <Localize i18n_default_text='Ramzfx Strategies ' />
                                         </>
                                     }
                                     id='id-bot-ideas'
